@@ -25,16 +25,16 @@ public static partial class UnityMCPBridge
 
     // Add public property to expose running state
     public static bool IsRunning => isRunning;
-    
+
     // Add method to check existence of a folder
     public static bool FolderExists(string path)
     {
         if (string.IsNullOrEmpty(path))
             return false;
-        
+
         if (path.Equals("Assets", StringComparison.OrdinalIgnoreCase))
             return true;
-            
+
         string fullPath = Path.Combine(Application.dataPath, path.StartsWith("Assets/") ? path.Substring(7) : path);
         return Directory.Exists(fullPath);
     }
@@ -50,7 +50,10 @@ public static partial class UnityMCPBridge
     {
         try
         {
-            string configPath = Path.Combine(Application.dataPath, "MCPServer", "config.json");
+            // Get the directory of the current script
+            string scriptPath = Path.GetDirectoryName(typeof(UnityMCPBridge).Assembly.Location);
+            string configPath = Path.Combine(scriptPath, "..", "config.json");
+
             if (File.Exists(configPath))
             {
                 string jsonConfig = File.ReadAllText(configPath);
@@ -59,7 +62,7 @@ public static partial class UnityMCPBridge
             }
             else
             {
-                Debug.LogError("Server config file not found!");
+                Debug.LogError($"Server config file not found at: {configPath}");
                 serverConfig = new DefaultServerConfig();
             }
         }
@@ -99,10 +102,10 @@ public static partial class UnityMCPBridge
                 var client = await listener.AcceptTcpClientAsync();
                 // Enable basic socket keepalive
                 client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-                
+
                 // Set longer receive timeout to prevent quick disconnections
                 client.ReceiveTimeout = 60000; // 60 seconds
-                
+
                 // Fire and forget each client connection
                 _ = HandleClientAsync(client);
             }
