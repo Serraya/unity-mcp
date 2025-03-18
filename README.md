@@ -1,6 +1,6 @@
 # Unity MCP Package
 
-![](https://youtu.be/dCC7QoV5a6E)
+![Creating a Mario Clone](https://youtu.be/dCC7QoV5a6E)
 
 A Unity package that enables seamless communication between Unity and Large Language Models (LLMs) like Claude Desktop via the **Model Context Protocol (MCP)**. This server acts as a bridge, allowing Unity to send commands to and receive responses from MCP-compliant tools, empowering developers to automate workflows, manipulate assets, and control the Unity Editor programmatically.
 
