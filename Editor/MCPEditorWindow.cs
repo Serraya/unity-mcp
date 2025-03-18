@@ -83,7 +83,6 @@ public class MCPEditorWindow : EditorWindow
     private bool isUnityBridgeRunning = false;
     private Vector2 scrollPosition;
     private string claudeConfigStatus = "Not configured";
-    private bool isPythonServerConnected = false;
     private string pythonServerStatus = "Not Connected";
     private Color pythonServerStatusColor = Color.red;
     private const int unityPort = 6400;  // Hardcoded Unity port
@@ -137,7 +136,6 @@ public class MCPEditorWindow : EditorWindow
                         if (await Task.WhenAny(readTask, Task.Delay(1000)) == readTask)
                         {
                             // Connection successful and responsive
-                            isPythonServerConnected = true;
                             pythonServerStatus = "Connected";
                             pythonServerStatusColor = Color.green;
                             UnityEngine.Debug.Log($"Python server connected successfully on port {unityPort}");
@@ -145,7 +143,6 @@ public class MCPEditorWindow : EditorWindow
                         else
                         {
                             // No response received
-                            isPythonServerConnected = false;
                             pythonServerStatus = "No Response";
                             pythonServerStatusColor = Color.yellow;
                             UnityEngine.Debug.LogWarning($"Python server not responding on port {unityPort}");
@@ -154,7 +151,6 @@ public class MCPEditorWindow : EditorWindow
                     catch (Exception e)
                     {
                         // Connection established but communication failed
-                        isPythonServerConnected = false;
                         pythonServerStatus = "Communication Error";
                         pythonServerStatusColor = Color.yellow;
                         UnityEngine.Debug.LogWarning($"Error communicating with Python server: {e.Message}");
@@ -163,7 +159,6 @@ public class MCPEditorWindow : EditorWindow
                 else
                 {
                     // Connection failed
-                    isPythonServerConnected = false;
                     pythonServerStatus = "Not Connected";
                     pythonServerStatusColor = Color.red;
                     UnityEngine.Debug.LogWarning($"Python server is not running or not accessible on port {unityPort}");
@@ -173,7 +168,6 @@ public class MCPEditorWindow : EditorWindow
         }
         catch (Exception e)
         {
-            isPythonServerConnected = false;
             pythonServerStatus = "Connection Error";
             pythonServerStatusColor = Color.red;
             UnityEngine.Debug.LogError($"Error checking Python server connection: {e.Message}");

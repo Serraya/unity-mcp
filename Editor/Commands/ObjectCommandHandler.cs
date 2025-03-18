@@ -6,6 +6,7 @@ using System.Linq;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine.SceneManagement;
+using UnityEditor.SceneManagement;
 
 namespace MCPServer.Editor.Commands
 {
@@ -249,7 +250,7 @@ namespace MCPServer.Editor.Commands
         public static object FindObjectsByName(JObject @params)
         {
             string name = (string)@params["name"] ?? throw new System.Exception("Parameter 'name' is required.");
-            var objects = GameObject.FindObjectsOfType<GameObject>()
+            var objects = GameObject.FindObjectsByType<GameObject>(FindObjectsSortMode.None)
                 .Where(o => o.name.Contains(name))
                 .Select(o => new
                 {
@@ -384,7 +385,7 @@ namespace MCPServer.Editor.Commands
                     .ToList()
             };
         }
-        
+
         /// <summary>
         /// Creates a directional light game object
         /// </summary>

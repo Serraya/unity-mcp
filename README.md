@@ -33,7 +33,7 @@ Follow these simple steps to get started with the Unity MCP Server:
      ```bash
      pip install uv
      ```
-   - Navigate to `Assets/unity-mcp/Python` in your project
+   - Navigate to `Python` in your project
    - Install dependencies:
      ```bash
      uv venv
@@ -139,7 +139,7 @@ Encountering issues? Here are some common fixes:
 - **Python Server Not Connected**
 
   - Verify the Python server is running (`python server.py` in the `Python` directory).
-  - Check `config.json` (in `Assets/unity-mcp`) for correct port settings (default: `unity_port: 6400`, `mcp_port: 6500`).
+  - Check `config.json` for correct port settings (default: `unity_port: 6400`, `mcp_port: 6500`).
   - Ensure `uv` and dependencies are installed correctly.
 
 - **Configuration Issues with Claude Desktop or Cursor**  
