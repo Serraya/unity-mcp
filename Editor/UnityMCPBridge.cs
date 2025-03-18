@@ -21,7 +21,7 @@ public static partial class UnityMCPBridge
     private static bool isRunning = false;
     private static readonly object lockObj = new object();
     private static Dictionary<string, (string commandJson, TaskCompletionSource<string> tcs)> commandQueue = new();
-    private static ServerConfig serverConfig;
+    private static readonly int unityPort = 6400;  // Hardcoded port
 
     // Add public property to expose running state
     public static bool IsRunning => isRunning;
@@ -41,45 +41,17 @@ public static partial class UnityMCPBridge
 
     static UnityMCPBridge()
     {
-        LoadServerConfig();
         Start();
         EditorApplication.quitting += Stop;
-    }
-
-    private static void LoadServerConfig()
-    {
-        try
-        {
-            // Get the directory of the current script
-            string scriptPath = Path.GetDirectoryName(typeof(UnityMCPBridge).Assembly.Location);
-            string configPath = Path.Combine(scriptPath, "..", "config.json");
-
-            if (File.Exists(configPath))
-            {
-                string jsonConfig = File.ReadAllText(configPath);
-                serverConfig = JsonConvert.DeserializeObject<ServerConfig>(jsonConfig);
-                Debug.Log($"Loaded server config: Unity Port = {serverConfig.unityPort}, MCP Port = {serverConfig.mcpPort}");
-            }
-            else
-            {
-                Debug.LogError($"Server config file not found at: {configPath}");
-                serverConfig = new DefaultServerConfig();
-            }
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Error loading server config: {e.Message}");
-            serverConfig = new DefaultServerConfig();
-        }
     }
 
     public static void Start()
     {
         if (isRunning) return;
         isRunning = true;
-        listener = new TcpListener(IPAddress.Loopback, serverConfig.unityPort);
+        listener = new TcpListener(IPAddress.Loopback, unityPort);
         listener.Start();
-        Debug.Log($"UnityMCPBridge started on port {serverConfig.unityPort}.");
+        Debug.Log($"UnityMCPBridge started on port {unityPort}.");
         Task.Run(ListenerLoop);
         EditorApplication.update += ProcessCommands;
     }

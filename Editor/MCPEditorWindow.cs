@@ -86,7 +86,8 @@ public class MCPEditorWindow : EditorWindow
     private bool isPythonServerConnected = false;
     private string pythonServerStatus = "Not Connected";
     private Color pythonServerStatusColor = Color.red;
-    private ServerConfig serverConfig;
+    private const int unityPort = 6400;  // Hardcoded Unity port
+    private const int mcpPort = 6500;    // Hardcoded MCP port
     private const float CONNECTION_CHECK_INTERVAL = 2f; // Check every 2 seconds
     private float lastCheckTime = 0f;
 
@@ -98,39 +99,9 @@ public class MCPEditorWindow : EditorWindow
 
     private void OnEnable()
     {
-        // Load server configuration
-        LoadServerConfig();
-
         // Check initial states
         isUnityBridgeRunning = UnityMCPBridge.IsRunning;
         CheckPythonServerConnection();
-    }
-
-    private void LoadServerConfig()
-    {
-        try
-        {
-            // Get the directory of the current script
-            string scriptPath = Path.GetDirectoryName(typeof(MCPEditorWindow).Assembly.Location);
-            string configPath = Path.Combine(scriptPath, "..", "config.json");
-
-            if (File.Exists(configPath))
-            {
-                string jsonConfig = File.ReadAllText(configPath);
-                serverConfig = JsonConvert.DeserializeObject<ServerConfig>(jsonConfig);
-                UnityEngine.Debug.Log($"Loaded server config: Unity Port = {serverConfig.unityPort}, MCP Port = {serverConfig.mcpPort}");
-            }
-            else
-            {
-                UnityEngine.Debug.LogError($"Server config file not found at: {configPath}");
-                serverConfig = new DefaultServerConfig();
-            }
-        }
-        catch (Exception e)
-        {
-            UnityEngine.Debug.LogError($"Error loading server config: {e.Message}");
-            serverConfig = new DefaultServerConfig();
-        }
     }
 
     private void Update()
@@ -145,24 +116,12 @@ public class MCPEditorWindow : EditorWindow
 
     private async void CheckPythonServerConnection()
     {
-        if (serverConfig == null)
-        {
-            LoadServerConfig(); // Reload config if not loaded
-        }
-
-        // Validate host is not null
-        if (string.IsNullOrEmpty(serverConfig.unityHost))
-        {
-            serverConfig.unityHost = "localhost"; // Fallback to localhost if null
-            UnityEngine.Debug.LogWarning("Unity host was null, defaulting to localhost");
-        }
-
         try
         {
             using (var client = new TcpClient())
             {
                 // Try to connect with a short timeout
-                var connectTask = client.ConnectAsync(serverConfig.unityHost, serverConfig.unityPort);
+                var connectTask = client.ConnectAsync("localhost", unityPort);
                 if (await Task.WhenAny(connectTask, Task.Delay(1000)) == connectTask)
                 {
                     // Try to send a ping message to verify connection is alive
@@ -181,7 +140,7 @@ public class MCPEditorWindow : EditorWindow
                             isPythonServerConnected = true;
                             pythonServerStatus = "Connected";
                             pythonServerStatusColor = Color.green;
-                            UnityEngine.Debug.Log($"Python server connected successfully on port {serverConfig.unityPort}");
+                            UnityEngine.Debug.Log($"Python server connected successfully on port {unityPort}");
                         }
                         else
                         {
@@ -189,7 +148,7 @@ public class MCPEditorWindow : EditorWindow
                             isPythonServerConnected = false;
                             pythonServerStatus = "No Response";
                             pythonServerStatusColor = Color.yellow;
-                            UnityEngine.Debug.LogWarning($"Python server not responding on port {serverConfig.unityPort}");
+                            UnityEngine.Debug.LogWarning($"Python server not responding on port {unityPort}");
                         }
                     }
                     catch (Exception e)
@@ -207,7 +166,7 @@ public class MCPEditorWindow : EditorWindow
                     isPythonServerConnected = false;
                     pythonServerStatus = "Not Connected";
                     pythonServerStatusColor = Color.red;
-                    UnityEngine.Debug.LogWarning($"Python server is not running or not accessible on port {serverConfig.unityPort}");
+                    UnityEngine.Debug.LogWarning($"Python server is not running or not accessible on port {unityPort}");
                 }
                 client.Close();
             }
@@ -239,8 +198,8 @@ public class MCPEditorWindow : EditorWindow
         EditorGUILayout.LabelField(pythonServerStatus);
         EditorGUILayout.EndHorizontal();
 
-        EditorGUILayout.LabelField($"Unity Port: {serverConfig?.unityPort}");
-        EditorGUILayout.LabelField($"MCP Port: {serverConfig?.mcpPort}");
+        EditorGUILayout.LabelField($"Unity Port: {unityPort}");
+        EditorGUILayout.LabelField($"MCP Port: {mcpPort}");
         EditorGUILayout.HelpBox("Start the Python server using command line: 'uv run server.py' in the Python directory", MessageType.Info);
         EditorGUILayout.EndVertical();
 
@@ -250,7 +209,7 @@ public class MCPEditorWindow : EditorWindow
         EditorGUILayout.BeginVertical(EditorStyles.helpBox);
         EditorGUILayout.LabelField("Unity MCP Bridge", EditorStyles.boldLabel);
         EditorGUILayout.LabelField($"Status: {(isUnityBridgeRunning ? "Running" : "Stopped")}");
-        EditorGUILayout.LabelField($"Port: {serverConfig?.unityPort}");
+        EditorGUILayout.LabelField($"Port: {unityPort}");
 
         if (GUILayout.Button(isUnityBridgeRunning ? "Stop Bridge" : "Start Bridge"))
         {
