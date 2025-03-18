@@ -147,7 +147,7 @@ For additional help, check the [issue tracker](https://github.com/justinpbarnett
 
 Have questions or want to chat about the project? Reach out!
 
-- **Email**: [barnett.justin.p@gmail.com](mailto:barnett.justin.p@gmail.com)  
+- **X**: [@justinpbarnett](https://x.com/justinpbarnett)
 - **GitHub**: [justinpbarnett](https://github.com/justinpbarnett)  
 - **Discord**: Join our community (link coming soon!).
 
