@@ -1,5 +1,5 @@
 {
-  "name": "com.justinpbarnett.unitymcpserver",
+  "name": "com.justinpbarnett.unity-mcp",
   "version": "0.1.0",
   "displayName": "Unity MCP Server",
   "description": "A Unity package to communicate with a local MCP Client via a Python server.",

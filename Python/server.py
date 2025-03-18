@@ -12,7 +12,7 @@ logging.basicConfig(
     level=getattr(logging, config.log_level),
     format=config.log_format
 )
-logger = logging.getLogger("UnityMCPServer")
+logger = logging.getLogger("UnityMCP")
 
 # Global connection state
 _unity_connection: UnityConnection = None

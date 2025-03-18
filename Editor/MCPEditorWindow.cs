@@ -287,7 +287,7 @@ public class MCPEditorWindow : EditorWindow
             else
             {
                 // If not found locally, try to find it in the package cache
-                string packageName = "com.justinpbarnett.unitymcpserver";
+                string packageName = "com.justinpbarnett.unity-mcp";
                 string packageCachePath = Path.Combine(Application.dataPath, "..", "Library", "PackageCache", packageName);
                 if (Directory.Exists(packageCachePath))
                 {

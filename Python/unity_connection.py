@@ -10,7 +10,7 @@ logging.basicConfig(
     level=getattr(logging, config.log_level),
     format=config.log_format
 )
-logger = logging.getLogger("UnityMCPServer")
+logger = logging.getLogger("UnityMCP")
 
 @dataclass
 class UnityConnection:
