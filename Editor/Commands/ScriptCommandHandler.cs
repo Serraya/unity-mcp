@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEditor;
+using System;
 using System.IO;
 using System.Text;
 using System.Linq;
@@ -55,15 +56,15 @@ namespace MCPServer.Editor.Commands
             // Ensure script name ends with .cs
             if (!scriptName.EndsWith(".cs"))
                 scriptName += ".cs";
-                
+
             string scriptPath;
-            
+
             // If content is provided, use it directly
             if (!string.IsNullOrEmpty(content))
             {
                 // Use specified folder or default to Scripts
                 scriptPath = string.IsNullOrEmpty(scriptFolder) ? "Scripts" : scriptFolder;
-                
+
                 // Ensure folder exists
                 string folderPath = Path.Combine(Application.dataPath, scriptPath);
                 if (!Directory.Exists(folderPath))
@@ -71,19 +72,19 @@ namespace MCPServer.Editor.Commands
                     Directory.CreateDirectory(folderPath);
                     AssetDatabase.Refresh();
                 }
-                
+
                 // Create the script file with provided content
                 string fullPath = Path.Combine(Application.dataPath, scriptPath, scriptName);
                 File.WriteAllText(fullPath, content);
-                
+
                 // Refresh the AssetDatabase
                 AssetDatabase.Refresh();
-                
+
                 return new { message = $"Created script: {Path.Combine(scriptPath, scriptName)}" };
             }
-            
+
             // Otherwise generate content based on template and parameters
-            
+
             // Ensure Scripts folder exists
             EnsureScriptsFolderExists();
 
@@ -109,7 +110,7 @@ namespace MCPServer.Editor.Commands
             // Add using directives
             contentBuilder.AppendLine("using UnityEngine;");
             contentBuilder.AppendLine();
-            
+
             // Add namespace if specified
             if (!string.IsNullOrEmpty(namespaceName))
             {
@@ -188,7 +189,7 @@ namespace MCPServer.Editor.Commands
                     {
                         throw new System.Exception($"Directory does not exist: {Path.GetDirectoryName(scriptPath)}");
                     }
-                    
+
                     // Create the file with content
                     File.WriteAllText(fullPath, content);
                     AssetDatabase.Refresh();
@@ -215,7 +216,7 @@ namespace MCPServer.Editor.Commands
         public static object ListScripts(JObject @params)
         {
             string folderPath = (string)@params["folder_path"] ?? "Assets";
-            
+
             // Special handling for "Assets" path since it's already the root
             string fullPath;
             if (folderPath.Equals("Assets", StringComparison.OrdinalIgnoreCase))
