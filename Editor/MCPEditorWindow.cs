@@ -110,7 +110,10 @@ public class MCPEditorWindow : EditorWindow
     {
         try
         {
-            string configPath = Path.Combine(Application.dataPath, "MCPServer", "config.json");
+            // Get the directory of the current script
+            string scriptPath = Path.GetDirectoryName(typeof(MCPEditorWindow).Assembly.Location);
+            string configPath = Path.Combine(scriptPath, "..", "config.json");
+
             if (File.Exists(configPath))
             {
                 string jsonConfig = File.ReadAllText(configPath);
@@ -119,7 +122,7 @@ public class MCPEditorWindow : EditorWindow
             }
             else
             {
-                UnityEngine.Debug.LogError("Server config file not found!");
+                UnityEngine.Debug.LogError($"Server config file not found at: {configPath}");
                 serverConfig = new DefaultServerConfig();
             }
         }
