@@ -67,6 +67,44 @@ To connect the MCP Server to tools like Claude Desktop or Cursor:
      - **Unity Bridge**: Should show "Running" when active.
      - **Python Server**: Should show "Connected" (green) when successfully linked.
 
+## Manual Configuration for MCP Clients
+
+If you prefer to manually configure your MCP client (like Claude Desktop or Cursor), you can create the configuration file yourself:
+
+1. **Locate the Configuration Directory**
+
+   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+2. **Create the Configuration File**
+   Create a JSON file with the following structure:
+
+   ```json
+   {
+     "mcpServers": {
+       "unityMCP": {
+         "command": "uv",
+         "args": [
+           "--directory",
+           "/path/to/your/unity-mcp/Python",
+           "run",
+           "server.py"
+         ]
+       }
+     }
+   }
+   ```
+
+3. **Find the Correct Python Path**
+
+   - If installed as a package: Look in `Library/PackageCache/com.justinpbarnett.unitymcpserver/Python`
+   - If installed locally: Look in `Assets/unity-mcp/Python`
+
+4. **Verify Configuration**
+   - Ensure the Python path points to the correct directory containing `server.py`
+   - Make sure the `uv` command is available in your system PATH
+   - Test the connection using the Unity MCP window
+
 ## Usage
 
 Once configured, you can use the MCP Server to interact with LLMs directly from Unity or Python. Here are a couple of examples:
