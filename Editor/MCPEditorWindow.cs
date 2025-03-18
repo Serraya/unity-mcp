@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Text;
+using System.Collections.Generic;
 
 public class DefaultServerConfig : ServerConfig
 {
@@ -277,36 +278,80 @@ public class MCPEditorWindow : EditorWindow
             string serverPath = null;
             string pythonDir = null;
 
-            // First try to find it in the current project's Assets folder
-            string localServerPath = Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python", "server.py"));
-            if (File.Exists(localServerPath))
+            // List of possible locations to search
+            var possiblePaths = new List<string>
             {
-                serverPath = localServerPath;
-                pythonDir = Path.GetDirectoryName(serverPath);
-            }
-            else
+                // Search in Assets folder - Manual installation
+                Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python", "server.py")),
+                Path.GetFullPath(Path.Combine(Application.dataPath, "Packages", "com.justinpbarnett.unity-mcp", "Python", "server.py")),
+                
+                // Search in package cache - Package manager installation
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Library", "PackageCache", "com.justinpbarnett.unity-mcp@*", "Python", "server.py")),
+                
+                // Search in package manager packages - Git installation
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Packages", "com.justinpbarnett.unity-mcp", "Python", "server.py"))
+            };
+
+            UnityEngine.Debug.Log("Searching for server.py in the following locations:");
+
+            // First try with explicit paths
+            foreach (var path in possiblePaths)
             {
-                // If not found locally, try to find it in the package cache
-                string packageName = "com.justinpbarnett.unity-mcp";
-                string packageCachePath = Path.Combine(Application.dataPath, "..", "Library", "PackageCache", packageName);
-                if (Directory.Exists(packageCachePath))
+                // Skip wildcard paths for now
+                if (path.Contains("*")) continue;
+
+                UnityEngine.Debug.Log($"Checking: {path}");
+                if (File.Exists(path))
                 {
-                    serverPath = Path.GetFullPath(Path.Combine(packageCachePath, "Python", "server.py"));
-                    if (File.Exists(serverPath))
+                    serverPath = path;
+                    pythonDir = Path.GetDirectoryName(serverPath);
+                    UnityEngine.Debug.Log($"Found server.py at: {serverPath}");
+                    break;
+                }
+            }
+
+            // If not found, try with wildcard paths (package cache with version)
+            if (serverPath == null)
+            {
+                foreach (var path in possiblePaths)
+                {
+                    if (!path.Contains("*")) continue;
+
+                    string directoryPath = Path.GetDirectoryName(path);
+                    string searchPattern = Path.GetFileName(Path.GetDirectoryName(path));
+                    string parentDir = Path.GetDirectoryName(directoryPath);
+
+                    if (Directory.Exists(parentDir))
                     {
-                        pythonDir = Path.GetDirectoryName(serverPath);
+                        var matchingDirs = Directory.GetDirectories(parentDir, searchPattern);
+                        UnityEngine.Debug.Log($"Searching in: {parentDir} for pattern: {searchPattern}, found {matchingDirs.Length} matches");
+
+                        foreach (var dir in matchingDirs)
+                        {
+                            string candidatePath = Path.Combine(dir, "Python", "server.py");
+                            UnityEngine.Debug.Log($"Checking: {candidatePath}");
+
+                            if (File.Exists(candidatePath))
+                            {
+                                serverPath = candidatePath;
+                                pythonDir = Path.GetDirectoryName(serverPath);
+                                UnityEngine.Debug.Log($"Found server.py at: {serverPath}");
+                                break;
+                            }
+                        }
+
+                        if (serverPath != null) break;
                     }
                 }
             }
 
             if (serverPath == null || !File.Exists(serverPath))
             {
-                claudeConfigStatus = "Error: Could not find server.py";
-                UnityEngine.Debug.LogError("Could not find server.py in either local project or package cache");
+                ShowManualConfigurationInstructions(configPath);
                 return;
             }
 
-            UnityEngine.Debug.Log($"Found server.py at: {serverPath}");
+            UnityEngine.Debug.Log($"Using server.py at: {serverPath}");
             UnityEngine.Debug.Log($"Python directory: {pythonDir}");
 
             // Create configuration object
@@ -342,8 +387,192 @@ public class MCPEditorWindow : EditorWindow
         }
         catch (Exception e)
         {
-            claudeConfigStatus = "Configuration failed";
-            UnityEngine.Debug.LogError($"Failed to configure Claude Desktop: {e.Message}");
+            // Determine the config file path based on OS for error message
+            string configPath = "";
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                configPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "Claude",
+                    "claude_desktop_config.json"
+                );
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                configPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "Library",
+                    "Application Support",
+                    "Claude",
+                    "claude_desktop_config.json"
+                );
+            }
+
+            ShowManualConfigurationInstructions(configPath);
+            UnityEngine.Debug.LogError($"Failed to configure Claude Desktop: {e.Message}\n{e.StackTrace}");
+        }
+    }
+
+    private void ShowManualConfigurationInstructions(string configPath)
+    {
+        claudeConfigStatus = "Error: Manual configuration required";
+
+        // Get the Python directory path that's likely to exist
+        string pythonDir = "";
+        string[] possibleDirs = {
+            Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python"))
+        };
+
+        foreach (var dir in possibleDirs)
+        {
+            if (Directory.Exists(dir) && File.Exists(Path.Combine(dir, "server.py")))
+            {
+                pythonDir = dir;
+                break;
+            }
+        }
+
+        // If we couldn't find a Python directory, try to get the Assets path as a fallback
+        if (string.IsNullOrEmpty(pythonDir))
+        {
+            pythonDir = "/path/to/your/unity-mcp/Python";
+        }
+
+        // Create the manual configuration message
+        var jsonConfig = new MCPConfig
+        {
+            mcpServers = new MCPConfigServers
+            {
+                unityMCP = new MCPConfigServer
+                {
+                    command = "uv",
+                    args = new[]
+                    {
+                        "--directory",
+                        pythonDir,
+                        "run",
+                        "server.py"
+                    }
+                }
+            }
+        };
+
+        var jsonSettings = new JsonSerializerSettings
+        {
+            Formatting = Formatting.Indented
+        };
+        string manualConfigJson = JsonConvert.SerializeObject(jsonConfig, jsonSettings);
+
+        // Show a dedicated configuration window instead of console logs
+        ManualConfigWindow.ShowWindow(configPath, manualConfigJson);
+    }
+}
+
+// Editor window to display manual configuration instructions
+public class ManualConfigWindow : EditorWindow
+{
+    private string configPath;
+    private string configJson;
+    private Vector2 scrollPos;
+    private bool pathCopied = false;
+    private bool jsonCopied = false;
+    private float copyFeedbackTimer = 0;
+
+    public static void ShowWindow(string configPath, string configJson)
+    {
+        var window = GetWindow<ManualConfigWindow>("Manual Configuration");
+        window.configPath = configPath;
+        window.configJson = configJson;
+        window.minSize = new Vector2(500, 400);
+        window.Show();
+    }
+
+    private void OnGUI()
+    {
+        scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
+
+        // Header
+        EditorGUILayout.Space(10);
+        EditorGUILayout.LabelField("Claude Desktop Manual Configuration", EditorStyles.boldLabel);
+        EditorGUILayout.Space(10);
+
+        // Instructions
+        EditorGUILayout.LabelField("The automatic configuration failed. Please follow these steps:", EditorStyles.boldLabel);
+        EditorGUILayout.Space(5);
+
+        EditorGUILayout.LabelField("1. Open Claude Desktop and go to Settings > Developer > Edit Config", EditorStyles.wordWrappedLabel);
+        EditorGUILayout.LabelField("2. Create or edit the configuration file at:", EditorStyles.wordWrappedLabel);
+
+        // Config path section with copy button
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.SelectableLabel(configPath, EditorStyles.textField, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+
+        if (GUILayout.Button("Copy Path", GUILayout.Width(80)))
+        {
+            EditorGUIUtility.systemCopyBuffer = configPath;
+            pathCopied = true;
+            copyFeedbackTimer = 2f;
+        }
+
+        EditorGUILayout.EndHorizontal();
+
+        if (pathCopied)
+        {
+            EditorGUILayout.LabelField("Path copied to clipboard!", EditorStyles.miniLabel);
+        }
+
+        EditorGUILayout.Space(10);
+
+        // JSON configuration
+        EditorGUILayout.LabelField("3. Paste the following JSON configuration:", EditorStyles.wordWrappedLabel);
+        EditorGUILayout.Space(5);
+
+        EditorGUILayout.LabelField("Make sure to replace the Python path if necessary:", EditorStyles.wordWrappedLabel);
+        EditorGUILayout.Space(5);
+
+        // JSON text area with copy button
+        GUIStyle textAreaStyle = new GUIStyle(EditorStyles.textArea)
+        {
+            wordWrap = true,
+            richText = true
+        };
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.SelectableLabel(configJson, textAreaStyle, GUILayout.MinHeight(200));
+        EditorGUILayout.EndHorizontal();
+
+        if (GUILayout.Button("Copy JSON Configuration"))
+        {
+            EditorGUIUtility.systemCopyBuffer = configJson;
+            jsonCopied = true;
+            copyFeedbackTimer = 2f;
+        }
+
+        if (jsonCopied)
+        {
+            EditorGUILayout.LabelField("JSON copied to clipboard!", EditorStyles.miniLabel);
+        }
+
+        EditorGUILayout.Space(10);
+
+        // Additional note
+        EditorGUILayout.HelpBox("After configuring, restart Claude Desktop to apply the changes.", MessageType.Info);
+
+        EditorGUILayout.EndScrollView();
+    }
+
+    private void Update()
+    {
+        // Handle the feedback message timer
+        if (copyFeedbackTimer > 0)
+        {
+            copyFeedbackTimer -= Time.deltaTime;
+            if (copyFeedbackTimer <= 0)
+            {
+                pathCopied = false;
+                jsonCopied = false;
+                Repaint();
+            }
         }
     }
 }
