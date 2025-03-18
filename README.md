@@ -18,40 +18,37 @@ This project is perfect for developers who want to leverage LLMs to enhance thei
 
 ## Installation
 
-Getting started is simple! Follow these steps to add the Unity MCP Server to your project:
+Follow these simple steps to get started with the Unity MCP Server:
 
-### Unity Package
+1. **Add the Unity Package**
 
-1. **Download the Package**  
-   Add via the Unity package manager using this link
+   - Open Unity Package Manager (`Window > Package Manager`)
+   - Click the `+` button and select `Add package from git URL`
+   - Enter: `https://github.com/justinpbarnett/unity-mcp.git`
 
-```text
-https://github.com/justinpbarnett/unity-mcp.git
-```
+2. **Set Up Python Environment**
 
-2. **Add to Unity**
-   - Open Unity and navigate to `Window > Package Manager`.
-   - Click the `+` button and select `Add package from disk...`.
-   - Locate the downloaded package and select the `package.json` file.
-
-### Python Environment
-
-1. **Prerequisites**  
-   Ensure you have:
-
-   - **Python** (version 3.7 or higher) installed. Download it from [python.org](https://www.python.org/downloads/).
-   - **`uv`** installed for managing Python dependencies. Install it via:
+   - Install [Python](https://www.python.org/downloads/) (version 3.7 or higher)
+   - Install `uv` package manager:
      ```bash
      pip install uv
      ```
-
-2. **Set Up the Python Server**
-   - Navigate to the `Python` directory within the package (e.g., `Assets/unity-mcp/Python`).
-   - Create a virtual environment and install dependencies:
+   - Navigate to `Assets/unity-mcp/Python` in your project
+   - Install dependencies:
      ```bash
      uv venv
      uv pip install -e .
      ```
+
+3. **Configure Claude Desktop**
+
+   - Open the Unity MCP window (`Window > Unity MCP`)
+   - Click the "Configure Claude" button
+   - Follow the on-screen instructions to set up the integration
+
+4. **Start Claude Desktop**
+   - Launch Claude Desktop
+   - The Unity MCP Server will automatically connect
 
 ## Configuration
 
