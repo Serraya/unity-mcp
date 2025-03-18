@@ -14,19 +14,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger("UnityMCPServer")
 
+# Global connection state
+_unity_connection: UnityConnection = None
+
 @asynccontextmanager
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     """Handle server startup and shutdown."""
+    global _unity_connection
     logger.info("UnityMCP server starting up")
     try:
-        unity = get_unity_connection()
+        _unity_connection = get_unity_connection()
         logger.info("Connected to Unity on startup")
     except Exception as e:
         logger.warning(f"Could not connect to Unity on startup: {str(e)}")
+        _unity_connection = None
     try:
         yield {}
     finally:
-        global _unity_connection
         if _unity_connection:
             _unity_connection.disconnect()
             _unity_connection = None

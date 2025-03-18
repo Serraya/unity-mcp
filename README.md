@@ -2,7 +2,7 @@
 
 A Unity package that enables seamless communication between Unity and Large Language Models (LLMs) like Claude Desktop via the **Model Context Protocol (MCP)**. This server acts as a bridge, allowing Unity to send commands to and receive responses from MCP-compliant tools, empowering developers to automate workflows, manipulate assets, and control the Unity Editor programmatically.
 
-Welcome to the initial release of this open-source project! Whether you're looking to integrate LLMs into your Unity workflow or contribute to an exciting new tool, we’re thrilled to have you here.
+Welcome to the initial release of this open-source project! Whether you're looking to integrate LLMs into your Unity workflow or contribute to an exciting new tool, we're thrilled to have you here.
 
 ## Overview
 
@@ -24,11 +24,12 @@ Getting started is simple! Follow these steps to add the Unity MCP Server to you
 
 1. **Download the Package**  
    Add via the Unity package manager using this link
-  ```text
-  https://github.com/justinpbarnett/unity-mcp.git
-  ```
 
-2. **Add to Unity**  
+```text
+https://github.com/justinpbarnett/unity-mcp.git
+```
+
+2. **Add to Unity**
    - Open Unity and navigate to `Window > Package Manager`.
    - Click the `+` button and select `Add package from disk...`.
    - Locate the downloaded package and select the `package.json` file.
@@ -37,14 +38,15 @@ Getting started is simple! Follow these steps to add the Unity MCP Server to you
 
 1. **Prerequisites**  
    Ensure you have:
+
    - **Python** (version 3.7 or higher) installed. Download it from [python.org](https://www.python.org/downloads/).
    - **`uv`** installed for managing Python dependencies. Install it via:
      ```bash
      pip install uv
      ```
 
-2. **Set Up the Python Server**  
-   - Navigate to the `Python` directory within the package (e.g., `Assets/MCPServer/Python`).
+2. **Set Up the Python Server**
+   - Navigate to the `Python` directory within the package (e.g., `Assets/unity-mcp/Python`).
    - Create a virtual environment and install dependencies:
      ```bash
      uv venv
@@ -58,11 +60,12 @@ To connect the MCP Server to tools like Claude Desktop or Cursor:
 1. **Open the Unity MCP Window**  
    In Unity, go to `Window > Unity MCP` to open the editor window.
 
-2. **Configure Your Tools**  
-   - In the Unity MCP window, you’ll see buttons to configure **Claude Desktop** or **Cursor**.
+2. **Configure Your Tools**
+
+   - In the Unity MCP window, you'll see buttons to configure **Claude Desktop** or **Cursor**.
    - Click the appropriate button and follow the on-screen instructions to set up the integration.
 
-3. **Verify Server Status**  
+3. **Verify Server Status**
    - Check the server status in the Unity MCP window. It will display:
      - **Unity Bridge**: Should show "Running" when active.
      - **Python Server**: Should show "Connected" (green) when successfully linked.
@@ -78,10 +81,10 @@ Once configured, you can use the MCP Server to interact with LLMs directly from 
 create_primitive(primitive_type="Cube", position=[0, 0, 0])
 ```
 
-### Changing a Material’s Color
+### Changing a Material's Color
 
 ```python
-# Set a material’s color to red (RGBA: 1, 0, 0, 1)
+# Set a material's color to red (RGBA: 1, 0, 0, 1)
 set_material_color(material_name="MyMaterial", color=[1, 0, 0, 1])
 ```
 
@@ -98,21 +101,23 @@ Explore more commands in the [HOW_TO_ADD_A_TOOL.md](HOW_TO_ADD_A_TOOL.md) file f
 
 ## Contributing
 
-We’d love your help to make the Unity MCP Server even better! Here’s how to contribute:
+We'd love your help to make the Unity MCP Server even better! Here's how to contribute:
 
 1. **Fork the Repository**  
    Fork [github.com/justinpbarnett/unity-mcp](https://github.com/justinpbarnett/unity-mcp) to your GitHub account.
 
-2. **Create a Branch**  
+2. **Create a Branch**
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
 
 3. **Make Changes**  
-   Implement your feature or fix, following the project’s coding standards (see [HOW_TO_ADD_A_TOOL.md](HOW_TO_ADD_A_TOOL.md) for guidance).
+   Implement your feature or fix, following the project's coding standards (see [HOW_TO_ADD_A_TOOL.md](HOW_TO_ADD_A_TOOL.md) for guidance).
 
 4. **Commit and Push**  
    Use clear, descriptive commit messages:
+
    ```bash
    git commit -m "Add feature: your feature description"
    git push origin feature/your-feature-name
@@ -126,6 +131,7 @@ For more details, check out [CONTRIBUTING.md](CONTRIBUTING.md) (to be created).
 ## License
 
 This project is licensed under the **MIT License**. Feel free to use, modify, and distribute it as you see fit. See the full license [here](https://github.com/justinpbarnett/unity-mcp/blob/master/LICENSE).
+
 ## Troubleshooting
 
 Encountering issues? Here are some common fixes:
@@ -133,13 +139,14 @@ Encountering issues? Here are some common fixes:
 - **Unity Bridge Not Running**  
   Ensure the Unity Editor is open and the MCP window is active. Restart Unity if needed.
 
-- **Python Server Not Connected**  
+- **Python Server Not Connected**
+
   - Verify the Python server is running (`python server.py` in the `Python` directory).
-  - Check `config.json` (in `Assets/MCPServer`) for correct port settings (default: `unity_port: 6400`, `mcp_port: 6500`).
+  - Check `config.json` (in `Assets/unity-mcp`) for correct port settings (default: `unity_port: 6400`, `mcp_port: 6500`).
   - Ensure `uv` and dependencies are installed correctly.
 
 - **Configuration Issues with Claude Desktop or Cursor**  
-  Confirm the paths and settings in the configuration dialog match your tool’s installation.
+  Confirm the paths and settings in the configuration dialog match your tool's installation.
 
 For additional help, check the [issue tracker](https://github.com/justinpbarnett/unity-mcp/issues) or file a new issue.
 
@@ -148,11 +155,11 @@ For additional help, check the [issue tracker](https://github.com/justinpbarnett
 Have questions or want to chat about the project? Reach out!
 
 - **X**: [@justinpbarnett](https://x.com/justinpbarnett)
-- **GitHub**: [justinpbarnett](https://github.com/justinpbarnett)  
+- **GitHub**: [justinpbarnett](https://github.com/justinpbarnett)
 - **Discord**: Join our community (link coming soon!).
 
 ## Acknowledgments
 
-A huge thanks to everyone who’s supported this project’s initial release. Special shoutout to Unity Technologies for inspiring tools that push creative boundaries, and to the open-source community for making projects like this possible.
+A huge thanks to everyone who's supported this project's initial release. Special shoutout to Unity Technologies for inspiring tools that push creative boundaries, and to the open-source community for making projects like this possible.
 
 Happy coding, and enjoy integrating LLMs with Unity!

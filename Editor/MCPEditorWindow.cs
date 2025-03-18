@@ -280,7 +280,7 @@ public class MCPEditorWindow : EditorWindow
             Directory.CreateDirectory(Path.GetDirectoryName(configPath));
 
             // Get the absolute path to the Python directory
-            string pythonDir = Path.GetFullPath(Path.Combine(Application.dataPath, "MCPServer", "Python"));
+            string pythonDir = Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python"));
             UnityEngine.Debug.Log($"Python directory path: {pythonDir}");
 
             // Create configuration object
