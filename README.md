@@ -44,7 +44,6 @@ Follow these simple steps to get started with the Unity MCP Server:
 
    - Open the Unity MCP window (`Window > Unity MCP`)
    - Click the "Configure Claude" button
-   - Follow the on-screen instructions to set up the integration
 
 4. **Start Claude Desktop**
    - Launch Claude Desktop
