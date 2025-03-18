@@ -417,26 +417,8 @@ public class MCPEditorWindow : EditorWindow
     {
         claudeConfigStatus = "Error: Manual configuration required";
 
-        // Get the Python directory path that's likely to exist
-        string pythonDir = "";
-        string[] possibleDirs = {
-            Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python"))
-        };
-
-        foreach (var dir in possibleDirs)
-        {
-            if (Directory.Exists(dir) && File.Exists(Path.Combine(dir, "server.py")))
-            {
-                pythonDir = dir;
-                break;
-            }
-        }
-
-        // If we couldn't find a Python directory, try to get the Assets path as a fallback
-        if (string.IsNullOrEmpty(pythonDir))
-        {
-            pythonDir = "/path/to/your/unity-mcp/Python";
-        }
+        // Get the Python directory path using Package Manager API
+        string pythonDir = FindPackagePythonDirectory();
 
         // Create the manual configuration message
         var jsonConfig = new MCPConfig
@@ -465,6 +447,68 @@ public class MCPEditorWindow : EditorWindow
 
         // Show a dedicated configuration window instead of console logs
         ManualConfigWindow.ShowWindow(configPath, manualConfigJson);
+    }
+
+    private string FindPackagePythonDirectory()
+    {
+        string pythonDir = "/path/to/your/unity-mcp/Python";
+
+        try
+        {
+            // Try to find the package using Package Manager API
+            var request = UnityEditor.PackageManager.Client.List();
+            while (!request.IsCompleted) { } // Wait for the request to complete
+
+            if (request.Status == UnityEditor.PackageManager.StatusCode.Success)
+            {
+                foreach (var package in request.Result)
+                {
+                    UnityEngine.Debug.Log($"Package: {package.name}, Path: {package.resolvedPath}");
+
+                    if (package.name == "com.justinpbarnett.unity-mcp")
+                    {
+                        string packagePath = package.resolvedPath;
+                        string potentialPythonDir = Path.Combine(packagePath, "Python");
+
+                        if (Directory.Exists(potentialPythonDir) &&
+                            File.Exists(Path.Combine(potentialPythonDir, "server.py")))
+                        {
+                            UnityEngine.Debug.Log($"Found package Python directory at: {potentialPythonDir}");
+                            return potentialPythonDir;
+                        }
+                    }
+                }
+            }
+            else if (request.Error != null)
+            {
+                UnityEngine.Debug.LogError("Failed to list packages: " + request.Error.message);
+            }
+
+            // If not found via Package Manager, try manual approaches
+            // First check for local installation
+            string[] possibleDirs = {
+                Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python"))
+            };
+
+            foreach (var dir in possibleDirs)
+            {
+                UnityEngine.Debug.Log($"Checking local directory: {dir}");
+                if (Directory.Exists(dir) && File.Exists(Path.Combine(dir, "server.py")))
+                {
+                    UnityEngine.Debug.Log($"Found local Python directory at: {dir}");
+                    return dir;
+                }
+            }
+
+            // If still not found, return the placeholder path
+            UnityEngine.Debug.LogWarning("Could not find Python directory, using placeholder path");
+        }
+        catch (Exception e)
+        {
+            UnityEngine.Debug.LogError($"Error finding package path: {e.Message}");
+        }
+
+        return pythonDir;
     }
 }
 
