@@ -273,9 +273,41 @@ public class MCPEditorWindow : EditorWindow
             // Create directory if it doesn't exist
             Directory.CreateDirectory(Path.GetDirectoryName(configPath));
 
-            // Get the absolute path to the Python directory
-            string pythonDir = Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python"));
-            UnityEngine.Debug.Log($"Python directory path: {pythonDir}");
+            // Find the server.py file location
+            string serverPath = null;
+            string pythonDir = null;
+
+            // First try to find it in the current project's Assets folder
+            string localServerPath = Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python", "server.py"));
+            if (File.Exists(localServerPath))
+            {
+                serverPath = localServerPath;
+                pythonDir = Path.GetDirectoryName(serverPath);
+            }
+            else
+            {
+                // If not found locally, try to find it in the package cache
+                string packageName = "com.justinpbarnett.unitymcpserver";
+                string packageCachePath = Path.Combine(Application.dataPath, "..", "Library", "PackageCache", packageName);
+                if (Directory.Exists(packageCachePath))
+                {
+                    serverPath = Path.GetFullPath(Path.Combine(packageCachePath, "Python", "server.py"));
+                    if (File.Exists(serverPath))
+                    {
+                        pythonDir = Path.GetDirectoryName(serverPath);
+                    }
+                }
+            }
+
+            if (serverPath == null || !File.Exists(serverPath))
+            {
+                claudeConfigStatus = "Error: Could not find server.py";
+                UnityEngine.Debug.LogError("Could not find server.py in either local project or package cache");
+                return;
+            }
+
+            UnityEngine.Debug.Log($"Found server.py at: {serverPath}");
+            UnityEngine.Debug.Log($"Python directory: {pythonDir}");
 
             // Create configuration object
             var config = new MCPConfig
