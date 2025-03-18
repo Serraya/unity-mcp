@@ -20,12 +20,40 @@ namespace MCPServer.Editor.Commands
         public static object ViewScript(JObject @params)
         {
             string scriptPath = (string)@params["script_path"] ?? throw new System.Exception("Parameter 'script_path' is required.");
-            string fullPath = Path.Combine(Application.dataPath, scriptPath);
+            bool requireExists = (bool?)@params["require_exists"] ?? true;
+            
+            // Debug to help diagnose issues
+            Debug.Log($"ViewScript - Original script path: {scriptPath}");
+            
+            // Handle path correctly to avoid double "Assets" folder issue
+            string relativePath;
+            if (scriptPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+            {
+                // If path already starts with Assets/, remove it for local path operations
+                relativePath = scriptPath.Substring(7);
+            }
+            else
+            {
+                relativePath = scriptPath;
+            }
+            
+            string fullPath = Path.Combine(Application.dataPath, relativePath);
+            Debug.Log($"ViewScript - Relative path: {relativePath}");
+            Debug.Log($"ViewScript - Full path: {fullPath}");
 
             if (!File.Exists(fullPath))
-                throw new System.Exception($"Script file not found: {scriptPath}");
+            {
+                if (requireExists)
+                {
+                    throw new System.Exception($"Script file not found: {scriptPath}");
+                }
+                else
+                {
+                    return new { exists = false, message = $"Script file not found: {scriptPath}" };
+                }
+            }
 
-            return new { content = File.ReadAllText(fullPath) };
+            return new { exists = true, content = File.ReadAllText(fullPath) };
         }
 
         /// <summary>
@@ -33,6 +61,8 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         private static void EnsureScriptsFolderExists()
         {
+            // Never create an "Assets" folder as it's the project root
+            // Instead create "Scripts" within the existing Assets folder
             string scriptsFolderPath = Path.Combine(Application.dataPath, "Scripts");
             if (!Directory.Exists(scriptsFolderPath))
             {
@@ -42,7 +72,7 @@ namespace MCPServer.Editor.Commands
         }
 
         /// <summary>
-        /// Creates a new Unity script file in the Scripts folder
+        /// Creates a new Unity script file in the specified folder
         /// </summary>
         public static object CreateScript(JObject @params)
         {
@@ -52,114 +82,147 @@ namespace MCPServer.Editor.Commands
             string template = (string)@params["template"];
             string scriptFolder = (string)@params["script_folder"];
             string content = (string)@params["content"];
+            bool overwrite = (bool?)@params["overwrite"] ?? false;
 
             // Ensure script name ends with .cs
-            if (!scriptName.EndsWith(".cs"))
+            if (!scriptName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 scriptName += ".cs";
 
+            // Make sure scriptName doesn't contain path separators - extract base name
+            scriptName = Path.GetFileName(scriptName);
+
+            // Determine the script path
             string scriptPath;
-
-            // If content is provided, use it directly
-            if (!string.IsNullOrEmpty(content))
+            
+            // Handle the script folder parameter
+            if (string.IsNullOrEmpty(scriptFolder))
             {
-                // Use specified folder or default to Scripts
-                scriptPath = string.IsNullOrEmpty(scriptFolder) ? "Scripts" : scriptFolder;
+                // Default to Scripts folder within Assets
+                scriptPath = "Scripts";
+                EnsureScriptsFolderExists();
+            }
+            else
+            {
+                // Use provided folder path
+                scriptPath = scriptFolder;
+                
+                // If scriptFolder starts with "Assets/", remove it for local path operations
+                if (scriptPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+                {
+                    scriptPath = scriptPath.Substring(7);
+                }
+            }
 
-                // Ensure folder exists
-                string folderPath = Path.Combine(Application.dataPath, scriptPath);
-                if (!Directory.Exists(folderPath))
+            // Create the full directory path, avoiding Assets/Assets issue
+            string folderPath = Path.Combine(Application.dataPath, scriptPath);
+            Debug.Log($"CreateScript - Script name: {scriptName}");
+            Debug.Log($"CreateScript - Script path: {scriptPath}");
+            Debug.Log($"CreateScript - Creating script in folder path: {folderPath}");
+            
+            // Create directory if it doesn't exist
+            if (!Directory.Exists(folderPath))
+            {
+                try
                 {
                     Directory.CreateDirectory(folderPath);
                     AssetDatabase.Refresh();
                 }
+                catch (Exception ex)
+                {
+                    throw new System.Exception($"Failed to create directory '{scriptPath}': {ex.Message}");
+                }
+            }
 
-                // Create the script file with provided content
-                string fullPath = Path.Combine(Application.dataPath, scriptPath, scriptName);
-                File.WriteAllText(fullPath, content);
+            // Check if script already exists
+            string fullFilePath = Path.Combine(folderPath, scriptName);
+            if (File.Exists(fullFilePath) && !overwrite)
+            {
+                throw new System.Exception($"Script file '{scriptName}' already exists in '{scriptPath}' and overwrite is not enabled.");
+            }
 
-                // Refresh the AssetDatabase
+            try
+            {
+                // If content is provided, use it directly
+                if (!string.IsNullOrEmpty(content))
+                {
+                    // Create the script file with provided content
+                    File.WriteAllText(fullFilePath, content);
+                }
+                else
+                {
+                    // Otherwise generate content based on template and parameters
+                    StringBuilder contentBuilder = new StringBuilder();
+
+                    // Add using directives
+                    contentBuilder.AppendLine("using UnityEngine;");
+                    contentBuilder.AppendLine();
+
+                    // Add namespace if specified
+                    if (!string.IsNullOrEmpty(namespaceName))
+                    {
+                        contentBuilder.AppendLine($"namespace {namespaceName}");
+                        contentBuilder.AppendLine("{");
+                    }
+
+                    // Add class definition with indent based on namespace
+                    string indent = string.IsNullOrEmpty(namespaceName) ? "" : "    ";
+                    contentBuilder.AppendLine($"{indent}public class {Path.GetFileNameWithoutExtension(scriptName)} : {scriptType}");
+                    contentBuilder.AppendLine($"{indent}{{");
+
+                    // Add default Unity methods based on script type
+                    if (scriptType == "MonoBehaviour")
+                    {
+                        contentBuilder.AppendLine($"{indent}    private void Start()");
+                        contentBuilder.AppendLine($"{indent}    {{");
+                        contentBuilder.AppendLine($"{indent}        // Initialize your component here");
+                        contentBuilder.AppendLine($"{indent}    }}");
+                        contentBuilder.AppendLine();
+                        contentBuilder.AppendLine($"{indent}    private void Update()");
+                        contentBuilder.AppendLine($"{indent}    {{");
+                        contentBuilder.AppendLine($"{indent}        // Update your component here");
+                        contentBuilder.AppendLine($"{indent}    }}");
+                    }
+                    else if (scriptType == "ScriptableObject")
+                    {
+                        contentBuilder.AppendLine($"{indent}    private void OnEnable()");
+                        contentBuilder.AppendLine($"{indent}    {{");
+                        contentBuilder.AppendLine($"{indent}        // Initialize your ScriptableObject here");
+                        contentBuilder.AppendLine($"{indent}    }}");
+                    }
+
+                    // Close class
+                    contentBuilder.AppendLine($"{indent}}}");
+
+                    // Close namespace if specified
+                    if (!string.IsNullOrEmpty(namespaceName))
+                    {
+                        contentBuilder.AppendLine("}");
+                    }
+
+                    // Write the generated content to file
+                    File.WriteAllText(fullFilePath, contentBuilder.ToString());
+                }
+
+                // Refresh the AssetDatabase to recognize the new script
                 AssetDatabase.Refresh();
 
-                return new { message = $"Created script: {Path.Combine(scriptPath, scriptName)}" };
-            }
-
-            // Otherwise generate content based on template and parameters
-
-            // Ensure Scripts folder exists
-            EnsureScriptsFolderExists();
-
-            // Create namespace-based folder structure if namespace is specified
-            scriptPath = string.IsNullOrEmpty(scriptFolder) ? "Scripts" : scriptFolder;
-            if (!string.IsNullOrEmpty(namespaceName))
-            {
-                if (scriptPath == "Scripts") // Only modify path if we're using the default
+                // Return the relative path for easier reference
+                string relativePath = scriptPath.Replace('\\', '/');
+                if (!relativePath.StartsWith("Assets/"))
                 {
-                    scriptPath = Path.Combine(scriptPath, namespaceName.Replace('.', '/'));
+                    relativePath = $"Assets/{relativePath}";
                 }
-                string namespaceFolderPath = Path.Combine(Application.dataPath, scriptPath);
-                if (!Directory.Exists(namespaceFolderPath))
-                {
-                    Directory.CreateDirectory(namespaceFolderPath);
-                    AssetDatabase.Refresh();
-                }
+                
+                return new { 
+                    message = $"Created script: {Path.Combine(relativePath, scriptName).Replace('\\', '/')}",
+                    script_path = Path.Combine(relativePath, scriptName).Replace('\\', '/')
+                };
             }
-
-            // Create the script content
-            StringBuilder contentBuilder = new StringBuilder();
-
-            // Add using directives
-            contentBuilder.AppendLine("using UnityEngine;");
-            contentBuilder.AppendLine();
-
-            // Add namespace if specified
-            if (!string.IsNullOrEmpty(namespaceName))
+            catch (Exception ex)
             {
-                contentBuilder.AppendLine($"namespace {namespaceName}");
-                contentBuilder.AppendLine("{");
+                Debug.LogError($"Failed to create script: {ex.Message}\n{ex.StackTrace}");
+                throw new System.Exception($"Failed to create script '{scriptName}': {ex.Message}");
             }
-
-            // Add class definition
-            contentBuilder.AppendLine($"    public class {Path.GetFileNameWithoutExtension(scriptName)} : {scriptType}");
-            contentBuilder.AppendLine("    {");
-
-            // Add default Unity methods based on script type
-            if (scriptType == "MonoBehaviour")
-            {
-                contentBuilder.AppendLine("        private void Start()");
-                contentBuilder.AppendLine("        {");
-                contentBuilder.AppendLine("            // Initialize your component here");
-                contentBuilder.AppendLine("        }");
-                contentBuilder.AppendLine();
-                contentBuilder.AppendLine("        private void Update()");
-                contentBuilder.AppendLine("        {");
-                contentBuilder.AppendLine("            // Update your component here");
-                contentBuilder.AppendLine("        }");
-            }
-            else if (scriptType == "ScriptableObject")
-            {
-                contentBuilder.AppendLine("        private void OnEnable()");
-                contentBuilder.AppendLine("        {");
-                contentBuilder.AppendLine("            // Initialize your ScriptableObject here");
-                contentBuilder.AppendLine("        }");
-            }
-
-            // Close class
-            contentBuilder.AppendLine("    }");
-
-            // Close namespace if specified
-            if (!string.IsNullOrEmpty(namespaceName))
-            {
-                contentBuilder.AppendLine("}");
-            }
-
-            // Create the script file in the Scripts folder
-            string fullFilePath = Path.Combine(Application.dataPath, scriptPath, scriptName);
-            File.WriteAllText(fullFilePath, contentBuilder.ToString());
-
-            // Refresh the AssetDatabase
-            AssetDatabase.Refresh();
-
-            return new { message = $"Created script: {Path.Combine(scriptPath, scriptName)}" };
         }
 
         /// <summary>
@@ -172,8 +235,25 @@ namespace MCPServer.Editor.Commands
             bool createIfMissing = (bool?)@params["create_if_missing"] ?? false;
             bool createFolderIfMissing = (bool?)@params["create_folder_if_missing"] ?? false;
 
-            string fullPath = Path.Combine(Application.dataPath, scriptPath);
+            // Handle path correctly to avoid double "Assets" folder
+            string relativePath;
+            if (scriptPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+            {
+                // If path already starts with Assets/, remove it for local path operations
+                relativePath = scriptPath.Substring(7);
+            }
+            else
+            {
+                relativePath = scriptPath;
+            }
+            
+            string fullPath = Path.Combine(Application.dataPath, relativePath);
             string directory = Path.GetDirectoryName(fullPath);
+            
+            // Debug the paths to help diagnose issues
+            Debug.Log($"UpdateScript - Original script path: {scriptPath}");
+            Debug.Log($"UpdateScript - Relative path: {relativePath}");
+            Debug.Log($"UpdateScript - Full path: {fullPath}");
 
             // Check if file exists, create if requested
             if (!File.Exists(fullPath))
@@ -252,6 +332,7 @@ namespace MCPServer.Editor.Commands
         {
             string objectName = (string)@params["object_name"] ?? throw new System.Exception("Parameter 'object_name' is required.");
             string scriptName = (string)@params["script_name"] ?? throw new System.Exception("Parameter 'script_name' is required.");
+            string scriptPath = (string)@params["script_path"]; // Optional
 
             // Find the target object
             GameObject targetObject = GameObject.Find(objectName);
@@ -259,35 +340,119 @@ namespace MCPServer.Editor.Commands
                 throw new System.Exception($"Object '{objectName}' not found in scene.");
 
             // Ensure script name ends with .cs
-            if (!scriptName.EndsWith(".cs"))
+            if (!scriptName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 scriptName += ".cs";
 
+            // Remove the path from the scriptName if it contains path separators
+            string scriptFileName = Path.GetFileName(scriptName);
+            string scriptNameWithoutExtension = Path.GetFileNameWithoutExtension(scriptFileName);
+
             // Find the script asset
-            string[] guids = AssetDatabase.FindAssets(Path.GetFileNameWithoutExtension(scriptName));
-            if (guids.Length == 0)
-                throw new System.Exception($"Script '{scriptName}' not found in project.");
-
-            // Get the script asset
-            string scriptPath = AssetDatabase.GUIDToAssetPath(guids[0]);
-            MonoScript scriptAsset = AssetDatabase.LoadAssetAtPath<MonoScript>(scriptPath);
-            if (scriptAsset == null)
-                throw new System.Exception($"Failed to load script asset: {scriptName}");
-
-            // Get the script type
-            System.Type scriptType = scriptAsset.GetClass();
-            if (scriptType == null)
-                throw new System.Exception($"Script '{scriptName}' does not contain a valid MonoBehaviour class.");
-
-            // Add the component
-            Component component = targetObject.AddComponent(scriptType);
-            if (component == null)
-                throw new System.Exception($"Failed to add component of type {scriptType.Name} to object '{objectName}'.");
-
-            return new
+            string[] guids;
+            
+            if (!string.IsNullOrEmpty(scriptPath))
             {
-                message = $"Successfully attached script '{scriptName}' to object '{objectName}'",
-                component_type = scriptType.Name
-            };
+                // If a specific path is provided, try that first
+                if (File.Exists(Path.Combine(Application.dataPath, scriptPath.Replace("Assets/", ""))))
+                {
+                    // Use the direct path if it exists
+                    MonoScript scriptAsset = AssetDatabase.LoadAssetAtPath<MonoScript>(scriptPath);
+                    if (scriptAsset != null)
+                    {
+                        System.Type scriptType = scriptAsset.GetClass();
+                        if (scriptType != null)
+                        {
+                            try
+                            {
+                                // Try to add the component
+                                Component component = targetObject.AddComponent(scriptType);
+                                if (component != null)
+                                {
+                                    return new
+                                    {
+                                        message = $"Successfully attached script '{scriptFileName}' to object '{objectName}'",
+                                        component_type = scriptType.Name
+                                    };
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogError($"Error attaching script component: {ex.Message}");
+                                throw new System.Exception($"Failed to add component: {ex.Message}");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Use the file name for searching if direct path didn't work
+            guids = AssetDatabase.FindAssets(scriptNameWithoutExtension + " t:script");
+            
+            if (guids.Length == 0)
+            {
+                // Try a broader search if exact match fails
+                guids = AssetDatabase.FindAssets(scriptNameWithoutExtension);
+                
+                if (guids.Length == 0)
+                    throw new System.Exception($"Script '{scriptFileName}' not found in project.");
+            }
+
+            // Check each potential script until we find one that can be attached
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                
+                // Filter to only consider .cs files
+                if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                    
+                // Double check the file name to avoid false matches
+                string foundFileName = Path.GetFileName(path);
+                if (!string.Equals(foundFileName, scriptFileName, StringComparison.OrdinalIgnoreCase) && 
+                    !string.Equals(Path.GetFileNameWithoutExtension(foundFileName), scriptNameWithoutExtension, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                
+                MonoScript scriptAsset = AssetDatabase.LoadAssetAtPath<MonoScript>(path);
+                if (scriptAsset == null)
+                    continue;
+
+                System.Type scriptType = scriptAsset.GetClass();
+                if (scriptType == null || !typeof(MonoBehaviour).IsAssignableFrom(scriptType))
+                    continue;
+
+                try
+                {
+                    // Check if component is already attached
+                    if (targetObject.GetComponent(scriptType) != null)
+                    {
+                        return new
+                        {
+                            message = $"Script '{scriptNameWithoutExtension}' is already attached to object '{objectName}'",
+                            component_type = scriptType.Name
+                        };
+                    }
+
+                    // Add the component
+                    Component component = targetObject.AddComponent(scriptType);
+                    if (component != null)
+                    {
+                        return new
+                        {
+                            message = $"Successfully attached script '{scriptFileName}' to object '{objectName}'",
+                            component_type = scriptType.Name,
+                            script_path = path
+                        };
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Error attaching script '{path}': {ex.Message}");
+                    // Continue trying other matches instead of failing immediately
+                }
+            }
+
+            // If we've tried all possibilities and nothing worked
+            throw new System.Exception($"Could not attach script '{scriptFileName}' to object '{objectName}'. No valid script found or component creation failed.");
         }
     }
 }
