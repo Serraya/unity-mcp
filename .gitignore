@@ -1,3 +1,9 @@
+# AI-related files
+.cursorrules
+.cursorignore
+CLAUDE.md
+
+# Code-copy related files
 .codeignore
 *codeclip*
 
@@ -10,3 +16,12 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Unity Editor
+*.meta
+*.unitypackage
+*.asset
+
+# IDE
+.idea/
+.vscode/
