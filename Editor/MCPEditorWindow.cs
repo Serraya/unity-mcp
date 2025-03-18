@@ -51,7 +51,7 @@ public class MCPConfigServer
 public class ServerConfig
 {
     [JsonProperty("unity_host")]
-    public string unityHost;
+    public string unityHost = "localhost";
 
     [JsonProperty("unity_port")]
     public int unityPort;
@@ -145,6 +145,13 @@ public class MCPEditorWindow : EditorWindow
         if (serverConfig == null)
         {
             LoadServerConfig(); // Reload config if not loaded
+        }
+
+        // Validate host is not null
+        if (string.IsNullOrEmpty(serverConfig.unityHost))
+        {
+            serverConfig.unityHost = "localhost"; // Fallback to localhost if null
+            UnityEngine.Debug.LogWarning("Unity host was null, defaulting to localhost");
         }
 
         try
