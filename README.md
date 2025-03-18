@@ -18,7 +18,41 @@ This project is perfect for developers who want to leverage LLMs to enhance thei
 
 ## Installation
 
-Follow these simple steps to get started with the Unity MCP Server:
+### Prerequisites
+
+- Unity 2020.3 LTS or newer
+- Python 3.7 or newer
+- uv package manager
+
+**If you're on Mac, please install uv as**
+
+```bash
+brew install uv
+```
+
+**On Windows**
+
+```bash
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+and then add to your PATH:
+
+```bash
+set Path=%USERPROFILE%\.local\bin;%Path%
+```
+
+**On Linux**
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Otherwise, installation instructions are on their website: [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
+
+**⚠️ Do not proceed before installing UV**
+
+### Unity Package Installation
 
 1. **Add the Unity Package**
 
@@ -27,27 +61,62 @@ Follow these simple steps to get started with the Unity MCP Server:
    - Enter: `https://github.com/justinpbarnett/unity-mcp.git`
 
 2. **Set Up Python Environment**
-
-   - Install [Python](https://www.python.org/downloads/) (version 3.7 or higher)
-   - Install `uv` package manager:
-     ```bash
-     pip install uv
-     ```
-   - Navigate to `Python` in your project
+   - Navigate to the Python directory in your project:
+     - If installed as a package: `Library/PackageCache/com.justinpbarnett.unity-mcp/Python`
+     - If installed locally: `Assets/unity-mcp/Python`
    - Install dependencies:
      ```bash
      uv venv
      uv pip install -e .
      ```
 
-3. **Configure Claude Desktop**
+### Claude Desktop Integration
 
-   - Open the Unity MCP window (`Window > Unity MCP`)
-   - Click the "Configure Claude" button
-   - Follow the on-screen instructions to set up the integration
+1. Open the Unity MCP window (`Window > Unity MCP`)
+2. Click the "Configure Claude" button
+3. Follow the on-screen instructions to set up the integration
 
-4. **Start Claude Desktop**
-   - Launch Claude Desktop
+Alternatively, manually configure Claude Desktop:
+
+1. Go to Claude > Settings > Developer > Edit Config
+2. Edit `claude_desktop_config.json` to include:
+
+```json
+{
+  "mcpServers": {
+    "unityMCP": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/your/unity-mcp/Python",
+        "run",
+        "server.py"
+      ]
+    }
+  }
+}
+```
+
+Replace `/path/to/your/unity-mcp/Python` with the actual path to the Unity MCP Python directory.
+
+### Cursor Integration
+
+1. Open the Unity MCP window (`Window > Unity MCP`)
+2. Click the "Configure Cursor" button
+3. Follow the on-screen instructions to set up the integration
+
+Alternatively, go to Cursor Settings > MCP and paste this as a command:
+
+```bash
+uv --directory "/path/to/your/unity-mcp/Python" run server.py
+```
+
+Replace `/path/to/your/unity-mcp/Python` with the actual path to the Unity MCP Python directory.
+
+**⚠️ Only run one instance of the MCP server (either on Cursor or Claude Desktop), not both**
+
+4. **Start Claude Desktop or Cursor**
+   - Launch your preferred tool
    - The Unity MCP Server will automatically connect
 
 ## Configuration
@@ -97,7 +166,7 @@ If you prefer to manually configure your MCP client (like Claude Desktop or Curs
 
 3. **Find the Correct Python Path**
 
-   - If installed as a package: Look in `Library/PackageCache/com.justinpbarnett.unitymcpserver/Python`
+   - If installed as a package: Look in `Library/PackageCache/com.justinpbarnett.unity-mcp/Python`
    - If installed locally: Look in `Assets/unity-mcp/Python`
 
 4. **Verify Configuration**
