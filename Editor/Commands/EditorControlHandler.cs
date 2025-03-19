@@ -5,7 +5,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Reflection;
 using System.Collections.Generic;
-using System.Linq;  // Add LINQ namespace for Select extension method
+using System.Linq; // Add LINQ namespace for Select extension method
 using System.Globalization;
 
 /// <summary>
@@ -39,6 +39,8 @@ public static class EditorControlHandler
                 return HandleExecuteCommand(commandParams);
             case "READ_CONSOLE":
                 return ReadConsole(commandParams);
+            case "GET_AVAILABLE_COMMANDS":
+                return GetAvailableCommands();
             default:
                 return new { error = $"Unknown editor control command: {command}" };
         }
@@ -105,11 +107,7 @@ public static class EditorControlHandler
             buildPlayerOptions.locationPathName = buildPath;
 
             BuildReport report = BuildPipeline.BuildPlayer(buildPlayerOptions);
-            return new
-            {
-                message = "Build completed successfully",
-                summary = report.summary
-            };
+            return new { message = "Build completed successfully", summary = report.summary };
         }
         catch (System.Exception e)
         {
@@ -147,10 +145,14 @@ public static class EditorControlHandler
         // Get filter parameters if provided
         if (@params != null)
         {
-            if (@params["show_logs"] != null) showLogs = (bool)@params["show_logs"];
-            if (@params["show_warnings"] != null) showWarnings = (bool)@params["show_warnings"];
-            if (@params["show_errors"] != null) showErrors = (bool)@params["show_errors"];
-            if (@params["search_term"] != null) searchTerm = (string)@params["search_term"];
+            if (@params["show_logs"] != null)
+                showLogs = (bool)@params["show_logs"];
+            if (@params["show_warnings"] != null)
+                showWarnings = (bool)@params["show_warnings"];
+            if (@params["show_errors"] != null)
+                showErrors = (bool)@params["show_errors"];
+            if (@params["search_term"] != null)
+                searchTerm = (string)@params["search_term"];
         }
 
         try
@@ -160,20 +162,50 @@ public static class EditorControlHandler
             Type logEntryType = Type.GetType("UnityEditor.LogEntry,UnityEditor");
 
             if (logEntriesType == null || logEntryType == null)
-                return new { error = "Could not find required Unity logging types", entries = new List<object>() };
+                return new
+                {
+                    error = "Could not find required Unity logging types",
+                    entries = new List<object>()
+                };
 
             // Get essential methods
-            MethodInfo getCountMethod = logEntriesType.GetMethod("GetCount", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            MethodInfo getEntryMethod = logEntriesType.GetMethod("GetEntryAt", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic) ??
-                                        logEntriesType.GetMethod("GetEntryInternal", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            MethodInfo getCountMethod = logEntriesType.GetMethod(
+                "GetCount",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+            );
+            MethodInfo getEntryMethod =
+                logEntriesType.GetMethod(
+                    "GetEntryAt",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+                )
+                ?? logEntriesType.GetMethod(
+                    "GetEntryInternal",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+                );
 
             if (getCountMethod == null || getEntryMethod == null)
-                return new { error = "Could not find required Unity logging methods", entries = new List<object>() };
+                return new
+                {
+                    error = "Could not find required Unity logging methods",
+                    entries = new List<object>()
+                };
 
             // Get stack trace method if available
-            MethodInfo getStackTraceMethod = logEntriesType.GetMethod("GetEntryStackTrace", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
-                null, new[] { typeof(int) }, null) ?? logEntriesType.GetMethod("GetStackTrace", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
-                null, new[] { typeof(int) }, null);
+            MethodInfo getStackTraceMethod =
+                logEntriesType.GetMethod(
+                    "GetEntryStackTrace",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                    null,
+                    new[] { typeof(int) },
+                    null
+                )
+                ?? logEntriesType.GetMethod(
+                    "GetStackTrace",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                    null,
+                    new[] { typeof(int) },
+                    null
+                );
 
             // Get entry count and prepare result list
             int count = (int)getCountMethod.Invoke(null, null);
@@ -183,12 +215,17 @@ public static class EditorControlHandler
             object logEntryInstance = Activator.CreateInstance(logEntryType);
 
             // Find properties on LogEntry type
-            PropertyInfo modeProperty = logEntryType.GetProperty("mode") ?? logEntryType.GetProperty("Mode");
-            PropertyInfo messageProperty = logEntryType.GetProperty("message") ?? logEntryType.GetProperty("Message");
+            PropertyInfo modeProperty =
+                logEntryType.GetProperty("mode") ?? logEntryType.GetProperty("Mode");
+            PropertyInfo messageProperty =
+                logEntryType.GetProperty("message") ?? logEntryType.GetProperty("Message");
 
             // Parse search terms if provided
-            string[] searchWords = !string.IsNullOrWhiteSpace(searchTerm) ?
-                searchTerm.ToLower().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries) : null;
+            string[] searchWords = !string.IsNullOrWhiteSpace(searchTerm)
+                ? searchTerm
+                    .ToLower()
+                    .Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                : null;
 
             // Process each log entry
             for (int i = 0; i < count; i++)
@@ -201,30 +238,41 @@ public static class EditorControlHandler
                     {
                         getEntryMethod.Invoke(null, new object[] { i, logEntryInstance });
                     }
-                    else if (methodParams.Length >= 1 && methodParams[0].ParameterType == typeof(int))
+                    else if (
+                        methodParams.Length >= 1 && methodParams[0].ParameterType == typeof(int)
+                    )
                     {
                         var parameters = new object[methodParams.Length];
                         parameters[0] = i;
                         for (int p = 1; p < parameters.Length; p++)
                         {
-                            parameters[p] = methodParams[p].ParameterType.IsValueType ?
-                                Activator.CreateInstance(methodParams[p].ParameterType) : null;
+                            parameters[p] = methodParams[p].ParameterType.IsValueType
+                                ? Activator.CreateInstance(methodParams[p].ParameterType)
+                                : null;
                         }
                         getEntryMethod.Invoke(null, parameters);
                     }
-                    else continue;
+                    else
+                        continue;
 
                     // Extract log data
-                    int logType = modeProperty != null ?
-                        Convert.ToInt32(modeProperty.GetValue(logEntryInstance) ?? 0) : 0;
+                    int logType =
+                        modeProperty != null
+                            ? Convert.ToInt32(modeProperty.GetValue(logEntryInstance) ?? 0)
+                            : 0;
 
-                    string message = messageProperty != null ?
-                        (messageProperty.GetValue(logEntryInstance)?.ToString() ?? "") : "";
+                    string message =
+                        messageProperty != null
+                            ? (messageProperty.GetValue(logEntryInstance)?.ToString() ?? "")
+                            : "";
 
                     // If message is empty, try to get it via a field
                     if (string.IsNullOrEmpty(message))
                     {
-                        var msgField = logEntryType.GetField("message", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        var msgField = logEntryType.GetField(
+                            "message",
+                            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                        );
                         if (msgField != null)
                         {
                             object msgValue = msgField.GetValue(logEntryInstance);
@@ -235,50 +283,93 @@ public static class EditorControlHandler
                         if (string.IsNullOrEmpty(message))
                         {
                             // Access ConsoleWindow and its data
-                            Type consoleWindowType = Type.GetType("UnityEditor.ConsoleWindow,UnityEditor");
+                            Type consoleWindowType = Type.GetType(
+                                "UnityEditor.ConsoleWindow,UnityEditor"
+                            );
                             if (consoleWindowType != null)
                             {
                                 try
                                 {
                                     // Get Console window instance
-                                    var getWindowMethod = consoleWindowType.GetMethod("GetWindow",
-                                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
-                                        null, new[] { typeof(bool) }, null) ??
-                                        consoleWindowType.GetMethod("GetConsoleWindow",
-                                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                                    var getWindowMethod =
+                                        consoleWindowType.GetMethod(
+                                            "GetWindow",
+                                            BindingFlags.Static
+                                                | BindingFlags.Public
+                                                | BindingFlags.NonPublic,
+                                            null,
+                                            new[] { typeof(bool) },
+                                            null
+                                        )
+                                        ?? consoleWindowType.GetMethod(
+                                            "GetConsoleWindow",
+                                            BindingFlags.Static
+                                                | BindingFlags.Public
+                                                | BindingFlags.NonPublic
+                                        );
 
                                     if (getWindowMethod != null)
                                     {
-                                        object consoleWindow = getWindowMethod.Invoke(null,
-                                            getWindowMethod.GetParameters().Length > 0 ? new object[] { false } : null);
+                                        object consoleWindow = getWindowMethod.Invoke(
+                                            null,
+                                            getWindowMethod.GetParameters().Length > 0
+                                                ? new object[] { false }
+                                                : null
+                                        );
 
                                         if (consoleWindow != null)
                                         {
                                             // Try to find log entries collection
-                                            foreach (var prop in consoleWindowType.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                                            foreach (
+                                                var prop in consoleWindowType.GetProperties(
+                                                    BindingFlags.Instance
+                                                        | BindingFlags.Public
+                                                        | BindingFlags.NonPublic
+                                                )
+                                            )
                                             {
-                                                if (prop.PropertyType.IsArray ||
-                                                   (prop.PropertyType.IsGenericType && prop.PropertyType.GetGenericTypeDefinition() == typeof(List<>)))
+                                                if (
+                                                    prop.PropertyType.IsArray
+                                                    || (
+                                                        prop.PropertyType.IsGenericType
+                                                        && prop.PropertyType.GetGenericTypeDefinition()
+                                                            == typeof(List<>)
+                                                    )
+                                                )
                                                 {
                                                     try
                                                     {
                                                         var logItems = prop.GetValue(consoleWindow);
                                                         if (logItems != null)
                                                         {
-                                                            if (logItems.GetType().IsArray && i < ((Array)logItems).Length)
+                                                            if (
+                                                                logItems.GetType().IsArray
+                                                                && i < ((Array)logItems).Length
+                                                            )
                                                             {
-                                                                var entry = ((Array)logItems).GetValue(i);
+                                                                var entry = (
+                                                                    (Array)logItems
+                                                                ).GetValue(i);
                                                                 if (entry != null)
                                                                 {
                                                                     var entryType = entry.GetType();
-                                                                    var entryMessageProp = entryType.GetProperty("message") ??
-                                                                                         entryType.GetProperty("Message");
+                                                                    var entryMessageProp =
+                                                                        entryType.GetProperty(
+                                                                            "message"
+                                                                        )
+                                                                        ?? entryType.GetProperty(
+                                                                            "Message"
+                                                                        );
                                                                     if (entryMessageProp != null)
                                                                     {
-                                                                        object value = entryMessageProp.GetValue(entry);
+                                                                        object value =
+                                                                            entryMessageProp.GetValue(
+                                                                                entry
+                                                                            );
                                                                         if (value != null)
                                                                         {
-                                                                            message = value.ToString();
+                                                                            message =
+                                                                                value.ToString();
                                                                             break;
                                                                         }
                                                                     }
@@ -314,23 +405,42 @@ public static class EditorControlHandler
                                 if (Application.platform == RuntimePlatform.WindowsEditor)
                                 {
                                     logPath = System.IO.Path.Combine(
-                                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                                        "Unity", "Editor", "Editor.log");
+                                        Environment.GetFolderPath(
+                                            Environment.SpecialFolder.LocalApplicationData
+                                        ),
+                                        "Unity",
+                                        "Editor",
+                                        "Editor.log"
+                                    );
                                 }
                                 else if (Application.platform == RuntimePlatform.OSXEditor)
                                 {
                                     logPath = System.IO.Path.Combine(
-                                        Environment.GetFolderPath(Environment.SpecialFolder.Personal),
-                                        "Library", "Logs", "Unity", "Editor.log");
+                                        Environment.GetFolderPath(
+                                            Environment.SpecialFolder.Personal
+                                        ),
+                                        "Library",
+                                        "Logs",
+                                        "Unity",
+                                        "Editor.log"
+                                    );
                                 }
                                 else if (Application.platform == RuntimePlatform.LinuxEditor)
                                 {
                                     logPath = System.IO.Path.Combine(
-                                        Environment.GetFolderPath(Environment.SpecialFolder.Personal),
-                                        ".config", "unity3d", "logs", "Editor.log");
+                                        Environment.GetFolderPath(
+                                            Environment.SpecialFolder.Personal
+                                        ),
+                                        ".config",
+                                        "unity3d",
+                                        "logs",
+                                        "Editor.log"
+                                    );
                                 }
 
-                                if (!string.IsNullOrEmpty(logPath) && System.IO.File.Exists(logPath))
+                                if (
+                                    !string.IsNullOrEmpty(logPath) && System.IO.File.Exists(logPath)
+                                )
                                 {
                                     // Read last few lines from the log file
                                     var logLines = ReadLastLines(logPath, 100);
@@ -351,14 +461,17 @@ public static class EditorControlHandler
                     string stackTrace = "";
                     if (getStackTraceMethod != null)
                     {
-                        stackTrace = getStackTraceMethod.Invoke(null, new object[] { i })?.ToString() ?? "";
+                        stackTrace =
+                            getStackTraceMethod.Invoke(null, new object[] { i })?.ToString() ?? "";
                     }
 
                     // Filter by type
-                    bool typeMatch = (logType == 0 && showLogs) ||
-                                    (logType == 1 && showWarnings) ||
-                                    (logType == 2 && showErrors);
-                    if (!typeMatch) continue;
+                    bool typeMatch =
+                        (logType == 0 && showLogs)
+                        || (logType == 1 && showWarnings)
+                        || (logType == 2 && showErrors);
+                    if (!typeMatch)
+                        continue;
 
                     // Filter by search term
                     bool searchMatch = true;
@@ -376,16 +489,24 @@ public static class EditorControlHandler
                             }
                         }
                     }
-                    if (!searchMatch) continue;
+                    if (!searchMatch)
+                        continue;
 
                     // Add matching entry to results
-                    string typeStr = logType == 0 ? "Log" : logType == 1 ? "Warning" : "Error";
-                    entries.Add(new
-                    {
-                        type = typeStr,
-                        message = message,
-                        stackTrace = stackTrace
-                    });
+                    string typeStr =
+                        logType == 0
+                            ? "Log"
+                            : logType == 1
+                                ? "Warning"
+                                : "Error";
+                    entries.Add(
+                        new
+                        {
+                            type = typeStr,
+                            message = message,
+                            stackTrace = stackTrace
+                        }
+                    );
                 }
                 catch (Exception)
                 {
@@ -420,8 +541,10 @@ public static class EditorControlHandler
     {
         foreach (var methodName in methodNames)
         {
-            var method = type.GetMethod(methodName,
-                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            var method = type.GetMethod(
+                methodName,
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+            );
             if (method != null)
                 return method;
         }
@@ -433,13 +556,27 @@ public static class EditorControlHandler
         BuildTarget target;
         switch (platform.ToLower())
         {
-            case "windows": target = BuildTarget.StandaloneWindows64; break;
-            case "mac": target = BuildTarget.StandaloneOSX; break;
-            case "linux": target = BuildTarget.StandaloneLinux64; break;
-            case "android": target = BuildTarget.Android; break;
-            case "ios": target = BuildTarget.iOS; break;
-            case "webgl": target = BuildTarget.WebGL; break;
-            default: target = (BuildTarget)(-1); break; // Invalid target
+            case "windows":
+                target = BuildTarget.StandaloneWindows64;
+                break;
+            case "mac":
+                target = BuildTarget.StandaloneOSX;
+                break;
+            case "linux":
+                target = BuildTarget.StandaloneLinux64;
+                break;
+            case "android":
+                target = BuildTarget.Android;
+                break;
+            case "ios":
+                target = BuildTarget.iOS;
+                break;
+            case "webgl":
+                target = BuildTarget.WebGL;
+                break;
+            default:
+                target = (BuildTarget)(-1);
+                break; // Invalid target
         }
         return target;
     }
@@ -465,8 +602,12 @@ public static class EditorControlHandler
         var result = new Dictionary<string, object>();
 
         // Get all public and non-public properties
-        var properties = type.GetProperties(BindingFlags.Public | BindingFlags.NonPublic |
-                                           BindingFlags.Static | BindingFlags.Instance);
+        var properties = type.GetProperties(
+            BindingFlags.Public
+                | BindingFlags.NonPublic
+                | BindingFlags.Static
+                | BindingFlags.Instance
+        );
         var propList = new List<string>();
         foreach (var prop in properties)
         {
@@ -475,8 +616,12 @@ public static class EditorControlHandler
         result["Properties"] = propList;
 
         // Get all public and non-public fields
-        var fields = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic |
-                                   BindingFlags.Static | BindingFlags.Instance);
+        var fields = type.GetFields(
+            BindingFlags.Public
+                | BindingFlags.NonPublic
+                | BindingFlags.Static
+                | BindingFlags.Instance
+        );
         var fieldList = new List<string>();
         foreach (var field in fields)
         {
@@ -485,15 +630,21 @@ public static class EditorControlHandler
         result["Fields"] = fieldList;
 
         // Get all public and non-public methods
-        var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
-                                     BindingFlags.Static | BindingFlags.Instance);
+        var methods = type.GetMethods(
+            BindingFlags.Public
+                | BindingFlags.NonPublic
+                | BindingFlags.Static
+                | BindingFlags.Instance
+        );
         var methodList = new List<string>();
         foreach (var method in methods)
         {
             if (!method.Name.StartsWith("get_") && !method.Name.StartsWith("set_"))
             {
-                var parameters = string.Join(", ", method.GetParameters()
-                    .Select(p => $"{p.ParameterType.Name} {p.Name}"));
+                var parameters = string.Join(
+                    ", ",
+                    method.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}")
+                );
                 methodList.Add($"{method.ReturnType.Name} {method.Name}({parameters})");
             }
         }
@@ -507,13 +658,16 @@ public static class EditorControlHandler
     /// </summary>
     private static Dictionary<string, string> GetObjectValues(object obj)
     {
-        if (obj == null) return new Dictionary<string, string>();
+        if (obj == null)
+            return new Dictionary<string, string>();
 
         var result = new Dictionary<string, string>();
         var type = obj.GetType();
 
         // Get all property values
-        var properties = type.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        var properties = type.GetProperties(
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+        );
         foreach (var prop in properties)
         {
             try
@@ -528,7 +682,9 @@ public static class EditorControlHandler
         }
 
         // Get all field values
-        var fields = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        var fields = type.GetFields(
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+        );
         foreach (var field in fields)
         {
             try
@@ -552,7 +708,14 @@ public static class EditorControlHandler
     {
         var result = new List<string>();
 
-        using (var stream = new System.IO.FileStream(filePath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite))
+        using (
+            var stream = new System.IO.FileStream(
+                filePath,
+                System.IO.FileMode.Open,
+                System.IO.FileAccess.Read,
+                System.IO.FileShare.ReadWrite
+            )
+        )
         using (var reader = new System.IO.StreamReader(stream))
         {
             string line;
@@ -588,5 +751,43 @@ public static class EditorControlHandler
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Gets a list of available editor commands that can be executed
+    /// the method should have a MenuItem attribute
+    /// </summary>
+    /// <returns>Object containing list of available command paths</returns>
+    [MenuItem("Window/Get Available Commands")]
+    private static object GetAvailableCommands()
+    {
+        var commands = new List<string>();
+        Assembly assembly = Assembly.GetExecutingAssembly();
+        foreach (Type type in assembly.GetTypes())
+        {
+            MethodInfo[] methods = type.GetMethods(
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+            );
+
+            foreach (MethodInfo method in methods)
+            {
+                // Look for the MenuItem attribute
+                object[] attributes = method.GetCustomAttributes(
+                    typeof(UnityEditor.MenuItem),
+                    false
+                );
+                if (attributes.Length > 0)
+                {
+                    UnityEditor.MenuItem menuItem = attributes[0] as UnityEditor.MenuItem;
+                    commands.Add(menuItem.menuItem);
+                }
+            }
+        }
+        Debug.Log($"commands.Count: {commands.Count}");
+        foreach (var command in commands)
+        {
+            Debug.Log($"Command: {command}");
+        }
+        return new { commands = commands };
     }
 }
