@@ -1,5 +1,5 @@
 from mcp.server.fastmcp import FastMCP, Context
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from unity_connection import get_unity_connection
 
 def register_editor_tools(mcp: FastMCP):
@@ -174,4 +174,96 @@ def register_editor_tools(mcp: FastMCP):
             })
             return response.get("message", f"Executed command: {command_name}")
         except Exception as e:
-            return f"Error executing command: {str(e)}" 
+            return f"Error executing command: {str(e)}"
+            
+    @mcp.tool()
+    def read_console(
+        ctx: Context,
+        show_logs: bool = True,
+        show_warnings: bool = True,
+        show_errors: bool = True,
+        search_term: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Read log messages from the Unity Console.
+        
+        Args:
+            ctx: The MCP context
+            show_logs: Whether to include regular log messages (default: True)
+            show_warnings: Whether to include warning messages (default: True)
+            show_errors: Whether to include error messages (default: True)
+            search_term: Optional text to filter logs by content. If multiple words are provided,
+                         entries must contain all words (not necessarily in order) to be included. (default: None)
+            
+        Returns:
+            List[Dict[str, Any]]: A list of console log entries, each containing 'type', 'message', and 'stackTrace' fields
+        """
+        try:
+            # Prepare params with only the provided values
+            params = {
+                "show_logs": show_logs,
+                "show_warnings": show_warnings,
+                "show_errors": show_errors
+            }
+            
+            # Only add search_term if it's provided
+            if search_term is not None:
+                params["search_term"] = search_term
+
+            response = get_unity_connection().send_command("EDITOR_CONTROL", {
+                "command": "READ_CONSOLE",
+                "params": params
+            })
+            
+            if "error" in response:
+                return [{
+                    "type": "Error",
+                    "message": f"Failed to read console: {response['error']}",
+                    "stackTrace": response.get("stackTrace", "")
+                }]
+            
+            entries = response.get("entries", [])
+            total_entries = response.get("total_entries", 0)
+            filtered_count = response.get("filtered_count", 0)
+            filter_applied = response.get("filter_applied", False)
+            
+            # Add summary info
+            summary = []
+            if total_entries > 0:
+                summary.append(f"Total console entries: {total_entries}")
+                if filter_applied:
+                    summary.append(f"Filtered entries: {filtered_count}")
+                    if filtered_count == 0:
+                        summary.append(f"No entries matched the search term: '{search_term}'")
+                else:
+                    summary.append(f"Showing all entries")
+            else:
+                summary.append("No entries in console")
+            
+            # Add filter info
+            filter_types = []
+            if show_logs: filter_types.append("logs")
+            if show_warnings: filter_types.append("warnings")
+            if show_errors: filter_types.append("errors")
+            if filter_types:
+                summary.append(f"Showing: {', '.join(filter_types)}")
+            
+            # Add summary as first entry
+            if summary:
+                entries.insert(0, {
+                    "type": "Info",
+                    "message": " | ".join(summary),
+                    "stackTrace": ""
+                })
+            
+            return entries if entries else [{
+                "type": "Info",
+                "message": "No logs found in console",
+                "stackTrace": ""
+            }]
+            
+        except Exception as e:
+            return [{
+                "type": "Error",
+                "message": f"Error reading console: {str(e)}",
+                "stackTrace": ""
+            }]
