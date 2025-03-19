@@ -354,31 +354,54 @@ public class MCPEditorWindow : EditorWindow
             UnityEngine.Debug.Log($"Using server.py at: {serverPath}");
             UnityEngine.Debug.Log($"Python directory: {pythonDir}");
 
-            // Create configuration object
-            var config = new MCPConfig
+            // Load existing configuration if it exists
+            dynamic existingConfig = null;
+            if (File.Exists(configPath))
             {
-                mcpServers = new MCPConfigServers
+                try
                 {
-                    unityMCP = new MCPConfigServer
-                    {
-                        command = "uv",
-                        args = new[]
-                        {
-                            "--directory",
-                            pythonDir,
-                            "run",
-                            "server.py"
-                        }
-                    }
+                    string existingJson = File.ReadAllText(configPath);
+                    existingConfig = JsonConvert.DeserializeObject(existingJson);
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogWarning($"Failed to parse existing Claude config: {ex.Message}. Creating new config.");
+                }
+            }
+
+            // If no existing config or parsing failed, create a new one
+            if (existingConfig == null)
+            {
+                existingConfig = new
+                {
+                    mcpServers = new Dictionary<string, object>()
+                };
+            }
+
+            // Create the Unity MCP server configuration
+            var unityMCPConfig = new MCPConfigServer
+            {
+                command = "uv",
+                args = new[]
+                {
+                    "--directory",
+                    pythonDir,
+                    "run",
+                    "server.py"
                 }
             };
-
+            // Add or update the Unity MCP configuration while preserving the rest
+            var mcpServers = existingConfig.mcpServers as Newtonsoft.Json.Linq.JObject 
+                ?? new Newtonsoft.Json.Linq.JObject();
+            
+            mcpServers["unityMCP"] = Newtonsoft.Json.Linq.JToken.FromObject(unityMCPConfig);
+            existingConfig.mcpServers = mcpServers;
             // Serialize and write to file with proper formatting
             var jsonSettings = new JsonSerializerSettings
             {
                 Formatting = Formatting.Indented
             };
-            string jsonConfig = JsonConvert.SerializeObject(config, jsonSettings);
+            string jsonConfig = JsonConvert.SerializeObject(existingConfig, jsonSettings);
             File.WriteAllText(configPath, jsonConfig);
 
             claudeConfigStatus = "Configured successfully";
