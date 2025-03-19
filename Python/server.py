@@ -55,6 +55,7 @@ def asset_creation_strategy() -> str:
         "Unity MCP Server Tools and Best Practices:\n\n"
         "1. **Editor Control**\n"
         "   - `editor_action` - Performs editor-wide actions such as `PLAY`, `PAUSE`, `STOP`, `BUILD`, `SAVE`\n"
+        "   - `read_console(show_logs=True, show_warnings=True, show_errors=True, search_term=None)` - Read and filter Unity Console logs\n"
         "2. **Scene Management**\n"
         "   - `get_current_scene()`, `get_scene_list()` - Get scene details\n"
         "   - `open_scene(path)`, `save_scene(path)` - Open/save scenes\n"
@@ -97,6 +98,8 @@ def asset_creation_strategy() -> str:
         "   - Provide correct value types for properties\n"
         "   - Keep prefabs in dedicated folders\n"
         "   - Regularly apply prefab changes\n"
+        "   - Monitor console logs for errors and warnings\n"
+        "   - Use search terms to filter console output when debugging\n"
     )
 
 # Run the server
