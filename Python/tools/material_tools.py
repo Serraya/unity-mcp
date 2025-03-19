@@ -1,5 +1,5 @@
 from mcp.server.fastmcp import FastMCP, Context
-from typing import List
+from typing import List, Optional
 from unity_connection import get_unity_connection
 
 def register_material_tools(mcp: FastMCP):
@@ -9,18 +9,22 @@ def register_material_tools(mcp: FastMCP):
     def set_material(
         ctx: Context,
         object_name: str,
-        material_name: str = None,
-        color: List[float] = None,
+        material_name: Optional[str] = None,
+        color: Optional[List[float]] = None,
         create_if_missing: bool = True
     ) -> str:
         """
-        Apply or create a material for a game object.
+        Apply or create a material for a game object. If material_name is provided,
+        the material will be saved as a shared asset in the Materials folder.
         
         Args:
             object_name: Target game object.
-            material_name: Optional material name.
-            color: Optional [R, G, B] values (0.0-1.0).
+            material_name: Optional material name. If provided, creates/uses a shared material asset.
+            color: Optional [R, G, B] or [R, G, B, A] values (0.0-1.0).
             create_if_missing: Whether to create the material if it doesn't exist (default: True).
+            
+        Returns:
+            str: Status message indicating success or failure.
         """
         try:
             unity = get_unity_connection()
@@ -63,14 +67,23 @@ def register_material_tools(mcp: FastMCP):
                         return f"Error: Color {channel} value must be in the range 0.0-1.0, but got {value}."
             
             # Set up parameters for the command
-            params = {"object_name": object_name}
+            params = {
+                "object_name": object_name,
+                "create_if_missing": create_if_missing
+            }
             if material_name:
                 params["material_name"] = material_name
-                params["create_if_missing"] = create_if_missing
             if color:
                 params["color"] = color
                 
             result = unity.send_command("SET_MATERIAL", params)
-            return f"Applied material to {object_name}: {result.get('material_name', 'unknown')}"
+            material_name = result.get("material_name", "unknown")
+            material_path = result.get("path")
+            
+            if material_path:
+                return f"Applied shared material '{material_name}' to {object_name} (saved at {material_path})"
+            else:
+                return f"Applied instance material '{material_name}' to {object_name}"
+                
         except Exception as e:
             return f"Error setting material: {str(e)}" 
