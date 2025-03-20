@@ -2,7 +2,7 @@
 
 A Unity package that enables seamless communication between Unity and Large Language Models (LLMs) like Claude Desktop via the **Model Context Protocol (MCP)**. This server acts as a bridge, allowing Unity to send commands to and receive responses from MCP-compliant tools, empowering developers to automate workflows, manipulate assets, and control the Unity Editor programmatically.
 
-Welcome to the initial release of this open-source project! Whether you're looking to integrate LLMs into your Unity workflow or contribute to an exciting new tool, we're thrilled to have you here.
+Welcome to the initial release of this open-source project! Whether you're looking to integrate LLMs into your Unity workflow or contribute to an exciting new tool, I appreciate you taking the time to check out my project.
 
 ## Overview
 
@@ -20,7 +20,7 @@ This project is perfect for developers who want to leverage LLMs to enhance thei
 
 ### Prerequisites
 
-- Unity 2020.3 LTS or newer
+- Unity 2020.3 LTS or newer (⚠️ only works in URP projects currently)
 - Python 3.7 or newer
 - uv package manager
 
@@ -70,16 +70,17 @@ Otherwise, installation instructions are on their website: [Install uv](https://
      uv pip install -e .
      ```
 
-### Claude Desktop Integration
+### MCP Client Integration
 
 1. Open the Unity MCP window (`Window > Unity MCP`)
-2. Click the "Configure Claude" button
-3. Follow the on-screen instructions to set up the integration
+2. Click the "Auto Configure" button for your desired MCP client
+3. Status indicator should show green and a "Configured" message
 
-Alternatively, manually configure Claude Desktop:
+Alternatively, manually configure your MCP client:
 
-1. Go to Claude > Settings > Developer > Edit Config
-2. Edit `claude_desktop_config.json` to include:
+1. Open the Unity MCP window (`Window > Unity MCP`)
+2. Click the "Manually Configure" button for your desired MCP client
+3. Copy the JSON code below to the config file
 
 ```json
 {
@@ -99,100 +100,15 @@ Alternatively, manually configure Claude Desktop:
 
 Replace `/path/to/your/unity-mcp/Python` with the actual path to the Unity MCP Python directory.
 
-### Cursor Integration
-
-1. Open the Unity MCP window (`Window > Unity MCP`)
-2. Click the "Configure Cursor" button
-3. Follow the on-screen instructions to set up the integration
-
-Alternatively, go to Cursor Settings > MCP and paste this as a command:
-
-```bash
-uv --directory "/path/to/your/unity-mcp/Python" run server.py
-```
-
-Replace `/path/to/your/unity-mcp/Python` with the actual path to the Unity MCP Python directory.
-
 **⚠️ Only run one instance of the MCP server (either on Cursor or Claude Desktop), not both**
 
 4. **Start Claude Desktop or Cursor**
    - Launch your preferred tool
-   - The Unity MCP Server will automatically connect
-
-## Configuration
-
-To connect the MCP Server to tools like Claude Desktop or Cursor:
-
-1. **Open the Unity MCP Window**  
-   In Unity, go to `Window > Unity MCP` to open the editor window.
-
-2. **Configure Your Tools**
-
-   - In the Unity MCP window, you'll see buttons to configure **Claude Desktop** or **Cursor**.
-   - Click the appropriate button and follow the on-screen instructions to set up the integration.
-
-3. **Verify Server Status**
-   - Check the server status in the Unity MCP window. It will display:
-     - **Unity Bridge**: Should show "Running" when active.
-     - **Python Server**: Should show "Connected" (green) when successfully linked.
-
-## Manual Configuration for MCP Clients
-
-If you prefer to manually configure your MCP client (like Claude Desktop or Cursor), you can create the configuration file yourself:
-
-1. **Locate the Configuration Directory**
-
-   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-2. **Create the Configuration File**
-   Create a JSON file with the following structure:
-
-   ```json
-   {
-     "mcpServers": {
-       "unityMCP": {
-         "command": "uv",
-         "args": [
-           "--directory",
-           "/path/to/your/unity-mcp/Python",
-           "run",
-           "server.py"
-         ]
-       }
-     }
-   }
-   ```
-
-3. **Find the Correct Python Path**
-
-   - If installed as a package: Look in `Library/PackageCache/com.justinpbarnett.unity-mcp/Python`
-   - If installed locally: Look in `Assets/unity-mcp/Python`
-
-4. **Verify Configuration**
-   - Ensure the Python path points to the correct directory containing `server.py`
-   - Make sure the `uv` command is available in your system PATH
-   - Test the connection using the Unity MCP window
+   - The Unity MCP Server will automatically start and connect
 
 ## Usage
 
-Once configured, you can use the MCP Server to interact with LLMs directly from Unity or Python. Here are a couple of examples:
-
-### Creating a Cube in the Scene
-
-```python
-# Send a command to create a cube at position (0, 0, 0)
-create_primitive(primitive_type="Cube", position=[0, 0, 0])
-```
-
-### Changing a Material's Color
-
-```python
-# Set a material's color to red (RGBA: 1, 0, 0, 1)
-set_material_color(material_name="MyMaterial", color=[1, 0, 0, 1])
-```
-
-Explore more commands in the [HOW_TO_ADD_A_TOOL.md](HOW_TO_ADD_A_TOOL.md) file for detailed examples and instructions on extending functionality.
+Once configured, you can use the MCP Client to interact with Unity directly through their chat interface.
 
 ## Features
 
@@ -205,7 +121,7 @@ Explore more commands in the [HOW_TO_ADD_A_TOOL.md](HOW_TO_ADD_A_TOOL.md) file f
 
 ## Contributing
 
-We'd love your help to make the Unity MCP Server even better! Here's how to contribute:
+I'd love your help to make the Unity MCP Server even better! Here's how to contribute:
 
 1. **Fork the Repository**  
    Fork [github.com/justinpbarnett/unity-mcp](https://github.com/justinpbarnett/unity-mcp) to your GitHub account.
@@ -216,8 +132,14 @@ We'd love your help to make the Unity MCP Server even better! Here's how to cont
    git checkout -b feature/your-feature-name
    ```
 
+   OR
+
+   ```bash
+   git checkout -b bugfix/your-bugfix-name
+   ```
+
 3. **Make Changes**  
-   Implement your feature or fix, following the project's coding standards (see [HOW_TO_ADD_A_TOOL.md](HOW_TO_ADD_A_TOOL.md) for guidance).
+   Implement your feature or fix.
 
 4. **Commit and Push**  
    Use clear, descriptive commit messages:
@@ -229,8 +151,6 @@ We'd love your help to make the Unity MCP Server even better! Here's how to cont
 
 5. **Submit a Pull Request**  
    Open a pull request to the `master` branch. Include a description of your changes and any relevant details.
-
-For more details, check out [CONTRIBUTING.md](CONTRIBUTING.md) (to be created).
 
 ## License
 
@@ -259,11 +179,9 @@ For additional help, check the [issue tracker](https://github.com/justinpbarnett
 Have questions or want to chat about the project? Reach out!
 
 - **X**: [@justinpbarnett](https://x.com/justinpbarnett)
-- **GitHub**: [justinpbarnett](https://github.com/justinpbarnett)
-- **Discord**: Join our community (link coming soon!).
 
 ## Acknowledgments
 
-A huge thanks to everyone who's supported this project's initial release. Special shoutout to Unity Technologies for inspiring tools that push creative boundaries, and to the open-source community for making projects like this possible.
+A huge thanks to everyone who's supported this project's initial release. Special shoutout to Unity Technologies for having an excellent Editor API.
 
 Happy coding, and enjoy integrating LLMs with Unity!

@@ -5,9 +5,8 @@ using System.IO;
 using System.Text;
 using System.Linq;
 using Newtonsoft.Json.Linq;
-using MCPServer.Editor.Helpers;
 
-namespace MCPServer.Editor.Commands
+namespace UnityMCP.Editor.Commands
 {
     /// <summary>
     /// Handles script-related commands for Unity
@@ -19,12 +18,9 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object ViewScript(JObject @params)
         {
-            string scriptPath = (string)@params["script_path"] ?? throw new System.Exception("Parameter 'script_path' is required.");
+            string scriptPath = (string)@params["script_path"] ?? throw new Exception("Parameter 'script_path' is required.");
             bool requireExists = (bool?)@params["require_exists"] ?? true;
-            
-            // Debug to help diagnose issues
-            Debug.Log($"ViewScript - Original script path: {scriptPath}");
-            
+
             // Handle path correctly to avoid double "Assets" folder issue
             string relativePath;
             if (scriptPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
@@ -36,16 +32,14 @@ namespace MCPServer.Editor.Commands
             {
                 relativePath = scriptPath;
             }
-            
+
             string fullPath = Path.Combine(Application.dataPath, relativePath);
-            Debug.Log($"ViewScript - Relative path: {relativePath}");
-            Debug.Log($"ViewScript - Full path: {fullPath}");
 
             if (!File.Exists(fullPath))
             {
                 if (requireExists)
                 {
-                    throw new System.Exception($"Script file not found: {scriptPath}");
+                    throw new Exception($"Script file not found: {scriptPath}");
                 }
                 else
                 {
@@ -76,7 +70,7 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object CreateScript(JObject @params)
         {
-            string scriptName = (string)@params["script_name"] ?? throw new System.Exception("Parameter 'script_name' is required.");
+            string scriptName = (string)@params["script_name"] ?? throw new Exception("Parameter 'script_name' is required.");
             string scriptType = (string)@params["script_type"] ?? "MonoBehaviour";
             string namespaceName = (string)@params["namespace"];
             string template = (string)@params["template"];
@@ -93,7 +87,7 @@ namespace MCPServer.Editor.Commands
 
             // Determine the script path
             string scriptPath;
-            
+
             // Handle the script folder parameter
             if (string.IsNullOrEmpty(scriptFolder))
             {
@@ -105,7 +99,7 @@ namespace MCPServer.Editor.Commands
             {
                 // Use provided folder path
                 scriptPath = scriptFolder;
-                
+
                 // If scriptFolder starts with "Assets/", remove it for local path operations
                 if (scriptPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
                 {
@@ -115,10 +109,7 @@ namespace MCPServer.Editor.Commands
 
             // Create the full directory path, avoiding Assets/Assets issue
             string folderPath = Path.Combine(Application.dataPath, scriptPath);
-            Debug.Log($"CreateScript - Script name: {scriptName}");
-            Debug.Log($"CreateScript - Script path: {scriptPath}");
-            Debug.Log($"CreateScript - Creating script in folder path: {folderPath}");
-            
+
             // Create directory if it doesn't exist
             if (!Directory.Exists(folderPath))
             {
@@ -129,7 +120,7 @@ namespace MCPServer.Editor.Commands
                 }
                 catch (Exception ex)
                 {
-                    throw new System.Exception($"Failed to create directory '{scriptPath}': {ex.Message}");
+                    throw new Exception($"Failed to create directory '{scriptPath}': {ex.Message}");
                 }
             }
 
@@ -137,7 +128,7 @@ namespace MCPServer.Editor.Commands
             string fullFilePath = Path.Combine(folderPath, scriptName);
             if (File.Exists(fullFilePath) && !overwrite)
             {
-                throw new System.Exception($"Script file '{scriptName}' already exists in '{scriptPath}' and overwrite is not enabled.");
+                throw new Exception($"Script file '{scriptName}' already exists in '{scriptPath}' and overwrite is not enabled.");
             }
 
             try
@@ -151,7 +142,7 @@ namespace MCPServer.Editor.Commands
                 else
                 {
                     // Otherwise generate content based on template and parameters
-                    StringBuilder contentBuilder = new StringBuilder();
+                    StringBuilder contentBuilder = new();
 
                     // Add using directives
                     contentBuilder.AppendLine("using UnityEngine;");
@@ -212,8 +203,9 @@ namespace MCPServer.Editor.Commands
                 {
                     relativePath = $"Assets/{relativePath}";
                 }
-                
-                return new { 
+
+                return new
+                {
                     message = $"Created script: {Path.Combine(relativePath, scriptName).Replace('\\', '/')}",
                     script_path = Path.Combine(relativePath, scriptName).Replace('\\', '/')
                 };
@@ -221,7 +213,7 @@ namespace MCPServer.Editor.Commands
             catch (Exception ex)
             {
                 Debug.LogError($"Failed to create script: {ex.Message}\n{ex.StackTrace}");
-                throw new System.Exception($"Failed to create script '{scriptName}': {ex.Message}");
+                throw new Exception($"Failed to create script '{scriptName}': {ex.Message}");
             }
         }
 
@@ -230,8 +222,8 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object UpdateScript(JObject @params)
         {
-            string scriptPath = (string)@params["script_path"] ?? throw new System.Exception("Parameter 'script_path' is required.");
-            string content = (string)@params["content"] ?? throw new System.Exception("Parameter 'content' is required.");
+            string scriptPath = (string)@params["script_path"] ?? throw new Exception("Parameter 'script_path' is required.");
+            string content = (string)@params["content"] ?? throw new Exception("Parameter 'content' is required.");
             bool createIfMissing = (bool?)@params["create_if_missing"] ?? false;
             bool createFolderIfMissing = (bool?)@params["create_folder_if_missing"] ?? false;
 
@@ -246,14 +238,12 @@ namespace MCPServer.Editor.Commands
             {
                 relativePath = scriptPath;
             }
-            
+
             string fullPath = Path.Combine(Application.dataPath, relativePath);
             string directory = Path.GetDirectoryName(fullPath);
-            
+
             // Debug the paths to help diagnose issues
-            Debug.Log($"UpdateScript - Original script path: {scriptPath}");
-            Debug.Log($"UpdateScript - Relative path: {relativePath}");
-            Debug.Log($"UpdateScript - Full path: {fullPath}");
+
 
             // Check if file exists, create if requested
             if (!File.Exists(fullPath))
@@ -267,7 +257,7 @@ namespace MCPServer.Editor.Commands
                     }
                     else if (!Directory.Exists(directory))
                     {
-                        throw new System.Exception($"Directory does not exist: {Path.GetDirectoryName(scriptPath)}");
+                        throw new Exception($"Directory does not exist: {Path.GetDirectoryName(scriptPath)}");
                     }
 
                     // Create the file with content
@@ -277,7 +267,7 @@ namespace MCPServer.Editor.Commands
                 }
                 else
                 {
-                    throw new System.Exception($"Script file not found: {scriptPath}");
+                    throw new Exception($"Script file not found: {scriptPath}");
                 }
             }
 
@@ -316,7 +306,7 @@ namespace MCPServer.Editor.Commands
             }
 
             if (!Directory.Exists(fullPath))
-                throw new System.Exception($"Folder not found: {folderPath}");
+                throw new Exception($"Folder not found: {folderPath}");
 
             string[] scripts = Directory.GetFiles(fullPath, "*.cs", SearchOption.AllDirectories)
                 .Select(path => path.Replace(Application.dataPath, "Assets"))
@@ -330,14 +320,14 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object AttachScript(JObject @params)
         {
-            string objectName = (string)@params["object_name"] ?? throw new System.Exception("Parameter 'object_name' is required.");
-            string scriptName = (string)@params["script_name"] ?? throw new System.Exception("Parameter 'script_name' is required.");
+            string objectName = (string)@params["object_name"] ?? throw new Exception("Parameter 'object_name' is required.");
+            string scriptName = (string)@params["script_name"] ?? throw new Exception("Parameter 'script_name' is required.");
             string scriptPath = (string)@params["script_path"]; // Optional
 
             // Find the target object
             GameObject targetObject = GameObject.Find(objectName);
             if (targetObject == null)
-                throw new System.Exception($"Object '{objectName}' not found in scene.");
+                throw new Exception($"Object '{objectName}' not found in scene.");
 
             // Ensure script name ends with .cs
             if (!scriptName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
@@ -349,7 +339,7 @@ namespace MCPServer.Editor.Commands
 
             // Find the script asset
             string[] guids;
-            
+
             if (!string.IsNullOrEmpty(scriptPath))
             {
                 // If a specific path is provided, try that first
@@ -359,7 +349,7 @@ namespace MCPServer.Editor.Commands
                     MonoScript scriptAsset = AssetDatabase.LoadAssetAtPath<MonoScript>(scriptPath);
                     if (scriptAsset != null)
                     {
-                        System.Type scriptType = scriptAsset.GetClass();
+                        Type scriptType = scriptAsset.GetClass();
                         if (scriptType != null)
                         {
                             try
@@ -378,7 +368,7 @@ namespace MCPServer.Editor.Commands
                             catch (Exception ex)
                             {
                                 Debug.LogError($"Error attaching script component: {ex.Message}");
-                                throw new System.Exception($"Failed to add component: {ex.Message}");
+                                throw new Exception($"Failed to add component: {ex.Message}");
                             }
                         }
                     }
@@ -387,36 +377,36 @@ namespace MCPServer.Editor.Commands
 
             // Use the file name for searching if direct path didn't work
             guids = AssetDatabase.FindAssets(scriptNameWithoutExtension + " t:script");
-            
+
             if (guids.Length == 0)
             {
                 // Try a broader search if exact match fails
                 guids = AssetDatabase.FindAssets(scriptNameWithoutExtension);
-                
+
                 if (guids.Length == 0)
-                    throw new System.Exception($"Script '{scriptFileName}' not found in project.");
+                    throw new Exception($"Script '{scriptFileName}' not found in project.");
             }
 
             // Check each potential script until we find one that can be attached
             foreach (string guid in guids)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
-                
+
                 // Filter to only consider .cs files
                 if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                     continue;
-                    
+
                 // Double check the file name to avoid false matches
                 string foundFileName = Path.GetFileName(path);
-                if (!string.Equals(foundFileName, scriptFileName, StringComparison.OrdinalIgnoreCase) && 
+                if (!string.Equals(foundFileName, scriptFileName, StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(Path.GetFileNameWithoutExtension(foundFileName), scriptNameWithoutExtension, StringComparison.OrdinalIgnoreCase))
                     continue;
-                
+
                 MonoScript scriptAsset = AssetDatabase.LoadAssetAtPath<MonoScript>(path);
                 if (scriptAsset == null)
                     continue;
 
-                System.Type scriptType = scriptAsset.GetClass();
+                Type scriptType = scriptAsset.GetClass();
                 if (scriptType == null || !typeof(MonoBehaviour).IsAssignableFrom(scriptType))
                     continue;
 
@@ -452,7 +442,7 @@ namespace MCPServer.Editor.Commands
             }
 
             // If we've tried all possibilities and nothing worked
-            throw new System.Exception($"Could not attach script '{scriptFileName}' to object '{objectName}'. No valid script found or component creation failed.");
+            throw new Exception($"Could not attach script '{scriptFileName}' to object '{objectName}'. No valid script found or component creation failed.");
         }
     }
 }
