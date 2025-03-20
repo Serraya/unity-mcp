@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 using UnityEditor;
 using System.IO;
 
-namespace MCPServer.Editor.Commands
+namespace UnityMCP.Editor.Commands
 {
     /// <summary>
     /// Handles material-related commands
@@ -70,7 +70,7 @@ namespace MCPServer.Editor.Commands
                 if (colorArray.Count < 3 || colorArray.Count > 4)
                     throw new System.Exception("Color must be an array of 3 (RGB) or 4 (RGBA) floats.");
 
-                Color color = new Color(
+                Color color = new(
                     (float)colorArray[0],
                     (float)colorArray[1],
                     (float)colorArray[2],

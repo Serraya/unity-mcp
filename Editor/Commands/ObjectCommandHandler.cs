@@ -1,14 +1,14 @@
 using UnityEngine;
 using Newtonsoft.Json.Linq;
-using MCPServer.Editor.Helpers;
 using System;
 using System.Linq;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine.SceneManagement;
 using UnityEditor.SceneManagement;
+using UnityMCP.Editor.Helpers;
 
-namespace MCPServer.Editor.Commands
+namespace UnityMCP.Editor.Commands
 {
     /// <summary>
     /// Handles object-related commands
@@ -20,11 +20,11 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object GetObjectInfo(JObject @params)
         {
-            string name = (string)@params["name"] ?? throw new System.Exception("Parameter 'name' is required.");
-            var obj = GameObject.Find(name) ?? throw new System.Exception($"Object '{name}' not found.");
+            string name = (string)@params["name"] ?? throw new Exception("Parameter 'name' is required.");
+            var obj = GameObject.Find(name) ?? throw new Exception($"Object '{name}' not found.");
             return new
             {
-                name = obj.name,
+                obj.name,
                 position = new[] { obj.transform.position.x, obj.transform.position.y, obj.transform.position.z },
                 rotation = new[] { obj.transform.eulerAngles.x, obj.transform.eulerAngles.y, obj.transform.eulerAngles.z },
                 scale = new[] { obj.transform.localScale.x, obj.transform.localScale.y, obj.transform.localScale.z }
@@ -36,7 +36,7 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object CreateObject(JObject @params)
         {
-            string type = (string)@params["type"] ?? throw new System.Exception("Parameter 'type' is required.");
+            string type = (string)@params["type"] ?? throw new Exception("Parameter 'type' is required.");
             GameObject obj = type.ToUpper() switch
             {
                 "CUBE" => GameObject.CreatePrimitive(PrimitiveType.Cube),
@@ -48,7 +48,7 @@ namespace MCPServer.Editor.Commands
                 "CAMERA" => new GameObject("Camera") { }.AddComponent<Camera>().gameObject,
                 "LIGHT" => new GameObject("Light") { }.AddComponent<Light>().gameObject,
                 "DIRECTIONAL_LIGHT" => CreateDirectionalLight(),
-                _ => throw new System.Exception($"Unsupported object type: {type}")
+                _ => throw new Exception($"Unsupported object type: {type}")
             };
 
             if (@params.ContainsKey("name")) obj.name = (string)@params["name"];
@@ -56,7 +56,7 @@ namespace MCPServer.Editor.Commands
             if (@params.ContainsKey("rotation")) obj.transform.eulerAngles = Vector3Helper.ParseVector3((JArray)@params["rotation"]);
             if (@params.ContainsKey("scale")) obj.transform.localScale = Vector3Helper.ParseVector3((JArray)@params["scale"]);
 
-            return new { name = obj.name };
+            return new { obj.name };
         }
 
         /// <summary>
@@ -64,8 +64,8 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object ModifyObject(JObject @params)
         {
-            string name = (string)@params["name"] ?? throw new System.Exception("Parameter 'name' is required.");
-            var obj = GameObject.Find(name) ?? throw new System.Exception($"Object '{name}' not found.");
+            string name = (string)@params["name"] ?? throw new Exception("Parameter 'name' is required.");
+            var obj = GameObject.Find(name) ?? throw new Exception($"Object '{name}' not found.");
 
             // Handle basic transform properties
             if (@params.ContainsKey("location")) obj.transform.position = Vector3Helper.ParseVector3((JArray)@params["location"]);
@@ -77,7 +77,7 @@ namespace MCPServer.Editor.Commands
             if (@params.ContainsKey("set_parent"))
             {
                 string parentName = (string)@params["set_parent"];
-                var parent = GameObject.Find(parentName) ?? throw new System.Exception($"Parent object '{parentName}' not found.");
+                var parent = GameObject.Find(parentName) ?? throw new Exception($"Parent object '{parentName}' not found.");
                 obj.transform.SetParent(parent.transform);
             }
 
@@ -109,7 +109,7 @@ namespace MCPServer.Editor.Commands
                     "TextMeshProUGUI" => typeof(TMPro.TextMeshProUGUI),
                     _ => Type.GetType($"UnityEngine.{componentType}") ??
                          Type.GetType(componentType) ??
-                         throw new System.Exception($"Component type '{componentType}' not found.")
+                         throw new Exception($"Component type '{componentType}' not found.")
                 };
                 obj.AddComponent(type);
             }
@@ -119,7 +119,7 @@ namespace MCPServer.Editor.Commands
                 string componentType = (string)@params["remove_component"];
                 Type type = Type.GetType($"UnityEngine.{componentType}") ??
                            Type.GetType(componentType) ??
-                           throw new System.Exception($"Component type '{componentType}' not found.");
+                           throw new Exception($"Component type '{componentType}' not found.");
                 var component = obj.GetComponent(type);
                 if (component != null)
                     UnityEngine.Object.DestroyImmediate(component);
@@ -137,12 +137,12 @@ namespace MCPServer.Editor.Commands
                 if (componentType == "GameObject")
                 {
                     var gameObjectProperty = typeof(GameObject).GetProperty(propertyName) ??
-                                 throw new System.Exception($"Property '{propertyName}' not found on GameObject.");
+                                 throw new Exception($"Property '{propertyName}' not found on GameObject.");
 
                     // Convert value based on property type
                     object gameObjectValue = Convert.ChangeType(value, gameObjectProperty.PropertyType);
                     gameObjectProperty.SetValue(obj, gameObjectValue);
-                    return new { name = obj.name };
+                    return new { obj.name };
                 }
 
                 // Handle component properties
@@ -170,21 +170,21 @@ namespace MCPServer.Editor.Commands
                     "TextMeshProUGUI" => typeof(TMPro.TextMeshProUGUI),
                     _ => Type.GetType($"UnityEngine.{componentType}") ??
                          Type.GetType(componentType) ??
-                         throw new System.Exception($"Component type '{componentType}' not found.")
+                         throw new Exception($"Component type '{componentType}' not found.")
                 };
 
                 var component = obj.GetComponent(type) ??
-                               throw new System.Exception($"Component '{componentType}' not found on object '{name}'.");
+                               throw new Exception($"Component '{componentType}' not found on object '{name}'.");
 
                 var property = type.GetProperty(propertyName) ??
-                              throw new System.Exception($"Property '{propertyName}' not found on component '{componentType}'.");
+                              throw new Exception($"Property '{propertyName}' not found on component '{componentType}'.");
 
                 // Convert value based on property type
                 object propertyValue = Convert.ChangeType(value, property.PropertyType);
                 property.SetValue(component, propertyValue);
             }
 
-            return new { name = obj.name };
+            return new { obj.name };
         }
 
         /// <summary>
@@ -192,8 +192,8 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object DeleteObject(JObject @params)
         {
-            string name = (string)@params["name"] ?? throw new System.Exception("Parameter 'name' is required.");
-            var obj = GameObject.Find(name) ?? throw new System.Exception($"Object '{name}' not found.");
+            string name = (string)@params["name"] ?? throw new Exception("Parameter 'name' is required.");
+            var obj = GameObject.Find(name) ?? throw new Exception($"Object '{name}' not found.");
             UnityEngine.Object.DestroyImmediate(obj);
             return new { name };
         }
@@ -203,8 +203,8 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object GetObjectProperties(JObject @params)
         {
-            string name = (string)@params["name"] ?? throw new System.Exception("Parameter 'name' is required.");
-            var obj = GameObject.Find(name) ?? throw new System.Exception($"Object '{name}' not found.");
+            string name = (string)@params["name"] ?? throw new Exception("Parameter 'name' is required.");
+            var obj = GameObject.Find(name) ?? throw new Exception($"Object '{name}' not found.");
 
             var components = obj.GetComponents<Component>()
                 .Select(c => new
@@ -216,9 +216,9 @@ namespace MCPServer.Editor.Commands
 
             return new
             {
-                name = obj.name,
-                tag = obj.tag,
-                layer = obj.layer,
+                obj.name,
+                obj.tag,
+                obj.layer,
                 active = obj.activeSelf,
                 transform = new
                 {
@@ -235,11 +235,11 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object GetComponentProperties(JObject @params)
         {
-            string objectName = (string)@params["object_name"] ?? throw new System.Exception("Parameter 'object_name' is required.");
-            string componentType = (string)@params["component_type"] ?? throw new System.Exception("Parameter 'component_type' is required.");
+            string objectName = (string)@params["object_name"] ?? throw new Exception("Parameter 'object_name' is required.");
+            string componentType = (string)@params["component_type"] ?? throw new Exception("Parameter 'component_type' is required.");
 
-            var obj = GameObject.Find(objectName) ?? throw new System.Exception($"Object '{objectName}' not found.");
-            var component = obj.GetComponent(componentType) ?? throw new System.Exception($"Component '{componentType}' not found on object '{objectName}'.");
+            var obj = GameObject.Find(objectName) ?? throw new Exception($"Object '{objectName}' not found.");
+            var component = obj.GetComponent(componentType) ?? throw new Exception($"Component '{componentType}' not found on object '{objectName}'.");
 
             return GetComponentProperties(component);
         }
@@ -249,12 +249,12 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object FindObjectsByName(JObject @params)
         {
-            string name = (string)@params["name"] ?? throw new System.Exception("Parameter 'name' is required.");
+            string name = (string)@params["name"] ?? throw new Exception("Parameter 'name' is required.");
             var objects = GameObject.FindObjectsByType<GameObject>(FindObjectsSortMode.None)
                 .Where(o => o.name.Contains(name))
                 .Select(o => new
                 {
-                    name = o.name,
+                    o.name,
                     path = GetGameObjectPath(o)
                 })
                 .ToList();
@@ -267,11 +267,11 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object FindObjectsByTag(JObject @params)
         {
-            string tag = (string)@params["tag"] ?? throw new System.Exception("Parameter 'tag' is required.");
+            string tag = (string)@params["tag"] ?? throw new Exception("Parameter 'tag' is required.");
             var objects = GameObject.FindGameObjectsWithTag(tag)
                 .Select(o => new
                 {
-                    name = o.name,
+                    o.name,
                     path = GetGameObjectPath(o)
                 })
                 .ToList();
@@ -295,11 +295,11 @@ namespace MCPServer.Editor.Commands
         /// </summary>
         public static object SelectObject(JObject @params)
         {
-            string name = (string)@params["name"] ?? throw new System.Exception("Parameter 'name' is required.");
-            var obj = GameObject.Find(name) ?? throw new System.Exception($"Object '{name}' not found.");
+            string name = (string)@params["name"] ?? throw new Exception("Parameter 'name' is required.");
+            var obj = GameObject.Find(name) ?? throw new Exception($"Object '{name}' not found.");
 
             Selection.activeGameObject = obj;
-            return new { name = obj.name };
+            return new { obj.name };
         }
 
         /// <summary>
@@ -315,7 +315,7 @@ namespace MCPServer.Editor.Commands
             {
                 selected = new
                 {
-                    name = selected.name,
+                    selected.name,
                     path = GetGameObjectPath(selected)
                 }
             };
@@ -379,7 +379,7 @@ namespace MCPServer.Editor.Commands
         {
             return new
             {
-                name = obj.name,
+                obj.name,
                 children = Enumerable.Range(0, obj.transform.childCount)
                     .Select(i => BuildHierarchyNode(obj.transform.GetChild(i).gameObject))
                     .ToList()

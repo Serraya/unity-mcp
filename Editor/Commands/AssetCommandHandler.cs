@@ -2,10 +2,9 @@ using UnityEngine;
 using UnityEditor;
 using System.IO;
 using Newtonsoft.Json.Linq;
-using System.Linq;
 using System.Collections.Generic;
 
-namespace MCPServer.Editor.Commands
+namespace UnityMCP.Editor.Commands
 {
     /// <summary>
     /// Handles asset-related commands for the MCP Server
@@ -51,10 +50,11 @@ namespace MCPServer.Editor.Commands
             }
             catch (System.Exception e)
             {
-                return new { 
-                    success = false, 
-                    error = $"Failed to import asset: {e.Message}", 
-                    stackTrace = e.StackTrace 
+                return new
+                {
+                    success = false,
+                    error = $"Failed to import asset: {e.Message}",
+                    stackTrace = e.StackTrace
                 };
             }
         }
@@ -67,16 +67,16 @@ namespace MCPServer.Editor.Commands
             try
             {
                 string prefabPath = (string)@params["prefab_path"];
-                
+
                 if (string.IsNullOrEmpty(prefabPath))
                     return new { success = false, error = "Prefab path cannot be empty" };
 
-                Vector3 position = new Vector3(
+                Vector3 position = new(
                     (float)@params["position_x"],
                     (float)@params["position_y"],
                     (float)@params["position_z"]
                 );
-                Vector3 rotation = new Vector3(
+                Vector3 rotation = new(
                     (float)@params["rotation_x"],
                     (float)@params["rotation_y"],
                     (float)@params["rotation_z"]
@@ -93,7 +93,7 @@ namespace MCPServer.Editor.Commands
                 {
                     return new { success = false, error = $"Failed to instantiate prefab: {prefabPath}" };
                 }
-                
+
                 instance.transform.position = position;
                 instance.transform.rotation = Quaternion.Euler(rotation);
 
@@ -106,10 +106,11 @@ namespace MCPServer.Editor.Commands
             }
             catch (System.Exception e)
             {
-                return new { 
-                    success = false, 
-                    error = $"Failed to instantiate prefab: {e.Message}", 
-                    stackTrace = e.StackTrace 
+                return new
+                {
+                    success = false,
+                    error = $"Failed to instantiate prefab: {e.Message}",
+                    stackTrace = e.StackTrace
                 };
             }
         }
@@ -162,9 +163,10 @@ namespace MCPServer.Editor.Commands
             }
             catch (System.Exception e)
             {
-                return new { 
-                    success = false, 
-                    error = $"Failed to create prefab: {e.Message}", 
+                return new
+                {
+                    success = false,
+                    error = $"Failed to create prefab: {e.Message}",
                     stackTrace = e.StackTrace,
                     sourceInfo = $"Object: {@params["object_name"]}, Path: {@params["prefab_path"]}"
                 };
@@ -218,9 +220,9 @@ namespace MCPServer.Editor.Commands
                 assets.Add(new
                 {
                     name = Path.GetFileNameWithoutExtension(path),
-                    path = path,
+                    path,
                     type = assetType?.Name ?? "Unknown",
-                    guid = guid
+                    guid
                 });
             }
 

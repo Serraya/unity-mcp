@@ -1,11 +1,11 @@
-using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Linq;
+using System;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 
-namespace MCPServer.Editor.Commands
+namespace UnityMCP.Editor.Commands
 {
     /// <summary>
     /// Handles scene-related commands for the MCP Server
@@ -42,7 +42,7 @@ namespace MCPServer.Editor.Commands
                 EditorSceneManager.OpenScene(scenePath);
                 return new { success = true, message = $"Opened scene: {scenePath}" };
             }
-            catch (System.Exception e)
+            catch (Exception e)
             {
                 return new { success = false, error = $"Failed to open scene: {e.Message}", stackTrace = e.StackTrace };
             }
@@ -60,7 +60,7 @@ namespace MCPServer.Editor.Commands
                 EditorSceneManager.SaveScene(scene);
                 return new { success = true, message = $"Saved scene: {scene.path}" };
             }
-            catch (System.Exception e)
+            catch (Exception e)
             {
                 return new { success = false, error = $"Failed to save scene: {e.Message}", stackTrace = e.StackTrace };
             }
@@ -96,7 +96,7 @@ namespace MCPServer.Editor.Commands
 
                 return new { success = true, message = $"Created new scene at: {scenePath}" };
             }
-            catch (System.Exception e)
+            catch (Exception e)
             {
                 return new { success = false, error = $"Failed to create new scene: {e.Message}", stackTrace = e.StackTrace };
             }
@@ -131,7 +131,7 @@ namespace MCPServer.Editor.Commands
                 EditorSceneManager.OpenScene(scenePath);
                 return new { success = true, message = $"Changed to scene: {scenePath}" };
             }
-            catch (System.Exception e)
+            catch (Exception e)
             {
                 return new { success = false, error = $"Failed to change scene: {e.Message}", stackTrace = e.StackTrace };
             }
