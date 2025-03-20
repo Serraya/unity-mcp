@@ -1,7 +1,7 @@
 {
   "name": "com.justinpbarnett.unity-mcp",
   "version": "0.1.4",
-  "displayName": "Unity MCP Server",
+  "displayName": "Unity MCP",
   "description": "A Unity package to communicate with a local MCP Client via a Python server.",
   "unity": "2022.3",
   "dependencies": {

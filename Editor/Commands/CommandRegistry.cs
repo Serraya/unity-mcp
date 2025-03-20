@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 
-namespace MCPServer.Editor.Commands
+namespace UnityMCP.Editor.Commands
 {
     /// <summary>
     /// Registry for all MCP command handlers
