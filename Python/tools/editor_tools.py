@@ -267,3 +267,29 @@ def register_editor_tools(mcp: FastMCP):
                 "message": f"Error reading console: {str(e)}",
                 "stackTrace": ""
             }]
+
+    @mcp.tool()
+    def get_available_commands(ctx: Context) -> List[str]:
+        """Get a list of all available editor commands that can be executed.
+        
+        This tool provides direct access to the list of commands that can be executed
+        in the Unity Editor through the MCP system.
+        
+        Returns:
+            List[str]: List of available command paths
+        """
+        try:
+            unity = get_unity_connection()
+            
+            # Send request for available commands
+            response = unity.send_command("EDITOR_CONTROL", {
+                "command": "GET_AVAILABLE_COMMANDS"
+            })
+            
+            # Extract commands list
+            commands = response.get("commands", [])
+            
+            # Return the commands list
+            return commands
+        except Exception as e:
+            return [f"Error fetching commands: {str(e)}"]

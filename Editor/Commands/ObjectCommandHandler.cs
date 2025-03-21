@@ -7,6 +7,7 @@ using UnityEditor;
 using UnityEngine.SceneManagement;
 using UnityEditor.SceneManagement;
 using UnityMCP.Editor.Helpers;
+using System.Reflection;
 
 namespace UnityMCP.Editor.Commands
 {
@@ -397,6 +398,108 @@ namespace UnityMCP.Editor.Commands
             light.intensity = 1.0f;
             light.shadows = LightShadows.Soft;
             return obj;
+        }
+
+        /// <summary>
+        /// Executes a context menu method on a component of a game object
+        /// </summary>
+        public static object ExecuteContextMenuItem(JObject @params)
+        {
+            string objectName = (string)@params["object_name"] ?? throw new Exception("Parameter 'object_name' is required.");
+            string componentName = (string)@params["component"] ?? throw new Exception("Parameter 'component' is required.");
+            string contextMenuItemName = (string)@params["context_menu_item"] ?? throw new Exception("Parameter 'context_menu_item' is required.");
+
+            // Find the game object
+            var obj = GameObject.Find(objectName) ?? throw new Exception($"Object '{objectName}' not found.");
+
+            // Find the component type
+            Type componentType = FindTypeInLoadedAssemblies(componentName) ??
+                throw new Exception($"Component type '{componentName}' not found.");
+
+            // Get the component from the game object
+            var component = obj.GetComponent(componentType) ??
+                throw new Exception($"Component '{componentName}' not found on object '{objectName}'.");
+
+            // Find methods with ContextMenu attribute matching the context menu item name
+            var methods = componentType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .Where(m => m.GetCustomAttributes(typeof(ContextMenuItemAttribute), true).Any() ||
+                           m.GetCustomAttributes(typeof(ContextMenu), true)
+                               .Cast<ContextMenu>()
+                               .Any(attr => attr.menuItem == contextMenuItemName))
+                .ToList();
+
+            // If no methods with ContextMenuItemAttribute are found, look for methods with name matching the context menu item
+            if (methods.Count == 0)
+            {
+                methods = componentType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                    .Where(m => m.Name == contextMenuItemName)
+                    .ToList();
+            }
+
+            if (methods.Count == 0)
+                throw new Exception($"No context menu method '{contextMenuItemName}' found on component '{componentName}'.");
+
+            // If multiple methods match, use the first one and log a warning
+            if (methods.Count > 1)
+            {
+                Debug.LogWarning($"Found multiple methods for context menu item '{contextMenuItemName}' on component '{componentName}'. Using the first one.");
+            }
+
+            var method = methods[0];
+
+            // Execute the method
+            try
+            {
+                method.Invoke(component, null);
+                return new 
+                { 
+                    success = true, 
+                    message = $"Successfully executed context menu item '{contextMenuItemName}' on component '{componentName}' of object '{objectName}'."
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error executing context menu item: {ex.Message}");
+            }
+        }
+
+        // Add this helper method to find types across all loaded assemblies
+        private static Type FindTypeInLoadedAssemblies(string typeName)
+        {
+            // First try standard approach
+            Type type = Type.GetType(typeName);
+            if (type != null)
+                return type;
+
+            type = Type.GetType($"UnityEngine.{typeName}");
+            if (type != null)
+                return type;
+
+            // Then search all loaded assemblies
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                // Try with the simple name
+                type = assembly.GetType(typeName);
+                if (type != null)
+                    return type;
+
+                // Try with the fully qualified name (assembly.GetTypes() can be expensive, so we do this last)
+                var types = assembly.GetTypes().Where(t => t.Name == typeName).ToArray();
+
+                if (types.Length > 0)
+                {
+                    // If we found multiple types with the same name, log a warning
+                    if (types.Length > 1)
+                    {
+                        Debug.LogWarning(
+                            $"Found multiple types named '{typeName}'. Using the first one: {types[0].FullName}"
+                        );
+                    }
+                    return types[0];
+                }
+            }
+
+            return null;
         }
     }
 }

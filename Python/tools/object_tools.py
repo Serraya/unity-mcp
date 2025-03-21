@@ -194,4 +194,57 @@ def register_object_tools(mcp: FastMCP):
             })
             return response.get("assets", [])
         except Exception as e:
-            return [{"error": f"Failed to get asset list: {str(e)}"}] 
+            return [{"error": f"Failed to get asset list: {str(e)}"}]
+            
+    @mcp.tool()
+    def execute_context_menu_item(
+        ctx: Context,
+        object_name: str,
+        component: str,
+        context_menu_item: str
+    ) -> Dict[str, Any]:
+        """Execute a specific [ContextMenu] method on a component of a given game object.
+
+        Args:
+            ctx: The MCP context
+            object_name: Name of the game object to call
+            component: Name of the component type
+            context_menu_item: Name of the context menu item to execute
+
+        Returns:
+            Dict containing the result of the operation
+        """
+        try:
+            unity = get_unity_connection()
+            
+            # Check if the object exists
+            found_objects = unity.send_command("FIND_OBJECTS_BY_NAME", {
+                "name": object_name
+            }).get("objects", [])
+            
+            if not found_objects:
+                return {"error": f"Object with name '{object_name}' not found in the scene."}
+            
+            # Check if the component exists on the object
+            object_props = unity.send_command("GET_OBJECT_PROPERTIES", {
+                "name": object_name
+            })
+            
+            if "error" in object_props:
+                return {"error": f"Failed to get object properties: {object_props['error']}"}
+                
+            components = object_props.get("components", [])
+            component_exists = any(comp.get("type") == component for comp in components)
+            
+            if not component_exists:
+                return {"error": f"Component '{component}' is not attached to object '{object_name}'."}
+            
+            # Now execute the context menu item
+            response = unity.send_command("EXECUTE_CONTEXT_MENU_ITEM", {
+                "object_name": object_name,
+                "component": component,
+                "context_menu_item": context_menu_item
+            })
+            return response
+        except Exception as e:
+            return {"error": f"Failed to execute context menu item: {str(e)}"} 
