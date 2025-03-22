@@ -321,9 +321,9 @@ wheels = [
 ]
 
 [[package]]
-name = "unity"
+name = "unity-mcp"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "mcp", extra = ["cli"] },
@@ -331,7 +331,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "httpx", specifier = ">=0.27.2" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.4.1" },
 ]
 

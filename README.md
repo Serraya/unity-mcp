@@ -2,7 +2,7 @@
 
 A Unity package that enables seamless communication between Unity and Large Language Models (LLMs) like Claude Desktop via the **Model Context Protocol (MCP)**. This server acts as a bridge, allowing Unity to send commands to and receive responses from MCP-compliant tools, empowering developers to automate workflows, manipulate assets, and control the Unity Editor programmatically.
 
-Welcome to the initial release of this open-source project! Whether you're looking to integrate LLMs into your Unity workflow or contribute to an exciting new tool, I appreciate you taking the time to check out my project.
+Welcome to the initial release of this open-source project! Whether you're looking to integrate LLMs into your Unity workflow or contribute to an exciting new tool, I appreciate you taking the time to check it out!
 
 ## Overview
 
@@ -18,97 +18,55 @@ This project is perfect for developers who want to leverage LLMs to enhance thei
 
 ## Installation
 
-### Prerequisites
+To use the Unity MCP Package, ensure you have the following installed:
 
-- Unity 2020.3 LTS or newer (⚠️ only works in URP projects currently)
-- Python 3.7 or newer
-- uv package manager
+- **Unity 2020.3 LTS or newer** (⚠️ Currently only works in URP projects)
+- **Python 3.12 or newer**
+- **uv package manager**
 
-**If you're on Mac, please install uv as**
+### Step 1: Install Python
 
-```bash
-brew install uv
-```
+Download and install Python 3.12 or newer from [python.org](https://www.python.org/downloads/). Make sure to add Python to your system’s PATH during installation.
 
-**On Windows**
+### Step 2: Install uv
 
-```bash
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
+uv is a Python package manager that simplifies dependency management. Install it using the command below based on your operating system:
 
-and then add to your PATH:
+- **Mac**:
 
-```bash
-set Path=%USERPROFILE%\.local\bin;%Path%
-```
+  ```bash
+  brew install uv
+  ```
 
-**On Linux**
+- **Windows**:
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+  ```bash
+  powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+  ```
 
-Otherwise, installation instructions are on their website: [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
+  Then, add uv to your PATH:
 
-**⚠️ Do not proceed before installing UV**
+  ```bash
+  set Path=%USERPROFILE%\.local\bin;%Path%
+  ```
 
-### Unity Package Installation
+- **Linux**:
 
-1. **Add the Unity Package**
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
 
-   - Open Unity Package Manager (`Window > Package Manager`)
-   - Click the `+` button and select `Add package from git URL`
-   - Enter: `https://github.com/justinpbarnett/unity-mcp.git`
+For alternative installation methods, see the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
 
-2. **Set Up Python Environment**
-   - Navigate to the Python directory in your project:
-     - If installed as a package: `Library/PackageCache/com.justinpbarnett.unity-mcp/Python`
-     - If installed locally: `Assets/unity-mcp/Python`
-   - Install dependencies:
-     ```bash
-     uv venv
-     uv pip install -e .
-     ```
+**Important**: Do not proceed without installing uv.
 
-### MCP Client Integration
+### Step 3: Install the Unity Package
 
-1. Open the Unity MCP window (`Window > Unity MCP`)
-2. Click the "Auto Configure" button for your desired MCP client
-3. Status indicator should show green and a "Configured" message
+1. Open Unity and go to `Window > Package Manager`.
+2. Click the `+` button and select `Add package from git URL`.
+3. Enter: `https://github.com/justinpbarnett/unity-mcp.git`
 
-Alternatively, manually configure your MCP client:
-
-1. Open the Unity MCP window (`Window > Unity MCP`)
-2. Click the "Manually Configure" button for your desired MCP client
-3. Copy the JSON code below to the config file
-
-```json
-{
-  "mcpServers": {
-    "unityMCP": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/path/to/your/unity-mcp/Python",
-        "run",
-        "server.py"
-      ]
-    }
-  }
-}
-```
-
-Replace `/path/to/your/unity-mcp/Python` with the actual path to the Unity MCP Python directory.
-
-**⚠️ Only run one instance of the MCP server (either on Cursor or Claude Desktop), not both**
-
-4. **Start Claude Desktop or Cursor**
-   - Launch your preferred tool
-   - The Unity MCP Server will automatically start and connect
-
-## Usage
-
-Once configured, you can use the MCP Client to interact with Unity directly through their chat interface.
+Once installed, the Unity MCP Package will be available in your Unity project. The server will start automatically when used with an MCP client like Claude Desktop or Cursor.
 
 ## Features
 
@@ -121,7 +79,7 @@ Once configured, you can use the MCP Client to interact with Unity directly thro
 
 ## Contributing
 
-I'd love your help to make the Unity MCP Server even better! Here's how to contribute:
+I’d love your help to make the Unity MCP Server even better! Here’s how to contribute:
 
 1. **Fork the Repository**  
    Fork [github.com/justinpbarnett/unity-mcp](https://github.com/justinpbarnett/unity-mcp) to your GitHub account.
@@ -132,7 +90,7 @@ I'd love your help to make the Unity MCP Server even better! Here's how to contr
    git checkout -b feature/your-feature-name
    ```
 
-   OR
+   or
 
    ```bash
    git checkout -b bugfix/your-bugfix-name
@@ -150,7 +108,7 @@ I'd love your help to make the Unity MCP Server even better! Here's how to contr
    ```
 
 5. **Submit a Pull Request**  
-   Open a pull request to the `master` branch. Include a description of your changes and any relevant details.
+   Open a pull request to the `master` branch with a description of your changes.
 
 ## License
 
@@ -158,21 +116,18 @@ This project is licensed under the **MIT License**. Feel free to use, modify, an
 
 ## Troubleshooting
 
-Encountering issues? Here are some common fixes:
+Encountering issues? Try these fixes:
 
 - **Unity Bridge Not Running**  
   Ensure the Unity Editor is open and the MCP window is active. Restart Unity if needed.
 
-- **Python Server Not Connected**
-
-  - Verify the Python server is running (`python server.py` in the `Python` directory).
-  - Check `config.json` for correct port settings (default: `unity_port: 6400`, `mcp_port: 6500`).
-  - Ensure `uv` and dependencies are installed correctly.
+- **Python Server Not Connected**  
+  Verify that Python and uv are correctly installed and that the Unity MCP package is properly set up.
 
 - **Configuration Issues with Claude Desktop or Cursor**  
-  Confirm the paths and settings in the configuration dialog match your tool's installation.
+  Ensure your MCP client is configured to communicate with the Unity MCP server.
 
-For additional help, check the [issue tracker](https://github.com/justinpbarnett/unity-mcp/issues) or file a new issue.
+For more help, visit the [issue tracker](https://github.com/justinpbarnett/unity-mcp/issues) or file a new issue.
 
 ## Contact
 
@@ -182,6 +137,6 @@ Have questions or want to chat about the project? Reach out!
 
 ## Acknowledgments
 
-A huge thanks to everyone who's supported this project's initial release. Special shoutout to Unity Technologies for having an excellent Editor API.
+A huge thanks to everyone who’s supported this project’s initial release. Special shoutout to Unity Technologies for their excellent Editor API.
 
 Happy coding, and enjoy integrating LLMs with Unity!
