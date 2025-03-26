@@ -1,10 +1,10 @@
-using UnityEngine;
-using UnityEditor;
 using System;
 using System.IO;
-using System.Text;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json.Linq;
+using UnityEditor;
+using UnityEngine;
 
 namespace UnityMCP.Editor.Commands
 {
@@ -18,7 +18,9 @@ namespace UnityMCP.Editor.Commands
         /// </summary>
         public static object ViewScript(JObject @params)
         {
-            string scriptPath = (string)@params["script_path"] ?? throw new Exception("Parameter 'script_path' is required.");
+            string scriptPath =
+                (string)@params["script_path"]
+                ?? throw new Exception("Parameter 'script_path' is required.");
             bool requireExists = (bool?)@params["require_exists"] ?? true;
 
             // Handle path correctly to avoid double "Assets" folder issue
@@ -47,7 +49,16 @@ namespace UnityMCP.Editor.Commands
                 }
             }
 
-            return new { exists = true, content = File.ReadAllText(fullPath) };
+            string content = File.ReadAllText(fullPath);
+            byte[] contentBytes = System.Text.Encoding.UTF8.GetBytes(content);
+            string base64Content = Convert.ToBase64String(contentBytes);
+
+            return new
+            {
+                exists = true,
+                content = base64Content,
+                encoding = "base64"
+            };
         }
 
         /// <summary>
@@ -70,7 +81,9 @@ namespace UnityMCP.Editor.Commands
         /// </summary>
         public static object CreateScript(JObject @params)
         {
-            string scriptName = (string)@params["script_name"] ?? throw new Exception("Parameter 'script_name' is required.");
+            string scriptName =
+                (string)@params["script_name"]
+                ?? throw new Exception("Parameter 'script_name' is required.");
             string scriptType = (string)@params["script_type"] ?? "MonoBehaviour";
             string namespaceName = (string)@params["namespace"];
             string template = (string)@params["template"];
@@ -128,7 +141,9 @@ namespace UnityMCP.Editor.Commands
             string fullFilePath = Path.Combine(folderPath, scriptName);
             if (File.Exists(fullFilePath) && !overwrite)
             {
-                throw new Exception($"Script file '{scriptName}' already exists in '{scriptPath}' and overwrite is not enabled.");
+                throw new Exception(
+                    $"Script file '{scriptName}' already exists in '{scriptPath}' and overwrite is not enabled."
+                );
             }
 
             try
@@ -157,7 +172,9 @@ namespace UnityMCP.Editor.Commands
 
                     // Add class definition with indent based on namespace
                     string indent = string.IsNullOrEmpty(namespaceName) ? "" : "    ";
-                    contentBuilder.AppendLine($"{indent}public class {Path.GetFileNameWithoutExtension(scriptName)} : {scriptType}");
+                    contentBuilder.AppendLine(
+                        $"{indent}public class {Path.GetFileNameWithoutExtension(scriptName)} : {scriptType}"
+                    );
                     contentBuilder.AppendLine($"{indent}{{");
 
                     // Add default Unity methods based on script type
@@ -165,7 +182,9 @@ namespace UnityMCP.Editor.Commands
                     {
                         contentBuilder.AppendLine($"{indent}    private void Start()");
                         contentBuilder.AppendLine($"{indent}    {{");
-                        contentBuilder.AppendLine($"{indent}        // Initialize your component here");
+                        contentBuilder.AppendLine(
+                            $"{indent}        // Initialize your component here"
+                        );
                         contentBuilder.AppendLine($"{indent}    }}");
                         contentBuilder.AppendLine();
                         contentBuilder.AppendLine($"{indent}    private void Update()");
@@ -177,7 +196,9 @@ namespace UnityMCP.Editor.Commands
                     {
                         contentBuilder.AppendLine($"{indent}    private void OnEnable()");
                         contentBuilder.AppendLine($"{indent}    {{");
-                        contentBuilder.AppendLine($"{indent}        // Initialize your ScriptableObject here");
+                        contentBuilder.AppendLine(
+                            $"{indent}        // Initialize your ScriptableObject here"
+                        );
                         contentBuilder.AppendLine($"{indent}    }}");
                     }
 
@@ -222,8 +243,12 @@ namespace UnityMCP.Editor.Commands
         /// </summary>
         public static object UpdateScript(JObject @params)
         {
-            string scriptPath = (string)@params["script_path"] ?? throw new Exception("Parameter 'script_path' is required.");
-            string content = (string)@params["content"] ?? throw new Exception("Parameter 'content' is required.");
+            string scriptPath =
+                (string)@params["script_path"]
+                ?? throw new Exception("Parameter 'script_path' is required.");
+            string content =
+                (string)@params["content"]
+                ?? throw new Exception("Parameter 'content' is required.");
             bool createIfMissing = (bool?)@params["create_if_missing"] ?? false;
             bool createFolderIfMissing = (bool?)@params["create_folder_if_missing"] ?? false;
 
@@ -257,7 +282,9 @@ namespace UnityMCP.Editor.Commands
                     }
                     else if (!Directory.Exists(directory))
                     {
-                        throw new Exception($"Directory does not exist: {Path.GetDirectoryName(scriptPath)}");
+                        throw new Exception(
+                            $"Directory does not exist: {Path.GetDirectoryName(scriptPath)}"
+                        );
                     }
 
                     // Create the file with content
@@ -308,7 +335,8 @@ namespace UnityMCP.Editor.Commands
             if (!Directory.Exists(fullPath))
                 throw new Exception($"Folder not found: {folderPath}");
 
-            string[] scripts = Directory.GetFiles(fullPath, "*.cs", SearchOption.AllDirectories)
+            string[] scripts = Directory
+                .GetFiles(fullPath, "*.cs", SearchOption.AllDirectories)
                 .Select(path => path.Replace(Application.dataPath, "Assets"))
                 .ToArray();
 
@@ -320,8 +348,12 @@ namespace UnityMCP.Editor.Commands
         /// </summary>
         public static object AttachScript(JObject @params)
         {
-            string objectName = (string)@params["object_name"] ?? throw new Exception("Parameter 'object_name' is required.");
-            string scriptName = (string)@params["script_name"] ?? throw new Exception("Parameter 'script_name' is required.");
+            string objectName =
+                (string)@params["object_name"]
+                ?? throw new Exception("Parameter 'object_name' is required.");
+            string scriptName =
+                (string)@params["script_name"]
+                ?? throw new Exception("Parameter 'script_name' is required.");
             string scriptPath = (string)@params["script_path"]; // Optional
 
             // Find the target object
@@ -343,7 +375,11 @@ namespace UnityMCP.Editor.Commands
             if (!string.IsNullOrEmpty(scriptPath))
             {
                 // If a specific path is provided, try that first
-                if (File.Exists(Path.Combine(Application.dataPath, scriptPath.Replace("Assets/", ""))))
+                if (
+                    File.Exists(
+                        Path.Combine(Application.dataPath, scriptPath.Replace("Assets/", ""))
+                    )
+                )
                 {
                     // Use the direct path if it exists
                     MonoScript scriptAsset = AssetDatabase.LoadAssetAtPath<MonoScript>(scriptPath);
@@ -398,8 +434,18 @@ namespace UnityMCP.Editor.Commands
 
                 // Double check the file name to avoid false matches
                 string foundFileName = Path.GetFileName(path);
-                if (!string.Equals(foundFileName, scriptFileName, StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(Path.GetFileNameWithoutExtension(foundFileName), scriptNameWithoutExtension, StringComparison.OrdinalIgnoreCase))
+                if (
+                    !string.Equals(
+                        foundFileName,
+                        scriptFileName,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                    && !string.Equals(
+                        Path.GetFileNameWithoutExtension(foundFileName),
+                        scriptNameWithoutExtension,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
                     continue;
 
                 MonoScript scriptAsset = AssetDatabase.LoadAssetAtPath<MonoScript>(path);
@@ -442,7 +488,9 @@ namespace UnityMCP.Editor.Commands
             }
 
             // If we've tried all possibilities and nothing worked
-            throw new Exception($"Could not attach script '{scriptFileName}' to object '{objectName}'. No valid script found or component creation failed.");
+            throw new Exception(
+                $"Could not attach script '{scriptFileName}' to object '{objectName}'. No valid script found or component creation failed."
+            );
         }
     }
 }
