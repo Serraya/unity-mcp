@@ -1,5 +1,5 @@
 from mcp.server.fastmcp import FastMCP, Context
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from unity_connection import get_unity_connection
 
 def register_manage_scene_tools(mcp: FastMCP):
@@ -9,9 +9,9 @@ def register_manage_scene_tools(mcp: FastMCP):
     def manage_scene(
         ctx: Context,
         action: str,
-        name: Optional[str] = None,
-        path: Optional[str] = None,
-        build_index: Optional[int] = None,
+        name: str,
+        path: str,
+        build_index: int,
     ) -> Dict[str, Any]:
         """Manages Unity scenes (load, save, create, get hierarchy, etc.).
 
@@ -26,7 +26,6 @@ def register_manage_scene_tools(mcp: FastMCP):
             Dictionary with results ('success', 'message', 'data').
         """
         try:
-            # Prepare parameters, removing None values
             params = {
                 "action": action,
                 "name": name,
@@ -46,9 +45,3 @@ def register_manage_scene_tools(mcp: FastMCP):
 
         except Exception as e:
             return {"success": False, "message": f"Python error managing scene: {str(e)}"}
-
-    # Consider adding specific tools if the single 'manage_scene' becomes too complex:
-    # @mcp.tool()
-    # def load_scene(ctx: Context, name: str, path: Optional[str] = None, build_index: Optional[int] = None) -> Dict[str, Any]: ...
-    # @mcp.tool()
-    # def get_scene_hierarchy(ctx: Context) -> Dict[str, Any]: ... 

@@ -2,7 +2,7 @@
 Defines the manage_asset tool for interacting with Unity assets.
 """
 import asyncio  # Added: Import asyncio for running sync code in async
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any
 from mcp.server.fastmcp import FastMCP, Context
 # from ..unity_connection import get_unity_connection  # Original line that caused error
 from unity_connection import get_unity_connection  # Use absolute import relative to Python dir
@@ -15,15 +15,15 @@ def register_manage_asset_tools(mcp: FastMCP):
         ctx: Context,
         action: str,
         path: str,
-        asset_type: Optional[str] = None,
-        properties: Optional[Dict[str, Any]] = None,
-        destination: Optional[str] = None,
-        generate_preview: Optional[bool] = False,
-        search_pattern: Optional[str] = None,
-        filter_type: Optional[str] = None,
-        filter_date_after: Optional[str] = None,
-        page_size: Optional[int] = None,
-        page_number: Optional[int] = None
+        asset_type: str = None,
+        properties: Dict[str, Any] = None,
+        destination: str = None,
+        generate_preview: bool = False,
+        search_pattern: str = None,
+        filter_type: str = None,
+        filter_date_after: str = None,
+        page_size: int = None,
+        page_number: int = None
     ) -> Dict[str, Any]:
         """Performs asset operations (import, create, modify, delete, etc.) in Unity.
 

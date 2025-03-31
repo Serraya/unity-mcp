@@ -1,5 +1,5 @@
 from mcp.server.fastmcp import FastMCP, Context
-from typing import Optional, Dict, Any, List, Union
+from typing import Dict, Any, List
 from unity_connection import get_unity_connection
 
 def register_manage_gameobject_tools(mcp: FastMCP):
@@ -9,42 +9,43 @@ def register_manage_gameobject_tools(mcp: FastMCP):
     def manage_gameobject(
         ctx: Context,
         action: str,
-        target: Optional[Union[str, int]] = None,
-        search_method: Optional[str] = None,
-        # --- Parameters for 'create' ---
-        name: Optional[str] = None,
-        tag: Optional[str] = None,
-        parent: Optional[Union[str, int]] = None,
-        position: Optional[List[float]] = None,
-        rotation: Optional[List[float]] = None,
-        scale: Optional[List[float]] = None,
-        components_to_add: Optional[List[Union[str, Dict[str, Any]]]] = None,
-        primitive_type: Optional[str] = None,
-        save_as_prefab: Optional[bool] = False,
-        prefab_path: Optional[str] = None,
-        prefab_folder: Optional[str] = "Assets/Prefabs",
+        target: str = None,  # GameObject identifier by name or path
+        search_method: str = None,
+        # --- Combined Parameters for Create/Modify ---
+        name: str = None,  # Used for both 'create' (new object name) and 'modify' (rename)
+        tag: str = None,  # Used for both 'create' (initial tag) and 'modify' (change tag)
+        parent: str = None,  # Used for both 'create' (initial parent) and 'modify' (change parent)
+        position: List[float] = None,
+        rotation: List[float] = None,
+        scale: List[float] = None,
+        components_to_add: List[str] = None,  # List of component names to add
+        primitive_type: str = None,
+        save_as_prefab: bool = False,
+        prefab_path: str = None,
+        prefab_folder: str = "Assets/Prefabs",
         # --- Parameters for 'modify' ---
-        new_name: Optional[str] = None,
-        new_parent: Optional[Union[str, int]] = None,
-        set_active: Optional[bool] = None,
-        new_tag: Optional[str] = None,
-        new_layer: Optional[Union[str, int]] = None,
-        components_to_remove: Optional[List[str]] = None,
-        component_properties: Optional[Dict[str, Dict[str, Any]]] = None,
+        set_active: bool = None,
+        layer: str = None,  # Layer name
+        components_to_remove: List[str] = None,
+        component_properties: Dict[str, Dict[str, Any]] = None,
         # --- Parameters for 'find' ---
-        search_term: Optional[str] = None,
-        find_all: Optional[bool] = False,
-        search_in_children: Optional[bool] = False,
-        search_inactive: Optional[bool] = False,
+        search_term: str = None,
+        find_all: bool = False,
+        search_in_children: bool = False,
+        search_inactive: bool = False,
         # -- Component Management Arguments --
-        component_name: Optional[str] = None,
+        component_name: str = None,
     ) -> Dict[str, Any]:
         """Manages GameObjects: create, modify, delete, find, and component operations.
 
         Args:
             action: Operation (e.g., 'create', 'modify', 'find', 'add_component', 'remove_component', 'set_component_property').
-            target: GameObject identifier (name, path, ID) for modify/delete/component actions.
+            target: GameObject identifier (name or path string) for modify/delete/component actions.
             search_method: How to find objects ('by_name', 'by_id', 'by_path', etc.). Used with 'find' and some 'target' lookups.
+            name: GameObject name - used for both 'create' (initial name) and 'modify' (rename).
+            tag: Tag name - used for both 'create' (initial tag) and 'modify' (change tag).
+            parent: Parent GameObject reference - used for both 'create' (initial parent) and 'modify' (change parent).
+            layer: Layer name - used for both 'create' (initial layer) and 'modify' (change layer).
             component_properties: Dict mapping Component names to their properties to set.
                                   Example: {"Rigidbody": {"mass": 10.0, "useGravity": True}},
                                   To set references:
@@ -52,7 +53,10 @@ def register_manage_gameobject_tools(mcp: FastMCP):
                                   - Use a dict for scene objects/components, e.g.:
                                     {"MyScript": {"otherObject": {"find": "Player", "method": "by_name"}}} (assigns GameObject)
                                     {"MyScript": {"playerHealth": {"find": "Player", "component": "HealthComponent"}}} (assigns Component)
-            Action-specific arguments (e.g., name, parent, position for 'create';
+                                  Example set nested property:
+                                  - Access shared material: {"MeshRenderer": {"sharedMaterial.color": [1, 0, 0, 1]}}
+            components_to_add: List of component names to add.
+            Action-specific arguments (e.g., position, rotation, scale for create/modify;
                      component_name for component actions;
                      search_term, find_all for 'find').
 
@@ -79,11 +83,8 @@ def register_manage_gameobject_tools(mcp: FastMCP):
                 "saveAsPrefab": save_as_prefab,
                 "prefabPath": prefab_path,
                 "prefabFolder": prefab_folder,
-                "newName": new_name,
-                "newParent": new_parent,
                 "setActive": set_active,
-                "newTag": new_tag,
-                "newLayer": new_layer,
+                "layer": layer,
                 "componentsToRemove": components_to_remove,
                 "componentProperties": component_properties,
                 "searchTerm": search_term,

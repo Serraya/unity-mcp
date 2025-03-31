@@ -1,8 +1,9 @@
 """
 Defines the execute_menu_item tool for running Unity Editor menu commands.
 """
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from mcp.server.fastmcp import FastMCP, Context
+from unity_connection import get_unity_connection  # Import unity_connection module
 
 def register_execute_menu_item_tools(mcp: FastMCP):
     """Registers the execute_menu_item tool with the MCP server."""
@@ -11,8 +12,8 @@ def register_execute_menu_item_tools(mcp: FastMCP):
     async def execute_menu_item(
         ctx: Context,
         menu_path: str,
-        action: Optional[str] = 'execute',
-        parameters: Optional[Dict[str, Any]] = None,
+        action: str = 'execute',
+        parameters: Dict[str, Any] = None,
     ) -> Dict[str, Any]:
         """Executes a Unity Editor menu item via its path (e.g., "File/Save Project").
 
@@ -41,9 +42,10 @@ def register_execute_menu_item_tools(mcp: FastMCP):
         if "parameters" not in params_dict:
             params_dict["parameters"] = {} # Ensure parameters dict exists
 
-        # Forward the command to the Unity editor handler
-        # The C# handler is the static method HandleCommand in the ExecuteMenuItem class.
-        # We assume ctx.call is the correct way to invoke it via FastMCP.
-        # Note: The exact target string might need adjustment based on FastMCP's specifics.
-        csharp_handler_target = "UnityMCP.Editor.Tools.ExecuteMenuItem.HandleCommand"
-        return await ctx.call(csharp_handler_target, params_dict) 
+        # Get Unity connection and send the command
+        # We use the unity_connection module to communicate with Unity
+        unity_conn = get_unity_connection()
+        
+        # Send command to the ExecuteMenuItem C# handler
+        # The command type should match what the Unity side expects
+        return unity_conn.send_command("execute_menu_item", params_dict) 

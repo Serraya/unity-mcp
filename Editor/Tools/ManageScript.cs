@@ -23,7 +23,26 @@ namespace UnityMCP.Editor.Tools
             string action = @params["action"]?.ToString().ToLower();
             string name = @params["name"]?.ToString();
             string path = @params["path"]?.ToString(); // Relative to Assets/
-            string contents = @params["contents"]?.ToString();
+            string contents = null;
+            
+            // Check if we have base64 encoded contents
+            bool contentsEncoded = @params["contentsEncoded"]?.ToObject<bool>() ?? false;
+            if (contentsEncoded && @params["encodedContents"] != null)
+            {
+                try
+                {
+                    contents = DecodeBase64(@params["encodedContents"].ToString());
+                }
+                catch (Exception e)
+                {
+                    return Response.Error($"Failed to decode script contents: {e.Message}");
+                }
+            }
+            else
+            {
+                contents = @params["contents"]?.ToString();
+            }
+            
             string scriptType = @params["scriptType"]?.ToString(); // For templates/validation
             string namespaceName = @params["namespace"]?.ToString(); // For organizing code
 
@@ -93,6 +112,24 @@ namespace UnityMCP.Editor.Tools
             }
         }
 
+        /// <summary>
+        /// Decode base64 string to normal text
+        /// </summary>
+        private static string DecodeBase64(string encoded)
+        {
+            byte[] data = Convert.FromBase64String(encoded);
+            return System.Text.Encoding.UTF8.GetString(data);
+        }
+
+        /// <summary>
+        /// Encode text to base64 string
+        /// </summary>
+        private static string EncodeBase64(string text)
+        {
+            byte[] data = System.Text.Encoding.UTF8.GetBytes(text);
+            return Convert.ToBase64String(data);
+        }
+
         private static object CreateScript(string fullPath, string relativePath, string name, string contents, string scriptType, string namespaceName)
         {
             // Check if script already exists
@@ -138,7 +175,18 @@ namespace UnityMCP.Editor.Tools
             try
             {
                 string contents = File.ReadAllText(fullPath);
-                return Response.Success($"Script '{Path.GetFileName(relativePath)}' read successfully.", new { path = relativePath, contents = contents });
+                
+                // Return both normal and encoded contents for larger files
+                bool isLarge = contents.Length > 10000; // If content is large, include encoded version
+                var responseData = new {
+                    path = relativePath, 
+                    contents = contents,
+                    // For large files, also include base64-encoded version
+                    encodedContents = isLarge ? EncodeBase64(contents) : null,
+                    contentsEncoded = isLarge
+                };
+                
+                return Response.Success($"Script '{Path.GetFileName(relativePath)}' read successfully.", responseData);
             }
             catch (Exception e)
             {

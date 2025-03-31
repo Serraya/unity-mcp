@@ -1,5 +1,5 @@
 from mcp.server.fastmcp import FastMCP, Context
-from typing import Optional, Dict, Any, Union
+from typing import Dict, Any
 from unity_connection import get_unity_connection
 
 def register_manage_editor_tools(mcp: FastMCP):
@@ -9,11 +9,11 @@ def register_manage_editor_tools(mcp: FastMCP):
     def manage_editor(
         ctx: Context,
         action: str,
-        wait_for_completion: Optional[bool] = None,
+        wait_for_completion: bool = None,
         # --- Parameters for specific actions ---
-        tool_name: Optional[str] = None, 
-        tag_name: Optional[str] = None,
-        layer_name: Optional[str] = None,
+        tool_name: str = None, 
+        tag_name: str = None,
+        layer_name: str = None,
     ) -> Dict[str, Any]:
         """Controls and queries the Unity editor's state and settings.
 
@@ -51,13 +51,3 @@ def register_manage_editor_tools(mcp: FastMCP):
 
         except Exception as e:
             return {"success": False, "message": f"Python error managing editor: {str(e)}"}
-
-    # Example of potentially splitting into more specific tools:
-    # @mcp.tool()
-    # def get_editor_state(ctx: Context) -> Dict[str, Any]: ...
-    # @mcp.tool()
-    # def set_editor_playmode(ctx: Context, state: str) -> Dict[str, Any]: ... # state='play'/'pause'/'stop' 
-    # @mcp.tool()
-    # def add_editor_tag(ctx: Context, tag_name: str) -> Dict[str, Any]: ...
-    # @mcp.tool()
-    # def add_editor_layer(ctx: Context, layer_name: str) -> Dict[str, Any]: ... 

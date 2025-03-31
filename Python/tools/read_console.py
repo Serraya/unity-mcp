@@ -1,9 +1,9 @@
 """
 Defines the read_console tool for accessing Unity Editor console messages.
 """
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
 from mcp.server.fastmcp import FastMCP, Context
-from unity_connection import get_unity_connection 
+from unity_connection import get_unity_connection
 
 def register_read_console_tools(mcp: FastMCP):
     """Registers the read_console tool with the MCP server."""
@@ -11,17 +11,18 @@ def register_read_console_tools(mcp: FastMCP):
     @mcp.tool()
     def read_console(
         ctx: Context,
-        action: Optional[str] = 'get',
-        types: Optional[List[str]] = ['error', 'warning', 'log'],
-        count: Optional[int] = None,
-        filter_text: Optional[str] = None,
-        since_timestamp: Optional[str] = None,
-        format: Optional[str] = 'detailed',
-        include_stacktrace: Optional[bool] = True,
+        action: str = None,
+        types: List[str] = None,
+        count: int = None,
+        filter_text: str = None,
+        since_timestamp: str = None,
+        format: str = None,
+        include_stacktrace: bool = None
     ) -> Dict[str, Any]:
         """Gets messages from or clears the Unity Editor console.
 
         Args:
+            ctx: The MCP context.
             action: Operation ('get' or 'clear').
             types: Message types to get ('error', 'warning', 'log', 'all').
             count: Max messages to return.
@@ -37,17 +38,24 @@ def register_read_console_tools(mcp: FastMCP):
         # Get the connection instance
         bridge = get_unity_connection()
 
-        # Normalize action
-        action = action.lower() if action else 'get'
+        # Set defaults if values are None
+        action = action if action is not None else 'get'
+        types = types if types is not None else ['error', 'warning', 'log']
+        format = format if format is not None else 'detailed'
+        include_stacktrace = include_stacktrace if include_stacktrace is not None else True
+
+        # Normalize action if it's a string
+        if isinstance(action, str):
+            action = action.lower()
         
         # Prepare parameters for the C# handler
         params_dict = {
             "action": action,
-            "types": types if types else ['error', 'warning', 'log'], # Ensure types is not None
+            "types": types,
             "count": count,
             "filterText": filter_text,
             "sinceTimestamp": since_timestamp,
-            "format": format.lower() if format else 'detailed',
+            "format": format.lower() if isinstance(format, str) else format,
             "includeStacktrace": include_stacktrace
         }
 
@@ -59,6 +67,4 @@ def register_read_console_tools(mcp: FastMCP):
              params_dict['count'] = None 
 
         # Forward the command using the bridge's send_command method
-        # The command type is the name of the tool itself in this case
-        # No await needed as send_command is synchronous
         return bridge.send_command("read_console", params_dict) 

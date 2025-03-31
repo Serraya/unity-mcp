@@ -30,7 +30,12 @@ namespace UnityMCP.Editor.Tools
             // Parameters used by various actions
             JToken targetToken = @params["target"]; // Can be string (name/path) or int (instanceID)
             string searchMethod = @params["searchMethod"]?.ToString().ToLower();
+            
+            // Get common parameters (consolidated)
             string name = @params["name"]?.ToString();
+            string tag = @params["tag"]?.ToString();
+            string layer = @params["layer"]?.ToString();
+            JToken parentToken = @params["parent"];
             
             // --- Prefab Redirection Check ---
             string targetPath = targetToken?.Type == JTokenType.String ? targetToken.ToString() : null;
@@ -308,6 +313,21 @@ namespace UnityMCP.Editor.Tools
                     }
                 }
             }
+            
+            // Set Layer (new for create action)
+            string layerName = @params["layer"]?.ToString();
+            if (!string.IsNullOrEmpty(layerName))
+            {
+                int layerId = LayerMask.NameToLayer(layerName);
+                if (layerId != -1)
+                {
+                    newGo.layer = layerId;
+                }
+                else
+                {
+                    Debug.LogWarning($"[ManageGameObject.Create] Layer '{layerName}' not found. Using default layer.");
+                }
+            }
 
             // Add Components
              if (@params["componentsToAdd"] is JArray componentsToAddArray)
@@ -438,22 +458,22 @@ namespace UnityMCP.Editor.Tools
 
             bool modified = false;
 
-            // Rename
-            string newName = @params["newName"]?.ToString();
-            if (!string.IsNullOrEmpty(newName) && targetGo.name != newName)
+            // Rename (using consolidated 'name' parameter)
+            string name = @params["name"]?.ToString();
+            if (!string.IsNullOrEmpty(name) && targetGo.name != name)
             {
-                targetGo.name = newName;
-                 modified = true;
+                targetGo.name = name;
+                modified = true;
             }
 
-            // Change Parent
-            JToken newParentToken = @params["newParent"];
-            if (newParentToken != null)
+            // Change Parent (using consolidated 'parent' parameter)
+            JToken parentToken = @params["parent"];
+            if (parentToken != null)
             {
-                 GameObject newParentGo = FindObjectInternal(newParentToken, "by_id_or_name_or_path");
-                 if (newParentGo == null && !(newParentToken.Type == JTokenType.Null || (newParentToken.Type == JTokenType.String && string.IsNullOrEmpty(newParentToken.ToString()))))
+                 GameObject newParentGo = FindObjectInternal(parentToken, "by_id_or_name_or_path");
+                 if (newParentGo == null && !(parentToken.Type == JTokenType.Null || (parentToken.Type == JTokenType.String && string.IsNullOrEmpty(parentToken.ToString()))))
                  {
-                      return Response.Error($"New parent ('{newParentToken}') not found.");
+                      return Response.Error($"New parent ('{parentToken}') not found.");
                  } 
                  // Check for hierarchy loops
                  if (newParentGo != null && newParentGo.transform.IsChildOf(targetGo.transform))
@@ -475,14 +495,14 @@ namespace UnityMCP.Editor.Tools
                  modified = true;
             }
 
-            // Change Tag
-            string newTag = @params["newTag"]?.ToString();
+            // Change Tag (using consolidated 'tag' parameter)
+            string tag = @params["tag"]?.ToString();
             // Only attempt to change tag if a non-null tag is provided and it's different from the current one.
             // Allow setting an empty string to remove the tag (Unity uses "Untagged").
-            if (newTag != null && targetGo.tag != newTag)
+            if (tag != null && targetGo.tag != tag)
             {
                 // Ensure the tag is not empty, if empty, it means "Untagged" implicitly
-                string tagToSet = string.IsNullOrEmpty(newTag) ? "Untagged" : newTag;
+                string tagToSet = string.IsNullOrEmpty(tag) ? "Untagged" : tag;
 
                 try {
                     // First attempt to set the tag
@@ -522,28 +542,19 @@ namespace UnityMCP.Editor.Tools
                 }
             }
 
-            // Change Layer
-            JToken newLayerToken = @params["newLayer"];
-            if (newLayerToken != null)
+            // Change Layer (using consolidated 'layer' parameter)
+            string layerName = @params["layer"]?.ToString();
+            if (!string.IsNullOrEmpty(layerName))
             {
-                int layer = -1;
-                if (newLayerToken.Type == JTokenType.Integer)
+                int layerId = LayerMask.NameToLayer(layerName);
+                if (layerId == -1 && layerName != "Default")
                 {
-                    layer = newLayerToken.ToObject<int>();
+                    return Response.Error($"Invalid layer specified: '{layerName}'. Use a valid layer name.");
                 }
-                else if (newLayerToken.Type == JTokenType.String)
+                if (layerId != -1 && targetGo.layer != layerId)
                 {
-                    layer = LayerMask.NameToLayer(newLayerToken.ToString());
-                }
-                
-                if (layer == -1 && newLayerToken.ToString() != "Default") // LayerMask.NameToLayer returns -1 for invalid names
-                {
-                     return Response.Error($"Invalid layer specified: '{newLayerToken}'. Use a valid layer name or index.");
-                }
-                if (layer != -1 && targetGo.layer != layer)
-                {
-                    targetGo.layer = layer;
-                     modified = true;
+                    targetGo.layer = layerId;
+                    modified = true;
                 }
             }
 
@@ -999,6 +1010,13 @@ namespace UnityMCP.Editor.Tools
                     return Response.Error($"Failed to add component '{typeName}' to '{targetGo.name}'. It might be disallowed (e.g., adding script twice).");
                 }
                 
+                // Set default values for specific component types
+                if (newComponent is Light light)
+                {
+                    // Default newly added lights to directional
+                    light.type = LightType.Directional;
+                }
+                
                 // Set properties if provided
                  if (properties != null)
                  {
@@ -1104,6 +1122,13 @@ namespace UnityMCP.Editor.Tools
 
             try
             {
+                // Handle special case for materials with dot notation (material.property)
+                // Examples: material.color, sharedMaterial.color, materials[0].color
+                if (memberName.Contains('.') || memberName.Contains('['))
+                {
+                    return SetNestedProperty(target, memberName, value);
+                }
+
                 PropertyInfo propInfo = type.GetProperty(memberName, flags);
                 if (propInfo != null && propInfo.CanWrite)
                 {
@@ -1135,12 +1160,303 @@ namespace UnityMCP.Editor.Tools
         }
 
         /// <summary>
+        /// Sets a nested property using dot notation (e.g., "material.color") or array access (e.g., "materials[0]")
+        /// </summary>
+        private static bool SetNestedProperty(object target, string path, JToken value)
+        {
+            try
+            {
+                // Split the path into parts (handling both dot notation and array indexing)
+                string[] pathParts = SplitPropertyPath(path);
+                if (pathParts.Length == 0) return false;
+
+                object currentObject = target;
+                Type currentType = currentObject.GetType();
+                BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
+
+                // Traverse the path until we reach the final property
+                for (int i = 0; i < pathParts.Length - 1; i++)
+                {
+                    string part = pathParts[i];
+                    bool isArray = false;
+                    int arrayIndex = -1;
+
+                    // Check if this part contains array indexing
+                    if (part.Contains("["))
+                    {
+                        int startBracket = part.IndexOf('[');
+                        int endBracket = part.IndexOf(']');
+                        if (startBracket > 0 && endBracket > startBracket)
+                        {
+                            string indexStr = part.Substring(startBracket + 1, endBracket - startBracket - 1);
+                            if (int.TryParse(indexStr, out arrayIndex))
+                            {
+                                isArray = true;
+                                part = part.Substring(0, startBracket);
+                            }
+                        }
+                    }
+
+                    // Get the property/field
+                    PropertyInfo propInfo = currentType.GetProperty(part, flags);
+                    FieldInfo fieldInfo = null;
+                    if (propInfo == null)
+                    {
+                        fieldInfo = currentType.GetField(part, flags);
+                        if (fieldInfo == null)
+                        {
+                            Debug.LogWarning($"[SetNestedProperty] Could not find property or field '{part}' on type '{currentType.Name}'");
+                            return false;
+                        }
+                    }
+
+                    // Get the value
+                    currentObject = propInfo != null ? propInfo.GetValue(currentObject) : fieldInfo.GetValue(currentObject);
+                    
+                    // If the current property is null, we need to stop
+                    if (currentObject == null)
+                    {
+                        Debug.LogWarning($"[SetNestedProperty] Property '{part}' is null, cannot access nested properties.");
+                        return false;
+                    }
+
+                    // If this is an array/list access, get the element at the index
+                    if (isArray)
+                    {
+                        if (currentObject is Material[])
+                        {
+                            var materials = currentObject as Material[];
+                            if (arrayIndex < 0 || arrayIndex >= materials.Length)
+                            {
+                                Debug.LogWarning($"[SetNestedProperty] Material index {arrayIndex} out of range (0-{materials.Length-1})");
+                                return false;
+                            }
+                            currentObject = materials[arrayIndex];
+                        }
+                        else if (currentObject is System.Collections.IList)
+                        {
+                            var list = currentObject as System.Collections.IList;
+                            if (arrayIndex < 0 || arrayIndex >= list.Count)
+                            {
+                                Debug.LogWarning($"[SetNestedProperty] Index {arrayIndex} out of range (0-{list.Count-1})");
+                                return false;
+                            }
+                            currentObject = list[arrayIndex];
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[SetNestedProperty] Property '{part}' is not an array or list, cannot access by index.");
+                            return false;
+                        }
+                    }
+
+                    // Update type for next iteration
+                    currentType = currentObject.GetType();
+                }
+
+                // Set the final property
+                string finalPart = pathParts[pathParts.Length - 1];
+                
+                // Special handling for Material properties (shader properties)
+                if (currentObject is Material material && finalPart.StartsWith("_"))
+                {
+                    // Handle various material property types
+                    if (value is JArray jArray)
+                    {
+                        if (jArray.Count == 4) // Color with alpha
+                        {
+                            Color color = new Color(
+                                jArray[0].ToObject<float>(),
+                                jArray[1].ToObject<float>(),
+                                jArray[2].ToObject<float>(),
+                                jArray[3].ToObject<float>()
+                            );
+                            material.SetColor(finalPart, color);
+                            return true;
+                        }
+                        else if (jArray.Count == 3) // Color without alpha
+                        {
+                            Color color = new Color(
+                                jArray[0].ToObject<float>(),
+                                jArray[1].ToObject<float>(),
+                                jArray[2].ToObject<float>(),
+                                1.0f
+                            );
+                            material.SetColor(finalPart, color);
+                            return true;
+                        }
+                        else if (jArray.Count == 2) // Vector2
+                        {
+                            Vector2 vec = new Vector2(
+                                jArray[0].ToObject<float>(),
+                                jArray[1].ToObject<float>()
+                            );
+                            material.SetVector(finalPart, vec);
+                            return true;
+                        }
+                        else if (jArray.Count == 4) // Vector4
+                        {
+                            Vector4 vec = new Vector4(
+                                jArray[0].ToObject<float>(),
+                                jArray[1].ToObject<float>(),
+                                jArray[2].ToObject<float>(),
+                                jArray[3].ToObject<float>()
+                            );
+                            material.SetVector(finalPart, vec);
+                            return true;
+                        }
+                    }
+                    else if (value.Type == JTokenType.Float || value.Type == JTokenType.Integer)
+                    {
+                        material.SetFloat(finalPart, value.ToObject<float>());
+                        return true;
+                    }
+                    else if (value.Type == JTokenType.Boolean)
+                    {
+                        material.SetFloat(finalPart, value.ToObject<bool>() ? 1f : 0f);
+                        return true;
+                    }
+                    else if (value.Type == JTokenType.String)
+                    {
+                        // Might be a texture path
+                        string texturePath = value.ToString();
+                        if (texturePath.EndsWith(".png") || texturePath.EndsWith(".jpg") || texturePath.EndsWith(".tga"))
+                        {
+                            Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
+                            if (texture != null)
+                            {
+                                material.SetTexture(finalPart, texture);
+                                return true;
+                            }
+                        }
+                        else
+                        {
+                            // Materials don't have SetString, use SetTextureOffset as workaround or skip
+                            // material.SetString(finalPart, texturePath);
+                            Debug.LogWarning($"[SetNestedProperty] String values not directly supported for material property {finalPart}");
+                            return false;
+                        }
+                    }
+                    
+                    Debug.LogWarning($"[SetNestedProperty] Unsupported material property value type: {value.Type} for {finalPart}");
+                    return false;
+                }
+                
+                // For standard properties (not shader specific)
+                PropertyInfo finalPropInfo = currentType.GetProperty(finalPart, flags);
+                if (finalPropInfo != null && finalPropInfo.CanWrite)
+                {
+                    object convertedValue = ConvertJTokenToType(value, finalPropInfo.PropertyType);
+                    if (convertedValue != null)
+                    {
+                        finalPropInfo.SetValue(currentObject, convertedValue);
+                        return true;
+                    }
+                }
+                else
+                {
+                    FieldInfo finalFieldInfo = currentType.GetField(finalPart, flags);
+                    if (finalFieldInfo != null)
+                    {
+                        object convertedValue = ConvertJTokenToType(value, finalFieldInfo.FieldType);
+                        if (convertedValue != null)
+                        {
+                            finalFieldInfo.SetValue(currentObject, convertedValue);
+                            return true;
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[SetNestedProperty] Could not find final property or field '{finalPart}' on type '{currentType.Name}'");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[SetNestedProperty] Error setting nested property '{path}': {ex.Message}");
+            }
+            
+            return false;
+        }
+        
+        /// <summary>
+        /// Split a property path into parts, handling both dot notation and array indexers
+        /// </summary>
+        private static string[] SplitPropertyPath(string path)
+        {
+            // Handle complex paths with both dots and array indexers
+            List<string> parts = new List<string>();
+            int startIndex = 0;
+            bool inBrackets = false;
+            
+            for (int i = 0; i < path.Length; i++)
+            {
+                char c = path[i];
+                
+                if (c == '[')
+                {
+                    inBrackets = true;
+                }
+                else if (c == ']')
+                {
+                    inBrackets = false;
+                }
+                else if (c == '.' && !inBrackets)
+                {
+                    // Found a dot separator outside of brackets
+                    parts.Add(path.Substring(startIndex, i - startIndex));
+                    startIndex = i + 1;
+                }
+            }
+            
+            // Add the final part
+            if (startIndex < path.Length)
+            {
+                parts.Add(path.Substring(startIndex));
+            }
+            
+            return parts.ToArray();
+        }
+
+        /// <summary>
         /// Simple JToken to Type conversion for common Unity types.
         /// </summary>
         private static object ConvertJTokenToType(JToken token, Type targetType)
         {
              try
              {
+                 // Unwrap nested material properties if we're assigning to a Material
+                 if (typeof(Material).IsAssignableFrom(targetType) && token is JObject materialProps)
+                 {
+                     // Handle case where we're passing shader properties directly in a nested object
+                     string materialPath = token["path"]?.ToString();
+                     if (!string.IsNullOrEmpty(materialPath))
+                     {
+                         // Load the material by path
+                         Material material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+                         if (material != null)
+                         {
+                             // If there are additional properties, set them
+                             foreach (var prop in materialProps.Properties())
+                             {
+                                 if (prop.Name != "path")
+                                 {
+                                     SetProperty(material, prop.Name, prop.Value);
+                                 }
+                             }
+                             return material;
+                         }
+                         else
+                         {
+                             Debug.LogWarning($"[ConvertJTokenToType] Could not load material at path: '{materialPath}'");
+                             return null;
+                         }
+                     }
+                     
+                     // If no path is specified, could be a dynamic material or instance set by reference                     
+                     return null;
+                 }
+                 
                  // Basic types first
                  if (targetType == typeof(string)) return token.ToObject<string>();
                  if (targetType == typeof(int)) return token.ToObject<int>();
