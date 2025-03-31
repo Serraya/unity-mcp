@@ -55,14 +55,16 @@ def asset_creation_strategy() -> str:
     """Guide for discovering and using Unity MCP tools effectively."""
     return (
         "Available Unity MCP Server Tools:\\n\\n"
-        "For detailed usage, please refer to the specific tool's documentation.\\n\\n"
-        "- `manage_editor`: Controls editor state (play/pause/stop) and queries info (state, selection).\\n"
-        "- `execute_menu_item`: Executes Unity Editor menu items by path (e.g., 'File/Save Project').\\n"
+        "- `manage_editor`: Controls editor state and queries info.\\n"
+        "- `execute_menu_item`: Executes Unity Editor menu items by path.\\n"
         "- `read_console`: Reads or clears Unity console messages, with filtering options.\\n"
-        "- `manage_scene`: Manages scenes (load, save, create, get hierarchy).\\n"
-        "- `manage_gameobject`: Manages GameObjects in the scene (CRUD, find, components, assign properties).\\n"
-        "- `manage_script`: Manages C# script files (CRUD).\\n"
-        "- `manage_asset`: Manages project assets (import, create, modify, delete, search).\\n\\n"
+        "- `manage_scene`: Manages scenes.\\n"
+        "- `manage_gameobject`: Manages GameObjects in the scene.\\n"
+        "- `manage_script`: Manages C# script files.\\n"
+        "- `manage_asset`: Manages prefabs and assets.\\n\\n"
+        "Tips:\\n"
+        "- Create prefabs for reusable GameObjects.\\n"
+        "- Always include a camera and main light in your scenes.\\n"
     )
 
 # Run the server

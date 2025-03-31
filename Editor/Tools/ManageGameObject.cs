@@ -32,6 +32,54 @@ namespace UnityMCP.Editor.Tools
             string searchMethod = @params["searchMethod"]?.ToString().ToLower();
             string name = @params["name"]?.ToString();
             
+            // --- Prefab Redirection Check ---
+            string targetPath = targetToken?.Type == JTokenType.String ? targetToken.ToString() : null;
+            if (!string.IsNullOrEmpty(targetPath) && targetPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+            {
+                // Allow 'create' (instantiate), 'find' (?), 'get_components' (?)
+                if (action == "modify" || action == "set_component_property")
+                {
+                    Debug.Log($"[ManageGameObject->ManageAsset] Redirecting action '{action}' for prefab '{targetPath}' to ManageAsset.");
+                    // Prepare params for ManageAsset.ModifyAsset
+                    JObject assetParams = new JObject();
+                    assetParams["action"] = "modify"; // ManageAsset uses "modify"
+                    assetParams["path"] = targetPath;
+
+                    // Extract properties. 
+                    // For 'set_component_property', combine componentName and componentProperties.
+                    // For 'modify', directly use componentProperties.
+                    JObject properties = null;
+                    if (action == "set_component_property")
+                    {
+                         string compName = @params["componentName"]?.ToString();
+                         JObject compProps = @params["componentProperties"]?[compName] as JObject; // Handle potential nesting
+                         if (string.IsNullOrEmpty(compName)) return Response.Error("Missing 'componentName' for 'set_component_property' on prefab.");
+                         if (compProps == null) return Response.Error($"Missing or invalid 'componentProperties' for component '{compName}' for 'set_component_property' on prefab.");
+                         
+                         properties = new JObject();
+                         properties[compName] = compProps; 
+                    } 
+                    else // action == "modify"
+                    {
+                         properties = @params["componentProperties"] as JObject;
+                         if (properties == null) return Response.Error("Missing 'componentProperties' for 'modify' action on prefab.");
+                    }
+                    
+                    assetParams["properties"] = properties;
+                    
+                    // Call ManageAsset handler
+                    return ManageAsset.HandleCommand(assetParams);
+                }
+                 else if (action == "delete" || action == "add_component" || action == "remove_component" || action == "get_components") // Added get_components here too
+                {
+                     // Explicitly block other modifications on the prefab asset itself via manage_gameobject
+                     return Response.Error($"Action '{action}' on a prefab asset ('{targetPath}') should be performed using the 'manage_asset' command.");
+                }
+                 // Allow 'create' (instantiation) and 'find' to proceed, although finding a prefab asset by path might be less common via manage_gameobject.
+                 // No specific handling needed here, the code below will run.
+            }
+            // --- End Prefab Redirection Check ---
+
             try
             {
                 switch (action)
@@ -80,48 +128,141 @@ namespace UnityMCP.Editor.Tools
             bool saveAsPrefab = @params["saveAsPrefab"]?.ToObject<bool>() ?? false;
             string prefabPath = @params["prefabPath"]?.ToString();
             string tag = @params["tag"]?.ToString(); // Get tag for creation
+            string primitiveType = @params["primitiveType"]?.ToString(); // Keep primitiveType check
+            GameObject newGo = null; // Initialize as null
 
-            if (saveAsPrefab && string.IsNullOrEmpty(prefabPath))
+            // --- Try Instantiating Prefab First ---
+            string originalPrefabPath = prefabPath; // Keep original for messages
+            if (!string.IsNullOrEmpty(prefabPath))
             {
-                return Response.Error("'prefabPath' is required when 'saveAsPrefab' is true.");
-            }
-            if (saveAsPrefab && !prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
-            {
-                 return Response.Error($"'prefabPath' must end with '.prefab'. Provided: '{prefabPath}'");
-            }
-
-            string primitiveType = @params["primitiveType"]?.ToString();
-            GameObject newGo;
-
-            // Create primitive or empty GameObject
-            if (!string.IsNullOrEmpty(primitiveType))
-            {
-                try
+                // If no extension, search for the prefab by name
+                if (!prefabPath.Contains("/") && !prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
                 {
-                    PrimitiveType type = (PrimitiveType)Enum.Parse(typeof(PrimitiveType), primitiveType, true);
-                    newGo = GameObject.CreatePrimitive(type);
-                    newGo.name = name; // Set name after creation
+                    string prefabNameOnly = prefabPath;
+                    Debug.Log($"[ManageGameObject.Create] Searching for prefab named: '{prefabNameOnly}'");
+                    string[] guids = AssetDatabase.FindAssets($"t:Prefab {prefabNameOnly}");
+                    if (guids.Length == 0)
+                    {
+                        return Response.Error($"Prefab named '{prefabNameOnly}' not found anywhere in the project.");
+                    }
+                    else if (guids.Length > 1)
+                    {
+                        string foundPaths = string.Join(", ", guids.Select(g => AssetDatabase.GUIDToAssetPath(g)));
+                        return Response.Error($"Multiple prefabs found matching name '{prefabNameOnly}': {foundPaths}. Please provide a more specific path.");
+                    }
+                    else // Exactly one found
+                    {
+                        prefabPath = AssetDatabase.GUIDToAssetPath(guids[0]); // Update prefabPath with the full path
+                        Debug.Log($"[ManageGameObject.Create] Found unique prefab at path: '{prefabPath}'");
+                    }
                 }
-                catch (ArgumentException)
+                else if (!prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
                 {
-                    return Response.Error($"Invalid primitive type: '{primitiveType}'. Valid types: {string.Join(", ", Enum.GetNames(typeof(PrimitiveType)))}");
+                    // If it looks like a path but doesn't end with .prefab, assume user forgot it and append it.
+                    // We could also error here, but appending might be more user-friendly.
+                    Debug.LogWarning($"[ManageGameObject.Create] Provided prefabPath '{prefabPath}' does not end with .prefab. Assuming it's missing and appending.");
+                    prefabPath += ".prefab";
+                    // Note: This path might still not exist, AssetDatabase.LoadAssetAtPath will handle that.
                 }
-                 catch (Exception e)
-                 {
-                     return Response.Error($"Failed to create primitive '{primitiveType}': {e.Message}");
-                 }
+
+                // Removed the early return error for missing .prefab ending.
+                // The logic above now handles finding or assuming the .prefab extension.
+
+                GameObject prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+                if (prefabAsset != null)
+                {
+                    try
+                    {
+                        // Instantiate the prefab, initially place it at the root
+                        // Parent will be set later if specified
+                        newGo = PrefabUtility.InstantiatePrefab(prefabAsset) as GameObject;
+
+                        if (newGo == null)
+                        {
+                             // This might happen if the asset exists but isn't a valid GameObject prefab somehow
+                             Debug.LogError($"[ManageGameObject.Create] Failed to instantiate prefab at '{prefabPath}', asset might be corrupted or not a GameObject.");
+                             return Response.Error($"Failed to instantiate prefab at '{prefabPath}'.");
+                        }
+                        
+                        // Name the instance based on the 'name' parameter, not the prefab's default name
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            newGo.name = name;
+                        }
+                        
+                        // Register Undo for prefab instantiation
+                        Undo.RegisterCreatedObjectUndo(newGo, $"Instantiate Prefab '{prefabAsset.name}' as '{newGo.name}'");
+                        Debug.Log($"[ManageGameObject.Create] Instantiated prefab '{prefabAsset.name}' from path '{prefabPath}' as '{newGo.name}'.");
+
+                    }
+                    catch (Exception e)
+                    {
+                        return Response.Error($"Error instantiating prefab '{prefabPath}': {e.Message}");
+                    }
+                }
+                else
+                {
+                     // Only return error if prefabPath was specified but not found.
+                     // If prefabPath was empty/null, we proceed to create primitive/empty.
+                     Debug.LogWarning($"[ManageGameObject.Create] Prefab asset not found at path: '{prefabPath}'. Will proceed to create new object if specified.");
+                     // Do not return error here, allow fallback to primitive/empty creation
+                }
             }
-            else
+
+            // --- Fallback: Create Primitive or Empty GameObject ---
+            bool createdNewObject = false; // Flag to track if we created (not instantiated)
+            if (newGo == null) // Only proceed if prefab instantiation didn't happen
             {
-                newGo = new GameObject(name);
+                if (!string.IsNullOrEmpty(primitiveType))
+                {
+                    try
+                    {
+                        PrimitiveType type = (PrimitiveType)Enum.Parse(typeof(PrimitiveType), primitiveType, true);
+                        newGo = GameObject.CreatePrimitive(type);
+                        // Set name *after* creation for primitives
+                        if (!string.IsNullOrEmpty(name)) newGo.name = name;
+                        else return Response.Error("'name' parameter is required when creating a primitive."); // Name is essential
+                        createdNewObject = true;
+                    }
+                    catch (ArgumentException)
+                    {
+                        return Response.Error($"Invalid primitive type: '{primitiveType}'. Valid types: {string.Join(", ", Enum.GetNames(typeof(PrimitiveType)))}");
+                    }
+                     catch (Exception e)
+                     {
+                         return Response.Error($"Failed to create primitive '{primitiveType}': {e.Message}");
+                     }
+                }
+                else // Create empty GameObject
+                {
+                     if (string.IsNullOrEmpty(name))
+                     {
+                        return Response.Error("'name' parameter is required for 'create' action when not instantiating a prefab or creating a primitive.");
+                     }
+                    newGo = new GameObject(name);
+                    createdNewObject = true;
+                }
+                
+                // Record creation for Undo *only* if we created a new object
+                if (createdNewObject)
+                {
+                    Undo.RegisterCreatedObjectUndo(newGo, $"Create GameObject '{newGo.name}'");
+                }
             }
 
-            // Record creation for Undo (initial object)
-            // Note: Prefab saving might have its own Undo implications or require different handling.
-            // PrefabUtility operations often handle their own Undo steps.
-            Undo.RegisterCreatedObjectUndo(newGo, $"Create GameObject '{name}'");
+            // --- Common Setup (Parent, Transform, Tag, Components) - Applied AFTER object exists ---
+            if (newGo == null)
+            {
+                 // Should theoretically not happen if logic above is correct, but safety check.
+                 return Response.Error("Failed to create or instantiate the GameObject.");
+            }
+            
+            // Record potential changes to the existing prefab instance or the new GO
+            // Record transform separately in case parent changes affect it
+            Undo.RecordObject(newGo.transform, "Set GameObject Transform");
+            Undo.RecordObject(newGo, "Set GameObject Properties");
 
-            // Set Parent (before potentially making it a prefab root)
+            // Set Parent
             JToken parentToken = @params["parent"];
             if (parentToken != null)
             {
@@ -202,52 +343,85 @@ namespace UnityMCP.Editor.Tools
                  }
              }
 
-            // Save as Prefab if requested
-            GameObject prefabInstance = newGo; // Keep track of the instance potentially linked to the prefab
-            if (saveAsPrefab)
+            // Save as Prefab ONLY if we *created* a new object AND saveAsPrefab is true
+            GameObject finalInstance = newGo; // Use this for selection and return data
+            if (createdNewObject && saveAsPrefab)
             {
+                string finalPrefabPath = prefabPath; // Use a separate variable for saving path
+                // This check should now happen *before* attempting to save
+                 if (string.IsNullOrEmpty(finalPrefabPath))
+                 {
+                     // Clean up the created object before returning error
+                     UnityEngine.Object.DestroyImmediate(newGo);
+                     return Response.Error("'prefabPath' is required when 'saveAsPrefab' is true and creating a new object.");
+                 }
+                 // Ensure the *saving* path ends with .prefab
+                 if (!finalPrefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+                 {
+                     Debug.Log($"[ManageGameObject.Create] Appending .prefab extension to save path: '{finalPrefabPath}' -> '{finalPrefabPath}.prefab'");
+                     finalPrefabPath += ".prefab";
+                 }
+                 
+                 // Removed the error check here as we now ensure the extension exists
+                 // if (!prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+                 // {
+                 //     UnityEngine.Object.DestroyImmediate(newGo);
+                 //     return Response.Error($"'prefabPath' must end with '.prefab'. Provided: '{prefabPath}'");
+                 // }
+            
                 try
                 {
-                    // Ensure directory exists
-                    string directoryPath = System.IO.Path.GetDirectoryName(prefabPath);
-                    if (!System.IO.Directory.Exists(directoryPath))
+                    // Ensure directory exists using the final saving path
+                    string directoryPath = System.IO.Path.GetDirectoryName(finalPrefabPath);
+                    if (!string.IsNullOrEmpty(directoryPath) && !System.IO.Directory.Exists(directoryPath))
                     {
                         System.IO.Directory.CreateDirectory(directoryPath);
                          AssetDatabase.Refresh(); // Refresh asset database to recognize the new folder
                          Debug.Log($"[ManageGameObject.Create] Created directory for prefab: {directoryPath}");
                     }
 
-                    // Save the GameObject as a prefab asset and connect the instance
-                    // Use SaveAsPrefabAssetAndConnect to keep the instance in the scene linked
-                    prefabInstance = PrefabUtility.SaveAsPrefabAssetAndConnect(newGo, prefabPath, InteractionMode.UserAction);
+                    // Use SaveAsPrefabAssetAndConnect with the final saving path
+                    finalInstance = PrefabUtility.SaveAsPrefabAssetAndConnect(newGo, finalPrefabPath, InteractionMode.UserAction);
                     
-                    if (prefabInstance == null)
+                    if (finalInstance == null)
                     {
                          // Destroy the original if saving failed somehow (shouldn't usually happen if path is valid)
                          UnityEngine.Object.DestroyImmediate(newGo);
-                         return Response.Error($"Failed to save GameObject '{name}' as prefab at '{prefabPath}'. Check path and permissions.");
+                         return Response.Error($"Failed to save GameObject '{name}' as prefab at '{finalPrefabPath}'. Check path and permissions.");
                     }
-                    Debug.Log($"[ManageGameObject.Create] GameObject '{name}' saved as prefab to '{prefabPath}' and instance connected.");
+                    Debug.Log($"[ManageGameObject.Create] GameObject '{name}' saved as prefab to '{finalPrefabPath}' and instance connected.");
                     // Mark the new prefab asset as dirty? Not usually necessary, SaveAsPrefabAsset handles it.
-                    // EditorUtility.SetDirty(prefabInstance); // Instance is handled by SaveAsPrefabAssetAndConnect
+                    // EditorUtility.SetDirty(finalInstance); // Instance is handled by SaveAsPrefabAssetAndConnect
                 }
                 catch (Exception e)
                 {
                     // Clean up the instance if prefab saving fails
                     UnityEngine.Object.DestroyImmediate(newGo); // Destroy the original attempt
-                    return Response.Error($"Error saving prefab '{prefabPath}': {e.Message}");
+                    return Response.Error($"Error saving prefab '{finalPrefabPath}': {e.Message}");
                 }
             }
 
-            // Select the instance in the scene (which might now be a prefab instance)
-            Selection.activeGameObject = prefabInstance; 
+            // Select the instance in the scene (either prefab instance or newly created/saved one)
+            Selection.activeGameObject = finalInstance;
             
-            string successMessage = saveAsPrefab
-                ? $"GameObject '{name}' created and saved as prefab to '{prefabPath}'."
-                : $"GameObject '{name}' created successfully in scene.";
+            // Determine appropriate success message using the potentially updated or original path
+            string messagePrefabPath = finalInstance == null ? originalPrefabPath : AssetDatabase.GetAssetPath(PrefabUtility.GetCorrespondingObjectFromSource(finalInstance) ?? (UnityEngine.Object)finalInstance);
+            string successMessage;
+            if (!createdNewObject && !string.IsNullOrEmpty(messagePrefabPath)) // Instantiated existing prefab
+            {
+                 successMessage = $"Prefab '{messagePrefabPath}' instantiated successfully as '{finalInstance.name}'.";
+            }
+            else if (createdNewObject && saveAsPrefab && !string.IsNullOrEmpty(messagePrefabPath)) // Created new and saved as prefab
+            {
+                 successMessage = $"GameObject '{finalInstance.name}' created and saved as prefab to '{messagePrefabPath}'.";
+            }
+            else // Created new primitive or empty GO, didn't save as prefab
+            {
+                 successMessage = $"GameObject '{finalInstance.name}' created successfully in scene.";
+            }
                 
             // Return data for the instance in the scene
-            return Response.Success(successMessage, GetGameObjectData(prefabInstance)); 
+            return Response.Success(successMessage, GetGameObjectData(finalInstance)); 
         }
 
         private static object ModifyGameObject(JObject @params, JToken targetToken, string searchMethod)
@@ -967,10 +1141,13 @@ namespace UnityMCP.Editor.Tools
         {
              try
              {
+                 // Basic types first
                  if (targetType == typeof(string)) return token.ToObject<string>();
                  if (targetType == typeof(int)) return token.ToObject<int>();
                  if (targetType == typeof(float)) return token.ToObject<float>();
                  if (targetType == typeof(bool)) return token.ToObject<bool>();
+                 
+                 // Vector/Quaternion/Color types
                  if (targetType == typeof(Vector2) && token is JArray arrV2 && arrV2.Count == 2) 
                      return new Vector2(arrV2[0].ToObject<float>(), arrV2[1].ToObject<float>());
                  if (targetType == typeof(Vector3) && token is JArray arrV3 && arrV3.Count == 3) 
@@ -981,47 +1158,121 @@ namespace UnityMCP.Editor.Tools
                      return new Quaternion(arrQ[0].ToObject<float>(), arrQ[1].ToObject<float>(), arrQ[2].ToObject<float>(), arrQ[3].ToObject<float>());
                  if (targetType == typeof(Color) && token is JArray arrC && arrC.Count >= 3) // Allow RGB or RGBA
                      return new Color(arrC[0].ToObject<float>(), arrC[1].ToObject<float>(), arrC[2].ToObject<float>(), arrC.Count > 3 ? arrC[3].ToObject<float>() : 1.0f);
-                if (targetType.IsEnum)
+                 
+                 // Enum types
+                 if (targetType.IsEnum)
                     return Enum.Parse(targetType, token.ToString(), true); // Case-insensitive enum parsing
 
-                 // Handle assigning Unity Objects (like Prefabs, Materials, Textures) using their asset path
+                 // Handle assigning Unity Objects (Assets, Scene Objects, Components)
                  if (typeof(UnityEngine.Object).IsAssignableFrom(targetType))
                  {
-                    // Check if the input token is a string, which we'll assume is the asset path
-                    if (token.Type == JTokenType.String)
-                    {
-                        string assetPath = token.ToString();
-                        if (!string.IsNullOrEmpty(assetPath))
-                        {
-                             // Attempt to load the asset from the provided path using the target type
-                             UnityEngine.Object loadedAsset = AssetDatabase.LoadAssetAtPath(assetPath, targetType);
-                             if (loadedAsset != null)
+                     // CASE 1: Reference is a JSON Object specifying a scene object/component find criteria
+                     if (token is JObject refObject)
+                     {
+                         JToken findToken = refObject["find"];
+                         string findMethod = refObject["method"]?.ToString() ?? "by_id_or_name_or_path"; // Default search
+                         string componentTypeName = refObject["component"]?.ToString();
+
+                         if (findToken == null)
+                         {
+                             Debug.LogWarning($"[ConvertJTokenToType] Reference object missing 'find' property: {token}");
+                             return null;
+                         }
+
+                         // Find the target GameObject
+                         // Pass 'searchInactive: true' for internal lookups to be more robust
+                         JObject findParams = new JObject(); 
+                         findParams["searchInactive"] = true; 
+                         GameObject foundGo = FindObjectInternal(findToken, findMethod, findParams);
+
+                         if (foundGo == null)
+                         {
+                             Debug.LogWarning($"[ConvertJTokenToType] Could not find GameObject specified by reference object: {token}");
+                             return null;
+                         }
+
+                         // If a component type is specified, try to get it
+                         if (!string.IsNullOrEmpty(componentTypeName))
+                         {
+                             Type compType = FindType(componentTypeName);
+                             if (compType == null)
                              {
-                                 return loadedAsset; // Return the loaded asset if successful
-                             }
-                             else
-                             {
-                                 // Log a warning if the asset could not be found at the path
-                                 Debug.LogWarning($"[ConvertJTokenToType] Could not load asset of type '{targetType.Name}' from path: '{assetPath}'. Make sure the path is correct and the asset exists.");
+                                 Debug.LogWarning($"[ConvertJTokenToType] Could not find component type '{componentTypeName}' specified in reference object: {token}");
                                  return null;
-                            }
-                        }
-                        else
-                        {
-                            // Handle cases where an empty string might be intended to clear the reference
-                            return null; // Assign null if the path is empty
-                        }
-                    }
-                    else
+                             }
+                             
+                             // Ensure the targetType is assignable from the found component type
+                             if (!targetType.IsAssignableFrom(compType))
+                             {
+                                Debug.LogWarning($"[ConvertJTokenToType] Found component '{componentTypeName}' but it is not assignable to the target property type '{targetType.Name}'. Reference: {token}");
+                                return null;
+                             }
+
+                             Component foundComp = foundGo.GetComponent(compType);
+                             if (foundComp == null)
+                             {
+                                 Debug.LogWarning($"[ConvertJTokenToType] Found GameObject '{foundGo.name}' but could not find component '{componentTypeName}' on it. Reference: {token}");
+                                 return null;
+                             }
+                             return foundComp; // Return the found component
+                         }
+                         else
+                         {
+                             // Otherwise, return the GameObject itself, ensuring it's assignable
+                             if (!targetType.IsAssignableFrom(typeof(GameObject)))
+                             {
+                                  Debug.LogWarning($"[ConvertJTokenToType] Found GameObject '{foundGo.name}' but it is not assignable to the target property type '{targetType.Name}' (component name was not specified). Reference: {token}");
+                                  return null;
+                             }
+                             return foundGo; // Return the found GameObject
+                         }
+                     }
+                     // CASE 2: Reference is a string, assume it's an asset path
+                     else if (token.Type == JTokenType.String)
+                     {
+                         string assetPath = token.ToString();
+                         if (!string.IsNullOrEmpty(assetPath))
+                         {
+                              // Attempt to load the asset from the provided path using the target type
+                              UnityEngine.Object loadedAsset = AssetDatabase.LoadAssetAtPath(assetPath, targetType);
+                              if (loadedAsset != null)
+                              {
+                                  return loadedAsset; // Return the loaded asset if successful
+                              }
+                              else
+                              {
+                                  // Log a warning if the asset could not be found at the path
+                                  Debug.LogWarning($"[ConvertJTokenToType] Could not load asset of type '{targetType.Name}' from path: '{assetPath}'. Make sure the path is correct and the asset exists.");
+                                  return null;
+                             }
+                         }
+                         else
+                         {
+                             // Handle cases where an empty string might be intended to clear the reference
+                             return null; // Assign null if the path is empty
+                         }
+                     }
+                    // CASE 3: Reference is null or empty JToken, assign null
+                    else if (token.Type == JTokenType.Null || string.IsNullOrEmpty(token.ToString()))
                     {
-                         // Log a warning if the input token is not a string (path) for a Unity Object assignment
-                         Debug.LogWarning($"[ConvertJTokenToType] Expected a string asset path to assign Unity Object of type '{targetType.Name}', but received token type '{token.Type}'. Value: {token}");
-                         return null;
+                        return null; 
                     }
+                     // CASE 4: Invalid format for Unity Object reference
+                     else
+                     {
+                          Debug.LogWarning($"[ConvertJTokenToType] Expected a string asset path or a reference object to assign Unity Object of type '{targetType.Name}', but received token type '{token.Type}'. Value: {token}");
+                          return null;
+                     }
                  }
 
-                 // Fallback: Try direct conversion (might work for simple value types)
-                 return token.ToObject(targetType); 
+                 // Fallback: Try direct conversion (might work for other simple value types)
+                 // Be cautious here, this might throw errors for complex types not handled above
+                 try {
+                     return token.ToObject(targetType); 
+                 } catch (Exception directConversionEx) {
+                      Debug.LogWarning($"[ConvertJTokenToType] Direct conversion failed for JToken '{token}' to type '{targetType.Name}': {directConversionEx.Message}. Specific handling might be needed.");
+                      return null;
+                 }
              }
              catch (Exception ex)
              {

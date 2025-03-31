@@ -17,12 +17,27 @@ namespace UnityMCP.Editor.Tools
     {
         // --- Main Handler ---
 
+        // Define the list of valid actions
+        private static readonly List<string> ValidActions = new List<string>
+        {
+            "import", "create", "modify", "delete", "duplicate",
+            "move", "rename", "search", "get_info", "create_folder",
+            "get_components"
+        };
+
         public static object HandleCommand(JObject @params)
         {
             string action = @params["action"]?.ToString().ToLower();
             if (string.IsNullOrEmpty(action))
             {
                 return Response.Error("Action parameter is required.");
+            }
+
+            // Check if the action is valid before switching
+            if (!ValidActions.Contains(action))
+            {
+                string validActionsList = string.Join(", ", ValidActions);
+                return Response.Error($"Unknown action: '{action}'. Valid actions are: {validActionsList}");
             }
 
             // Common parameters
@@ -52,9 +67,13 @@ namespace UnityMCP.Editor.Tools
                          return GetAssetInfo(path, @params["generatePreview"]?.ToObject<bool>() ?? false);
                     case "create_folder": // Added specific action for clarity
                          return CreateFolder(path);
+                    case "get_components":
+                         return GetComponentsFromAsset(path);
 
                     default:
-                        return Response.Error($"Unknown action: '{action}'.");
+                        // This error message is less likely to be hit now, but kept here as a fallback or for potential future modifications.
+                        string validActionsListDefault = string.Join(", ", ValidActions);
+                        return Response.Error($"Unknown action: '{action}'. Valid actions are: {validActionsListDefault}");
                 }
             }
             catch (Exception e)
@@ -239,27 +258,72 @@ namespace UnityMCP.Editor.Tools
                 UnityEngine.Object asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(fullPath);
                 if (asset == null) return Response.Error($"Failed to load asset at path: {fullPath}");
 
-                bool modified = false;
-                // Example: Modifying a Material
-                if (asset is Material material)
+                bool modified = false; // Flag to track if any changes were made
+
+                // --- NEW: Handle GameObject / Prefab Component Modification ---
+                if (asset is GameObject gameObject)
                 {
-                     modified = ApplyMaterialProperties(material, properties);
+                    // Iterate through the properties JSON: keys are component names, values are properties objects for that component
+                    foreach (var prop in properties.Properties())
+                    {
+                        string componentName = prop.Name; // e.g., "Collectible"
+                        // Check if the value associated with the component name is actually an object containing properties
+                        if (prop.Value is JObject componentProperties && componentProperties.HasValues) // e.g., {"bobSpeed": 2.0}
+                        {
+                            // Find the component on the GameObject using the name from the JSON key
+                            // Using GetComponent(string) is convenient but might require exact type name or be ambiguous.
+                            // Consider using FindType helper if needed for more complex scenarios.
+                            Component targetComponent = gameObject.GetComponent(componentName);
+
+                            if (targetComponent != null)
+                            {
+                                // Apply the nested properties (e.g., bobSpeed) to the found component instance
+                                // Use |= to ensure 'modified' becomes true if any component is successfully modified
+                                modified |= ApplyObjectProperties(targetComponent, componentProperties);
+                            }
+                            else
+                            {
+                                // Log a warning if a specified component couldn't be found
+                                Debug.LogWarning($"[ManageAsset.ModifyAsset] Component '{componentName}' not found on GameObject '{gameObject.name}' in asset '{fullPath}'. Skipping modification for this component.");
+                            }
+                        }
+                        else
+                        {
+                            // Log a warning if the structure isn't {"ComponentName": {"prop": value}}
+                            // We could potentially try to apply this property directly to the GameObject here if needed,
+                            // but the primary goal is component modification.
+                             Debug.LogWarning($"[ManageAsset.ModifyAsset] Property '{prop.Name}' for GameObject modification should have a JSON object value containing component properties. Value was: {prop.Value.Type}. Skipping.");
+                        }
+                    }
+                    // Note: 'modified' is now true if ANY component property was successfully changed.
                 }
-                // Example: Modifying a ScriptableObject (more complex, needs reflection or specific interface)
+                // --- End NEW ---
+
+                // --- Existing logic for other asset types (now as else-if) ---
+                // Example: Modifying a Material
+                else if (asset is Material material)
+                {
+                     // Apply properties directly to the material. If this modifies, it sets modified=true.
+                     // Use |= in case the asset was already marked modified by previous logic (though unlikely here)
+                     modified |= ApplyMaterialProperties(material, properties);
+                }
+                // Example: Modifying a ScriptableObject
                  else if (asset is ScriptableObject so)
                  {
-                      modified = ApplyObjectProperties(so, properties); // General helper
+                      // Apply properties directly to the ScriptableObject.
+                      modified |= ApplyObjectProperties(so, properties); // General helper
                  }
                  // Example: Modifying TextureImporter settings
                  else if (asset is Texture) {
                      AssetImporter importer = AssetImporter.GetAtPath(fullPath);
                      if (importer is TextureImporter textureImporter)
                      {
-                          modified = ApplyObjectProperties(textureImporter, properties);
-                          if (modified) {
-                               // Importer settings need saving
+                          bool importerModified = ApplyObjectProperties(textureImporter, properties);
+                          if (importerModified) {
+                               // Importer settings need saving and reimporting
                                AssetDatabase.WriteImportSettingsIfDirty(fullPath);
                                AssetDatabase.ImportAsset(fullPath, ImportAssetOptions.ForceUpdate); // Reimport to apply changes
+                               modified = true; // Mark overall operation as modified
                           }
                      }
                      else {
@@ -267,25 +331,37 @@ namespace UnityMCP.Editor.Tools
                      }
                  }
                 // TODO: Add modification logic for other common asset types (Models, AudioClips importers, etc.)
-                else
+                else // Fallback for other asset types OR direct properties on non-GameObject assets
                 {
-                    Debug.LogWarning($"Modification for asset type '{asset.GetType().Name}' at '{fullPath}' is not fully implemented. Attempting generic property setting.");
-                     modified = ApplyObjectProperties(asset, properties);
+                    // This block handles non-GameObject/Material/ScriptableObject/Texture assets.
+                    // Attempts to apply properties directly to the asset itself.
+                    Debug.LogWarning($"[ManageAsset.ModifyAsset] Asset type '{asset.GetType().Name}' at '{fullPath}' is not explicitly handled for component modification. Attempting generic property setting on the asset itself.");
+                    modified |= ApplyObjectProperties(asset, properties);
                 }
+                // --- End Existing Logic ---
 
+                // Check if any modification happened (either component or direct asset modification)
                 if (modified)
-                { 
-                    EditorUtility.SetDirty(asset); // Mark the asset itself as dirty
-                    AssetDatabase.SaveAssets(); // Save changes to disk
-                    // AssetDatabase.Refresh(); // SaveAssets usually handles refresh
+                {
+                    // Mark the asset as dirty (important for prefabs/SOs) so Unity knows to save it.
+                    EditorUtility.SetDirty(asset);
+                    // Save all modified assets to disk.
+                    AssetDatabase.SaveAssets();
+                    // Refresh might be needed in some edge cases, but SaveAssets usually covers it.
+                    // AssetDatabase.Refresh();
                     return Response.Success($"Asset '{fullPath}' modified successfully.", GetAssetData(fullPath));
                 } else {
-                    return Response.Success($"No applicable properties found to modify for asset '{fullPath}'.", GetAssetData(fullPath));
+                     // If no changes were made (e.g., component not found, property names incorrect, value unchanged), return a success message indicating nothing changed.
+                    return Response.Success($"No applicable or modifiable properties found for asset '{fullPath}'. Check component names, property names, and values.", GetAssetData(fullPath));
+                    // Previous message: return Response.Success($"No applicable properties found to modify for asset '{fullPath}'.", GetAssetData(fullPath));
                 }
             }
             catch (Exception e)
             {
-                return Response.Error($"Failed to modify asset '{fullPath}': {e.Message}");
+                // Log the detailed error internally
+                 Debug.LogError($"[ManageAsset] Action 'modify' failed for path '{path}': {e}");
+                 // Return a user-friendly error message
+                 return Response.Error($"Failed to modify asset '{fullPath}': {e.Message}");
             }
         }
 
@@ -486,7 +562,62 @@ namespace UnityMCP.Editor.Tools
                  return Response.Error($"Error getting info for asset '{fullPath}': {e.Message}");
             }
         }
-        
+
+        /// <summary>
+        /// Retrieves components attached to a GameObject asset (like a Prefab).
+        /// </summary>
+        /// <param name="path">The asset path of the GameObject or Prefab.</param>
+        /// <returns>A response object containing a list of component type names or an error.</returns>
+        private static object GetComponentsFromAsset(string path)
+        {
+            // 1. Validate input path
+            if (string.IsNullOrEmpty(path)) return Response.Error("'path' is required for get_components.");
+            
+            // 2. Sanitize and check existence
+            string fullPath = SanitizeAssetPath(path);
+            if (!AssetExists(fullPath)) return Response.Error($"Asset not found at path: {fullPath}");
+
+            try
+            {
+                // 3. Load the asset
+                UnityEngine.Object asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(fullPath);
+                if (asset == null) return Response.Error($"Failed to load asset at path: {fullPath}");
+
+                // 4. Check if it's a GameObject (Prefabs load as GameObjects)
+                GameObject gameObject = asset as GameObject;
+                if (gameObject == null)
+                {
+                    // Also check if it's *directly* a Component type (less common for primary assets)
+                    Component componentAsset = asset as Component;
+                    if (componentAsset != null) {
+                        // If the asset itself *is* a component, maybe return just its info?
+                        // This is an edge case. Let's stick to GameObjects for now.
+                        return Response.Error($"Asset at '{fullPath}' is a Component ({asset.GetType().FullName}), not a GameObject. Components are typically retrieved *from* a GameObject.");
+                    }
+                    return Response.Error($"Asset at '{fullPath}' is not a GameObject (Type: {asset.GetType().FullName}). Cannot get components from this asset type.");
+                }
+
+                // 5. Get components
+                Component[] components = gameObject.GetComponents<Component>();
+                
+                // 6. Format component data
+                List<object> componentList = components.Select(comp => new {
+                    typeName = comp.GetType().FullName,
+                    instanceID = comp.GetInstanceID(),
+                    // TODO: Add more component-specific details here if needed in the future? 
+                    //       Requires reflection or specific handling per component type.
+                }).ToList<object>(); // Explicit cast for clarity if needed
+
+                // 7. Return success response
+                return Response.Success($"Found {componentList.Count} component(s) on asset '{fullPath}'.", componentList);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[ManageAsset.GetComponentsFromAsset] Error getting components for '{fullPath}': {e}");
+                return Response.Error($"Error getting components for asset '{fullPath}': {e.Message}");
+            }
+        }
+
         // --- Internal Helpers ---
 
         /// <summary>

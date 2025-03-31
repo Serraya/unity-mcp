@@ -317,7 +317,6 @@ namespace UnityMCP.Editor.Tools
                 childrenData.Add(GetGameObjectDataRecursive(child.gameObject));
             }
 
-            // Basic info
             var gameObjectData = new Dictionary<string, object>
             {
                 { "name", go.name },
@@ -328,14 +327,12 @@ namespace UnityMCP.Editor.Tools
                 { "isStatic", go.isStatic },
                 { "instanceID", go.GetInstanceID() }, // Useful unique identifier
                 { "transform", new {
-                        position = go.transform.localPosition,
-                        rotation = go.transform.localRotation.eulerAngles, // Euler for simplicity
-                        scale = go.transform.localScale
+                        position = new { x = go.transform.localPosition.x, y = go.transform.localPosition.y, z = go.transform.localPosition.z },
+                        rotation = new { x = go.transform.localRotation.eulerAngles.x, y = go.transform.localRotation.eulerAngles.y, z = go.transform.localRotation.eulerAngles.z }, // Euler for simplicity
+                        scale = new { x = go.transform.localScale.x, y = go.transform.localScale.y, z = go.transform.localScale.z }
                     }
                 },
                 { "children", childrenData }
-                // Add components if needed - potentially large data
-                // { "components", go.GetComponents<Component>().Select(c => c.GetType().FullName).ToList() }
             };
 
             return gameObjectData;

@@ -17,6 +17,7 @@ def register_manage_script_tools(mcp: FastMCP):
         namespace: Optional[str] = None
     ) -> Dict[str, Any]:
         """Manages C# scripts in Unity (create, read, update, delete).
+        Make reference variables public for easier access in the Unity Editor.
 
         Args:
             action: Operation ('create', 'read', 'update', 'delete').

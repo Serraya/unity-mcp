@@ -9,50 +9,60 @@ def register_manage_gameobject_tools(mcp: FastMCP):
     def manage_gameobject(
         ctx: Context,
         action: str,
-        target: Optional[Union[str, int]] = None, # Name, path, or instance ID
-        search_method: Optional[str] = None, # by_name, by_tag, by_layer, by_component, by_id
+        target: Optional[Union[str, int]] = None,
+        search_method: Optional[str] = None,
         # --- Parameters for 'create' ---
-        name: Optional[str] = None, # Required for 'create'
-        tag: Optional[str] = None, # Tag to assign during creation
-        parent: Optional[Union[str, int]] = None, # Name or ID of parent
-        position: Optional[List[float]] = None, # [x, y, z]
-        rotation: Optional[List[float]] = None, # [x, y, z] Euler angles
-        scale: Optional[List[float]] = None, # [x, y, z]
-        components_to_add: Optional[List[Union[str, Dict[str, Any]]]] = None, # List of component names or dicts with properties
-        primitive_type: Optional[str] = None, # Optional: create primitive (Cube, Sphere, etc.) instead of empty
-        save_as_prefab: Optional[bool] = False, # If True, save the created object as a prefab
-        prefab_path: Optional[str] = None, # Full path to save prefab (e.g., "Assets/Prefabs/MyObject.prefab"). Overrides prefab_folder.
-        prefab_folder: Optional[str] = "Assets/Prefabs", # Default folder if prefab_path not set (e.g., "Assets/Prefabs")
+        name: Optional[str] = None,
+        tag: Optional[str] = None,
+        parent: Optional[Union[str, int]] = None,
+        position: Optional[List[float]] = None,
+        rotation: Optional[List[float]] = None,
+        scale: Optional[List[float]] = None,
+        components_to_add: Optional[List[Union[str, Dict[str, Any]]]] = None,
+        primitive_type: Optional[str] = None,
+        save_as_prefab: Optional[bool] = False,
+        prefab_path: Optional[str] = None,
+        prefab_folder: Optional[str] = "Assets/Prefabs",
         # --- Parameters for 'modify' ---
         new_name: Optional[str] = None,
         new_parent: Optional[Union[str, int]] = None,
         set_active: Optional[bool] = None,
         new_tag: Optional[str] = None,
-        new_layer: Optional[Union[str, int]] = None, # Layer name or number
+        new_layer: Optional[Union[str, int]] = None,
         components_to_remove: Optional[List[str]] = None,
-        component_properties: Optional[Dict[str, Dict[str, Any]]] = None, # { "ComponentName": { "propName": value } }
+        component_properties: Optional[Dict[str, Dict[str, Any]]] = None,
         # --- Parameters for 'find' ---
-        search_term: Optional[str] = None, # Used with search_method (e.g., name, tag value, component type)
-        find_all: Optional[bool] = False, # Find all matches or just the first?
-        search_in_children: Optional[bool] = False, # Limit search scope
-        search_inactive: Optional[bool] = False, # Include inactive GameObjects?
+        search_term: Optional[str] = None,
+        find_all: Optional[bool] = False,
+        search_in_children: Optional[bool] = False,
+        search_inactive: Optional[bool] = False,
         # -- Component Management Arguments --
-        component_name: Optional[str] = None,       # Target component for component actions
+        component_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Manages GameObjects: create, modify, delete, find, and component operations.
 
         Args:
-            action: Operation (e.g., 'create', 'modify', 'find', 'add_component').
+            action: Operation (e.g., 'create', 'modify', 'find', 'add_component', 'remove_component', 'set_component_property').
             target: GameObject identifier (name, path, ID) for modify/delete/component actions.
-            search_method: How to find objects ('by_name', 'by_id', 'by_path', etc.). Used with 'find'.
-            Action-specific arguments (e.g., name, parent, position for 'create'; 
-                     component_name, component_properties for component actions; 
+            search_method: How to find objects ('by_name', 'by_id', 'by_path', etc.). Used with 'find' and some 'target' lookups.
+            component_properties: Dict mapping Component names to their properties to set.
+                                  Example: {"Rigidbody": {"mass": 10.0, "useGravity": True}},
+                                  To set references:
+                                  - Use asset path string for Prefabs/Materials, e.g., {"MeshRenderer": {"material": "Assets/Materials/MyMat.mat"}}
+                                  - Use a dict for scene objects/components, e.g.:
+                                    {"MyScript": {"otherObject": {"find": "Player", "method": "by_name"}}} (assigns GameObject)
+                                    {"MyScript": {"playerHealth": {"find": "Player", "component": "HealthComponent"}}} (assigns Component)
+            Action-specific arguments (e.g., name, parent, position for 'create';
+                     component_name for component actions;
                      search_term, find_all for 'find').
 
         Returns:
             Dictionary with operation results ('success', 'message', 'data').
         """
         try:
+            # --- Early check for attempting to modify a prefab asset ---
+            # ----------------------------------------------------------
+
             # Prepare parameters, removing None values
             params = {
                 "action": action,

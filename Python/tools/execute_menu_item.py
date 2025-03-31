@@ -11,10 +11,8 @@ def register_execute_menu_item_tools(mcp: FastMCP):
     async def execute_menu_item(
         ctx: Context,
         menu_path: str,
-        action: Optional[str] = 'execute', # Allows extending later (e.g., 'validate', 'get_available')
-        parameters: Optional[Dict[str, Any]] = None, # For menu items that might accept parameters (less common)
-        # alias: Optional[str] = None, # Potential future addition for common commands
-        # context: Optional[Dict[str, Any]] = None # Potential future addition for context-specific menus
+        action: Optional[str] = 'execute',
+        parameters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Executes a Unity Editor menu item via its path (e.g., "File/Save Project").
 
@@ -35,8 +33,6 @@ def register_execute_menu_item_tools(mcp: FastMCP):
             "action": action,
             "menuPath": menu_path,
             "parameters": parameters if parameters else {},
-            # "alias": alias,
-            # "context": context
         }
 
         # Remove None values

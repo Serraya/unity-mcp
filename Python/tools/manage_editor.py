@@ -11,15 +11,9 @@ def register_manage_editor_tools(mcp: FastMCP):
         action: str,
         wait_for_completion: Optional[bool] = None,
         # --- Parameters for specific actions ---
-        # For 'set_active_tool'
         tool_name: Optional[str] = None, 
-        # For 'add_tag', 'remove_tag'
         tag_name: Optional[str] = None,
-        # For 'add_layer', 'remove_layer'
         layer_name: Optional[str] = None,
-        # Example: width: Optional[int] = None, height: Optional[int] = None
-        # Example: window_name: Optional[str] = None
-        # context: Optional[Dict[str, Any]] = None # Additional context
     ) -> Dict[str, Any]:
         """Controls and queries the Unity editor's state and settings.
 

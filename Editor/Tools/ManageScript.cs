@@ -43,7 +43,8 @@ namespace UnityMCP.Editor.Tools
             }
 
             // Ensure path is relative to Assets/, removing any leading "Assets/"
-            string relativeDir = path ?? string.Empty;
+            // Set default directory to "Scripts" if path is not provided
+            string relativeDir = path ?? "Scripts"; // Default to "Scripts" if path is null
             if (!string.IsNullOrEmpty(relativeDir))
             {
                 relativeDir = relativeDir.Replace('\\', '/').Trim('/');
@@ -51,6 +52,10 @@ namespace UnityMCP.Editor.Tools
                 {
                     relativeDir = relativeDir.Substring("Assets/".Length).TrimStart('/');
                 }
+            }
+            // Handle empty string case explicitly after processing
+            if (string.IsNullOrEmpty(relativeDir)) {
+                 relativeDir = "Scripts"; // Ensure default if path was provided as "" or only "/" or "Assets/"
             }
 
             // Construct paths

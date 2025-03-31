@@ -18,9 +18,9 @@ namespace UnityMCP.Editor.Tools
     public static class ReadConsole
     {
         // Reflection members for accessing internal LogEntry data
-        private static MethodInfo _getEntriesMethod;
+        // private static MethodInfo _getEntriesMethod; // Removed as it's unused and fails reflection
         private static MethodInfo _startGettingEntriesMethod;
-        private static MethodInfo _stopGettingEntriesMethod;
+        private static MethodInfo _endGettingEntriesMethod; // Renamed from _stopGettingEntriesMethod, trying End...
         private static MethodInfo _clearMethod;
         private static MethodInfo _getCountMethod;
         private static MethodInfo _getEntryMethod;
@@ -38,33 +38,49 @@ namespace UnityMCP.Editor.Tools
                 Type logEntriesType = typeof(EditorApplication).Assembly.GetType("UnityEditor.LogEntries");
                  if (logEntriesType == null) throw new Exception("Could not find internal type UnityEditor.LogEntries");
 
-                 _getEntriesMethod = logEntriesType.GetMethod("GetEntries", BindingFlags.Static | BindingFlags.Public);
-                 _startGettingEntriesMethod = logEntriesType.GetMethod("StartGettingEntries", BindingFlags.Static | BindingFlags.Public);
-                 _stopGettingEntriesMethod = logEntriesType.GetMethod("StopGettingEntries", BindingFlags.Static | BindingFlags.Public);
-                 _clearMethod = logEntriesType.GetMethod("Clear", BindingFlags.Static | BindingFlags.Public);
-                 _getCountMethod = logEntriesType.GetMethod("GetCount", BindingFlags.Static | BindingFlags.Public);
-                 _getEntryMethod = logEntriesType.GetMethod("GetEntryInternal", BindingFlags.Static | BindingFlags.Public);
+                 // Include NonPublic binding flags as internal APIs might change accessibility
+                 BindingFlags staticFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+                 BindingFlags instanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+                 _startGettingEntriesMethod = logEntriesType.GetMethod("StartGettingEntries", staticFlags);
+                 if (_startGettingEntriesMethod == null) throw new Exception("Failed to reflect LogEntries.StartGettingEntries");
+
+                 // Try reflecting EndGettingEntries based on warning message
+                 _endGettingEntriesMethod = logEntriesType.GetMethod("EndGettingEntries", staticFlags);
+                 if (_endGettingEntriesMethod == null) throw new Exception("Failed to reflect LogEntries.EndGettingEntries");
+
+                 _clearMethod = logEntriesType.GetMethod("Clear", staticFlags);
+                 if (_clearMethod == null) throw new Exception("Failed to reflect LogEntries.Clear");
+
+                 _getCountMethod = logEntriesType.GetMethod("GetCount", staticFlags);
+                 if (_getCountMethod == null) throw new Exception("Failed to reflect LogEntries.GetCount");
+
+                 _getEntryMethod = logEntriesType.GetMethod("GetEntryInternal", staticFlags);
+                 if (_getEntryMethod == null) throw new Exception("Failed to reflect LogEntries.GetEntryInternal");
 
                  Type logEntryType = typeof(EditorApplication).Assembly.GetType("UnityEditor.LogEntry");
                  if (logEntryType == null) throw new Exception("Could not find internal type UnityEditor.LogEntry");
 
-                 _modeField = logEntryType.GetField("mode", BindingFlags.Instance | BindingFlags.Public);
-                 _messageField = logEntryType.GetField("message", BindingFlags.Instance | BindingFlags.Public);
-                 _fileField = logEntryType.GetField("file", BindingFlags.Instance | BindingFlags.Public);
-                 _lineField = logEntryType.GetField("line", BindingFlags.Instance | BindingFlags.Public);
-                 _instanceIdField = logEntryType.GetField("instanceID", BindingFlags.Instance | BindingFlags.Public);
+                 _modeField = logEntryType.GetField("mode", instanceFlags);
+                 if (_modeField == null) throw new Exception("Failed to reflect LogEntry.mode");
 
-                // Basic check if reflection worked
-                if (_getEntriesMethod == null || _clearMethod == null || _modeField == null || _messageField == null)
-                {
-                     throw new Exception("Failed to get required reflection members for LogEntries/LogEntry.");
-                 }
+                 _messageField = logEntryType.GetField("message", instanceFlags);
+                 if (_messageField == null) throw new Exception("Failed to reflect LogEntry.message");
+
+                 _fileField = logEntryType.GetField("file", instanceFlags);
+                 if (_fileField == null) throw new Exception("Failed to reflect LogEntry.file");
+
+                 _lineField = logEntryType.GetField("line", instanceFlags);
+                 if (_lineField == null) throw new Exception("Failed to reflect LogEntry.line");
+
+                 _instanceIdField = logEntryType.GetField("instanceID", instanceFlags);
+                 if (_instanceIdField == null) throw new Exception("Failed to reflect LogEntry.instanceID");
             }
             catch (Exception e)
             {
-                 Debug.LogError($"[ReadConsole] Static Initialization Failed: Could not setup reflection for LogEntries. Console reading/clearing will likely fail. Error: {e}");
+                 Debug.LogError($"[ReadConsole] Static Initialization Failed: Could not setup reflection for LogEntries/LogEntry. Console reading/clearing will likely fail. Specific Error: {e.Message}");
                  // Set members to null to prevent NullReferenceExceptions later, HandleCommand should check this.
-                 _getEntriesMethod = _startGettingEntriesMethod = _stopGettingEntriesMethod = _clearMethod = _getCountMethod = _getEntryMethod = null;
+                 _startGettingEntriesMethod = _endGettingEntriesMethod = _clearMethod = _getCountMethod = _getEntryMethod = null;
                  _modeField = _messageField = _fileField = _lineField = _instanceIdField = null;
             }
         }
@@ -73,9 +89,13 @@ namespace UnityMCP.Editor.Tools
 
         public static object HandleCommand(JObject @params)
         {
-            // Check if reflection setup failed in static constructor
-             if (_clearMethod == null || _getEntriesMethod == null || _startGettingEntriesMethod == null || _stopGettingEntriesMethod == null || _getCountMethod == null || _getEntryMethod == null || _modeField == null || _messageField == null)
+            // Check if ALL required reflection members were successfully initialized.
+             if (_startGettingEntriesMethod == null || _endGettingEntriesMethod == null ||
+                 _clearMethod == null || _getCountMethod == null || _getEntryMethod == null || 
+                 _modeField == null || _messageField == null || _fileField == null || _lineField == null || _instanceIdField == null)
              {
+                 // Log the error here as well for easier debugging in Unity Console
+                 Debug.LogError("[ReadConsole] HandleCommand called but reflection members are not initialized. Static constructor might have failed silently or there's an issue.");
                  return Response.Error("ReadConsole handler failed to initialize due to reflection errors. Cannot access console logs.");
              }
 
@@ -162,6 +182,7 @@ namespace UnityMCP.Editor.Tools
                      int mode = (int)_modeField.GetValue(logEntryInstance);
                      string message = (string)_messageField.GetValue(logEntryInstance);
                      string file = (string)_fileField.GetValue(logEntryInstance);
+
                      int line = (int)_lineField.GetValue(logEntryInstance);
                      // int instanceId = (int)_instanceIdField.GetValue(logEntryInstance);
 
@@ -220,15 +241,15 @@ namespace UnityMCP.Editor.Tools
              }
              catch (Exception e) {
                   Debug.LogError($"[ReadConsole] Error while retrieving log entries: {e}");
-                   // Ensure StopGettingEntries is called even if there's an error during iteration
-                  try { _stopGettingEntriesMethod.Invoke(null, null); } catch { /* Ignore nested exception */ }
+                   // Ensure EndGettingEntries is called even if there's an error during iteration
+                  try { _endGettingEntriesMethod.Invoke(null, null); } catch { /* Ignore nested exception */ }
                   return Response.Error($"Error retrieving log entries: {e.Message}");
              }
              finally
              {
-                  // Ensure we always call StopGettingEntries
-                 try { _stopGettingEntriesMethod.Invoke(null, null); } catch (Exception e) {
-                      Debug.LogError($"[ReadConsole] Failed to call StopGettingEntries: {e}");
+                  // Ensure we always call EndGettingEntries
+                 try { _endGettingEntriesMethod.Invoke(null, null); } catch (Exception e) {
+                      Debug.LogError($"[ReadConsole] Failed to call EndGettingEntries: {e}");
                       // Don't return error here as we might have valid data, but log it.
                  }
              }
@@ -257,20 +278,30 @@ namespace UnityMCP.Editor.Tools
 
          private static LogType GetLogTypeFromMode(int mode)
          {
-             // Check for specific error/exception/assert types first
-             // Combine general and scripting-specific bits for broader matching.
-             if ((mode & (ModeBitError | ModeBitScriptingError | ModeBitException | ModeBitScriptingException)) != 0) {
-                 return LogType.Error;
+             // First, determine the type based on the original logic (most severe first)
+             LogType initialType;
+             if ((mode & (ModeBitError | ModeBitScriptingError | ModeBitException | ModeBitScriptingException)) != 0) { 
+                 initialType = LogType.Error;
              }
-             if ((mode & (ModeBitAssert | ModeBitScriptingAssertion)) != 0) {
-                 return LogType.Assert;
+             else if ((mode & (ModeBitAssert | ModeBitScriptingAssertion)) != 0) { 
+                 initialType = LogType.Assert;
              }
-             if ((mode & (ModeBitWarning | ModeBitScriptingWarning)) != 0) {
-                 return LogType.Warning;
+             else if ((mode & (ModeBitWarning | ModeBitScriptingWarning)) != 0) { 
+                 initialType = LogType.Warning;
              }
-             // If none of the above, assume it's a standard log message.
-             // This covers ModeBitLog and ModeBitScriptingLog.
-             return LogType.Log;
+             else { 
+                 initialType = LogType.Log; 
+             }
+
+             // Apply the observed "one level lower" correction
+             switch (initialType)
+             {
+                 case LogType.Error:   return LogType.Warning; // Error becomes Warning
+                 case LogType.Warning: return LogType.Log;     // Warning becomes Log
+                 case LogType.Assert:  return LogType.Assert;  // Assert remains Assert (no lower level defined)
+                 case LogType.Log:     return LogType.Log;     // Log remains Log
+                 default:              return LogType.Log;     // Default fallback
+             }
          }
 
         /// <summary>

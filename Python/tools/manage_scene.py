@@ -12,8 +12,6 @@ def register_manage_scene_tools(mcp: FastMCP):
         name: Optional[str] = None,
         path: Optional[str] = None,
         build_index: Optional[int] = None,
-        # Add other potential parameters like load_additive, etc. if needed
-        # context: Optional[Dict[str, Any]] = None # Future: Contextual info (e.g., current project settings)
     ) -> Dict[str, Any]:
         """Manages Unity scenes (load, save, create, get hierarchy, etc.).
 

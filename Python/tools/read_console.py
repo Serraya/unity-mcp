@@ -3,21 +3,21 @@ Defines the read_console tool for accessing Unity Editor console messages.
 """
 from typing import Optional, List, Dict, Any
 from mcp.server.fastmcp import FastMCP, Context
+from unity_connection import get_unity_connection 
 
 def register_read_console_tools(mcp: FastMCP):
     """Registers the read_console tool with the MCP server."""
 
     @mcp.tool()
-    async def read_console(
+    def read_console(
         ctx: Context,
-        action: Optional[str] = 'get', # Default action is to get messages
-        types: Optional[List[str]] = ['error', 'warning', 'log'], # Default types to retrieve
-        count: Optional[int] = None, # Max number of messages to return (null for all matching)
-        filter_text: Optional[str] = None, # Text to filter messages by
-        since_timestamp: Optional[str] = None, # ISO 8601 timestamp to get messages since
-        format: Optional[str] = 'detailed', # 'plain', 'detailed', 'json'
-        include_stacktrace: Optional[bool] = True, # Whether to include stack traces in detailed/json formats
-        # context: Optional[Dict[str, Any]] = None # Future context
+        action: Optional[str] = 'get',
+        types: Optional[List[str]] = ['error', 'warning', 'log'],
+        count: Optional[int] = None,
+        filter_text: Optional[str] = None,
+        since_timestamp: Optional[str] = None,
+        format: Optional[str] = 'detailed',
+        include_stacktrace: Optional[bool] = True,
     ) -> Dict[str, Any]:
         """Gets messages from or clears the Unity Editor console.
 
@@ -34,6 +34,9 @@ def register_read_console_tools(mcp: FastMCP):
             Dictionary with results. For 'get', includes 'data' (messages).
         """
         
+        # Get the connection instance
+        bridge = get_unity_connection()
+
         # Normalize action
         action = action.lower() if action else 'get'
         
@@ -55,6 +58,7 @@ def register_read_console_tools(mcp: FastMCP):
         if 'count' not in params_dict:
              params_dict['count'] = None 
 
-        # Forward the command to the Unity editor handler
-        # The C# handler name might need adjustment (e.g., CommandRegistry)
-        return await ctx.bridge.unity_editor.HandleReadConsole(params_dict) 
+        # Forward the command using the bridge's send_command method
+        # The command type is the name of the tool itself in this case
+        # No await needed as send_command is synchronous
+        return bridge.send_command("read_console", params_dict) 
