@@ -127,12 +127,25 @@ namespace UnityMcpBridge.Editor.Helpers
             // Clone the repository
             RunCommand("git", $"clone -b {BranchName} {GitUrl} \"{location}\"");
 
-            // Set up virtual environment and install dependencies
+            // Set up virtual environment
             string venvPath = Path.Combine(location, "venv");
             RunCommand("python", $"-m venv \"{venvPath}\"");
+
+            // Determine the path to the virtual environment's Python interpreter
+            string pythonPath = Path.Combine(
+                venvPath,
+                RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? "Scripts\\python.exe"
+                    : "bin/python"
+            );
+
+            // Install uv into the virtual environment
+            RunCommand(pythonPath, "-m pip install uv");
+
+            // Use uv to install dependencies
             string uvPath = Path.Combine(
                 venvPath,
-                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "Scripts/uv.exe" : "bin/uv"
+                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "Scripts\\uv.exe" : "bin/uv"
             );
             RunCommand(uvPath, "install");
         }
