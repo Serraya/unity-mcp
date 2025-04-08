@@ -9,7 +9,8 @@ namespace UnityMcpBridge.Editor.Helpers
 {
     public static class ServerInstaller
     {
-        private const string PackageName = "UnityMcpServer";
+        private const string RootFolder = "UnityMCP";
+        private const string ServerFolder = "UnityMcpServer";
         private const string BranchName = "feature/install-overhaul"; // Adjust branch as needed
         private const string GitUrl = "https://github.com/justinpbarnett/unity-mcp.git";
         private const string PyprojectUrl =
@@ -70,7 +71,7 @@ namespace UnityMcpBridge.Editor.Helpers
                     "AppData",
                     "Local",
                     "Programs",
-                    PackageName
+                    RootFolder
                 );
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
@@ -78,7 +79,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 return Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     "bin",
-                    PackageName
+                    RootFolder
                 );
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -89,10 +90,10 @@ namespace UnityMcpBridge.Editor.Helpers
                     return Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                         "Applications",
-                        PackageName
+                        RootFolder
                     );
                 }
-                return Path.Combine(path, PackageName);
+                return Path.Combine(path, RootFolder);
             }
             throw new Exception("Unsupported operating system.");
         }
@@ -125,28 +126,27 @@ namespace UnityMcpBridge.Editor.Helpers
         private static void InstallServer(string location)
         {
             // Create the src directory where the server code will reside
-            string serverDir = Path.Combine(location, "src");
-            Directory.CreateDirectory(serverDir);
+            Directory.CreateDirectory(location);
 
             // Initialize git repo in the src directory
-            RunCommand("git", $"init", workingDirectory: serverDir);
+            RunCommand("git", $"init", workingDirectory: location);
 
             // Add remote
-            RunCommand("git", $"remote add origin {GitUrl}", workingDirectory: serverDir);
+            RunCommand("git", $"remote add origin {GitUrl}", workingDirectory: location);
 
             // Configure sparse checkout
-            RunCommand("git", "config core.sparseCheckout true", workingDirectory: serverDir);
+            RunCommand("git", "config core.sparseCheckout true", workingDirectory: location);
 
             // Set sparse checkout path to only include UnityMcpServer folder
-            string sparseCheckoutPath = Path.Combine(serverDir, ".git", "info", "sparse-checkout");
+            string sparseCheckoutPath = Path.Combine(location, ".git", "info", "sparse-checkout");
             File.WriteAllText(sparseCheckoutPath, "UnityMcpServer/");
 
             // Fetch and checkout the branch
-            RunCommand("git", $"fetch --depth=1 origin {BranchName}", workingDirectory: serverDir);
-            RunCommand("git", $"checkout {BranchName}", workingDirectory: serverDir);
+            RunCommand("git", $"fetch --depth=1 origin {BranchName}", workingDirectory: location);
+            RunCommand("git", $"checkout {BranchName}", workingDirectory: location);
 
             // Create version.txt file based on pyproject.toml, stored at the root level
-            string pyprojectPath = Path.Combine(serverDir, "UnityMcpServer", "pyproject.toml");
+            string pyprojectPath = Path.Combine(location, "UnityMcpServer", "pyproject.toml");
             if (File.Exists(pyprojectPath))
             {
                 string pyprojectContent = File.ReadAllText(pyprojectPath);
@@ -206,7 +206,7 @@ namespace UnityMcpBridge.Editor.Helpers
         private static void UpdateServer(string location)
         {
             // Pull latest changes in the src directory
-            string serverDir = Path.Combine(location, "src");
+            string serverDir = Path.Combine(location, ServerFolder, "src");
             RunCommand("git", $"pull origin {BranchName}", workingDirectory: serverDir);
 
             // Update version.txt file based on pyproject.toml in src
