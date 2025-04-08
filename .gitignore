@@ -24,6 +24,9 @@ UnityMcpServer.meta
 *.asset
 UnityMcpBridge.meta
 package.json.meta
+LICENSE.meta
+README.md.meta
+CONTRIBUTING.md.meta
 
 # IDE
 .idea/
