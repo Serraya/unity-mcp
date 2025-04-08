@@ -70,11 +70,32 @@ namespace UnityMcpBridge.Editor
                 return;
             }
 
-            isRunning = true;
-            listener = new TcpListener(IPAddress.Loopback, unityPort);
-            listener.Start();
-            Task.Run(ListenerLoop);
-            EditorApplication.update += ProcessCommands;
+            // Stop any existing listener to free the port
+            Stop();
+
+            try
+            {
+                listener = new TcpListener(IPAddress.Loopback, unityPort);
+                listener.Start();
+                isRunning = true;
+                Debug.Log($"UnityMcpBridge started on port {unityPort}.");
+                // Assuming ListenerLoop and ProcessCommands are defined elsewhere
+                Task.Run(ListenerLoop);
+                EditorApplication.update += ProcessCommands;
+            }
+            catch (SocketException ex)
+            {
+                if (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+                {
+                    Debug.LogError(
+                        $"Port {unityPort} is already in use. Ensure no other instances are running or change the port."
+                    );
+                }
+                else
+                {
+                    Debug.LogError($"Failed to start TCP listener: {ex.Message}");
+                }
+            }
         }
 
         public static void Stop()
@@ -84,10 +105,18 @@ namespace UnityMcpBridge.Editor
                 return;
             }
 
-            isRunning = false;
-            listener.Stop();
-            EditorApplication.update -= ProcessCommands;
-            Debug.Log("UnityMCPBridge stopped.");
+            try
+            {
+                listener?.Stop();
+                listener = null;
+                isRunning = false;
+                EditorApplication.update -= ProcessCommands;
+                Debug.Log("UnityMcpBridge stopped.");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error stopping UnityMcpBridge: {ex.Message}");
+            }
         }
 
         private static async Task ListenerLoop()
