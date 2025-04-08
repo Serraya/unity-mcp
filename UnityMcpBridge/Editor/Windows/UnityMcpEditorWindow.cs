@@ -9,6 +9,7 @@ using Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine;
 using UnityMcpBridge.Editor.Data;
+using UnityMcpBridge.Editor.Helpers;
 using UnityMcpBridge.Editor.Models;
 
 namespace UnityMcpBridge.Editor.Windows
@@ -23,46 +24,7 @@ namespace UnityMcpBridge.Editor.Windows
         private Color pythonServerStatusColor = Color.red;
         private const int unityPort = 6400; // Hardcoded Unity port
         private const int mcpPort = 6500; // Hardcoded MCP port
-        private const float CONNECTION_CHECK_INTERVAL = 2f; // Check every 2 seconds
-        private float lastCheckTime = 0f;
         private McpClients mcpClients = new();
-
-        private List<string> possiblePaths = new()
-        {
-            Path.GetFullPath(
-                Path.Combine(Application.dataPath, "unity-mcp", "Python", "server.py")
-            ),
-            Path.GetFullPath(
-                Path.Combine(
-                    Application.dataPath,
-                    "Packages",
-                    "com.justinpbarnett.unity-mcp",
-                    "Python",
-                    "server.py"
-                )
-            ),
-            Path.GetFullPath(
-                Path.Combine(
-                    Application.dataPath,
-                    "..",
-                    "Library",
-                    "PackageCache",
-                    "com.justinpbarnett.unity-mcp@*",
-                    "Python",
-                    "server.py"
-                )
-            ),
-            Path.GetFullPath(
-                Path.Combine(
-                    Application.dataPath,
-                    "..",
-                    "Packages",
-                    "com.justinpbarnett.unity-mcp",
-                    "Python",
-                    "server.py"
-                )
-            ),
-        };
 
         [MenuItem("Window/Unity MCP")]
         public static void ShowWindow()
@@ -74,108 +36,9 @@ namespace UnityMcpBridge.Editor.Windows
         {
             // Check initial states
             isUnityBridgeRunning = UnityMcpBridge.IsRunning;
-            CheckPythonServerConnection();
             foreach (McpClient mcpClient in mcpClients.clients)
             {
                 CheckMcpConfiguration(mcpClient);
-            }
-        }
-
-        private void Update()
-        {
-            // Check Python server connection periodically
-            if (Time.realtimeSinceStartup - lastCheckTime >= CONNECTION_CHECK_INTERVAL)
-            {
-                CheckPythonServerConnection();
-                lastCheckTime = Time.realtimeSinceStartup;
-            }
-        }
-
-        private async void CheckPythonServerConnection()
-        {
-            try
-            {
-                using (var client = new TcpClient())
-                {
-                    // Try to connect with a short timeout
-                    var connectTask = client.ConnectAsync("localhost", unityPort);
-                    if (await Task.WhenAny(connectTask, Task.Delay(1000)) == connectTask)
-                    {
-                        // Try to send a ping message to verify connection is alive
-                        try
-                        {
-                            NetworkStream stream = client.GetStream();
-                            byte[] pingMessage = Encoding.UTF8.GetBytes("ping");
-                            await stream.WriteAsync(pingMessage, 0, pingMessage.Length);
-
-                            // Wait for response with timeout
-                            byte[] buffer = new byte[1024];
-                            var readTask = stream.ReadAsync(buffer, 0, buffer.Length);
-                            if (await Task.WhenAny(readTask, Task.Delay(1000)) == readTask)
-                            {
-                                int bytesRead = await readTask;
-                                if (bytesRead <= 0)
-                                {
-                                    // Received empty response
-                                    pythonServerStatus = "Invalid Response";
-                                    pythonServerStatusColor = GetStatusColor(McpStatus.NoResponse);
-                                    return;
-                                }
-
-                                // Validate the response is actually from our server
-                                string response = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                                if (response.Contains("pong"))
-                                {
-                                    // Connection successful and responsive with valid response
-                                    pythonServerStatus = "Connected";
-                                    pythonServerStatusColor = GetStatusColor(McpStatus.Connected);
-                                }
-                                else
-                                {
-                                    // Received response but not the expected one
-                                    pythonServerStatus = "Invalid Server";
-                                    pythonServerStatusColor = GetStatusColor(
-                                        McpStatus.CommunicationError
-                                    );
-                                }
-                            }
-                            else
-                            {
-                                // No response received
-                                pythonServerStatus = "No Response";
-                                pythonServerStatusColor = GetStatusColor(McpStatus.NoResponse);
-                                UnityEngine.Debug.LogWarning(
-                                    $"Python server not responding on port {unityPort}"
-                                );
-                            }
-                        }
-                        catch (Exception e)
-                        {
-                            // Connection established but communication failed
-                            pythonServerStatus = "Communication Error";
-                            pythonServerStatusColor = GetStatusColor(McpStatus.CommunicationError);
-                            UnityEngine.Debug.LogWarning(
-                                $"Error communicating with Python server: {e.Message}"
-                            );
-                        }
-                    }
-                    else
-                    {
-                        // Connection failed
-                        pythonServerStatus = "Not Connected";
-                        pythonServerStatusColor = GetStatusColor(McpStatus.NotConfigured);
-                        UnityEngine.Debug.LogWarning(
-                            $"Python server is not running or not accessible on port {unityPort}"
-                        );
-                    }
-                    client.Close();
-                }
-            }
-            catch (Exception e)
-            {
-                pythonServerStatus = "Connection Error";
-                pythonServerStatusColor = GetStatusColor(McpStatus.Error);
-                UnityEngine.Debug.LogError($"Error checking Python server connection: {e.Message}");
             }
         }
 
@@ -383,48 +246,6 @@ namespace UnityMcpBridge.Editor.Windows
             isUnityBridgeRunning = !isUnityBridgeRunning;
         }
 
-        private string GetPythonDirectory(List<string> possiblePaths)
-        {
-            foreach (var path in possiblePaths)
-            {
-                // Skip wildcard paths for now
-                if (path.Contains("*"))
-                    continue;
-
-                if (File.Exists(path))
-                {
-                    return Path.GetDirectoryName(path);
-                }
-            }
-
-            foreach (var path in possiblePaths)
-            {
-                if (!path.Contains("*"))
-                    continue;
-
-                string directoryPath = Path.GetDirectoryName(path);
-                string searchPattern = Path.GetFileName(Path.GetDirectoryName(path));
-                string parentDir = Path.GetDirectoryName(directoryPath);
-
-                if (Directory.Exists(parentDir))
-                {
-                    var matchingDirs = Directory.GetDirectories(parentDir, searchPattern);
-
-                    foreach (var dir in matchingDirs)
-                    {
-                        string candidatePath = Path.Combine(dir, "Python", "server.py");
-
-                        if (File.Exists(candidatePath))
-                        {
-                            return Path.GetDirectoryName(candidatePath);
-                        }
-                    }
-                }
-            }
-
-            return null;
-        }
-
         private string WriteToConfig(string pythonDir, string configPath)
         {
             // Create configuration object for unityMCP
@@ -597,7 +418,7 @@ namespace UnityMcpBridge.Editor.Windows
                 Directory.CreateDirectory(Path.GetDirectoryName(configPath));
 
                 // Find the server.py file location
-                string pythonDir = GetPythonDirectory(possiblePaths);
+                string pythonDir = ServerInstaller.GetServerPath();
 
                 if (pythonDir == null || !File.Exists(Path.Combine(pythonDir, "server.py")))
                 {
@@ -701,7 +522,7 @@ namespace UnityMcpBridge.Editor.Windows
 
                 if (config?.mcpServers?.unityMCP != null)
                 {
-                    string pythonDir = GetPythonDirectory(possiblePaths);
+                    string pythonDir = ServerInstaller.GetServerPath();
                     if (
                         pythonDir != null
                         && Array.Exists(
