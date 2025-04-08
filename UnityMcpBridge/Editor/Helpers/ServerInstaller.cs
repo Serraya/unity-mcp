@@ -39,7 +39,9 @@ namespace UnityMcpBridge.Editor.Helpers
                         "src",
                         "pyproject.toml"
                     );
-                    string installedVersion = ParseVersionFromPyproject(pyprojectPath);
+                    string installedVersion = ParseVersionFromPyproject(
+                        File.ReadAllText(pyprojectPath)
+                    );
                     string latestVersion = GetLatestVersion();
 
                     if (IsNewerVersion(latestVersion, installedVersion))
