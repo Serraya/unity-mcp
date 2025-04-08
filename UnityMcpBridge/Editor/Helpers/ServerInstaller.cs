@@ -46,6 +46,7 @@ namespace UnityMcpBridge.Editor.Helpers
 
                     if (IsNewerVersion(latestVersion, installedVersion))
                     {
+                        Debug.Log($"is newer version");
                         UpdateServer(saveLocation);
                     }
                     else { }
@@ -163,9 +164,8 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static void UpdateServer(string location)
         {
-            // Pull latest changes in the src directory
-            string serverDir = Path.Combine(location, ServerFolder, "src");
-            RunCommand("git", $"pull origin {BranchName}", workingDirectory: serverDir);
+            Debug.Log("updating server");
+            RunCommand("git", $"pull origin {BranchName}", workingDirectory: location);
         }
 
         /// <summary>
