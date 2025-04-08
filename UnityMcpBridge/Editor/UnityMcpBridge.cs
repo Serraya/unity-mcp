@@ -56,6 +56,8 @@ namespace UnityMcpBridge.Editor
 
         public static void Start()
         {
+            Stop();
+
             try
             {
                 ServerInstaller.EnsureServerInstalled();
@@ -69,9 +71,6 @@ namespace UnityMcpBridge.Editor
             {
                 return;
             }
-
-            // Stop any existing listener to free the port
-            Stop();
 
             try
             {

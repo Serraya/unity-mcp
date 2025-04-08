@@ -1,9 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
+using System.Net;
 using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace UnityMcpBridge.Editor.Helpers
@@ -11,240 +10,222 @@ namespace UnityMcpBridge.Editor.Helpers
     public static class ServerInstaller
     {
         private const string PackageName = "unity-mcp-server";
-        private const string BranchName = "feature/install-overhaul";
-        private const string GitUrl =
-            "git+https://github.com/justinpbarnett/unity-mcp.git@"
-            + BranchName
-            + "#subdirectory=UnityMcpServer";
+        private const string BranchName = "feature/install-overhaul"; // Adjust branch as needed
+        private const string GitUrl = "https://github.com/justinpbarnett/unity-mcp.git";
         private const string PyprojectUrl =
             "https://raw.githubusercontent.com/justinpbarnett/unity-mcp/"
             + BranchName
             + "/UnityMcpServer/pyproject.toml";
 
-        // Typical uv installation paths per OS
-        private static readonly string[] WindowsUvPaths = new[]
-        {
-            @"C:\Users\$USER$\.local\bin\uv.exe",
-            @"C:\Program Files\uv\uv.exe",
-            @"C:\Users\$USER$\AppData\Local\Programs\uv\uv.exe",
-        };
-
-        private static readonly string[] LinuxUvPaths = new[]
-        {
-            "/home/$USER$/.local/bin/uv",
-            "/usr/local/bin/uv",
-            "/usr/bin/uv",
-        };
-
-        private static readonly string[] MacUvPaths = new[]
-        {
-            "/Users/$USER$/.local/bin/uv",
-            "/usr/local/bin/uv",
-            "/opt/homebrew/bin/uv",
-        };
-
+        /// <summary>
+        /// Ensures the unity-mcp-server is installed and up to date.
+        /// </summary>
         public static void EnsureServerInstalled()
         {
             try
             {
-                string uvPath = FindUvExecutable();
-                if (string.IsNullOrEmpty(uvPath))
-                {
-                    throw new Exception(
-                        "Could not find 'uv' executable. Please ensure it is installed."
-                    );
-                }
+                string saveLocation = GetSaveLocation();
+                Debug.Log($"Server save location: {saveLocation}");
 
-                // Check if the package is installed
-                System.Diagnostics.Process process = new();
-                process.StartInfo.FileName = uvPath;
-                process.StartInfo.Arguments = "pip show " + PackageName;
-                process.StartInfo.UseShellExecute = false;
-                process.StartInfo.RedirectStandardOutput = true;
-                process.StartInfo.RedirectStandardError = true;
-                process.Start();
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-
-                if (process.ExitCode == 0)
+                if (!IsServerInstalled(saveLocation))
                 {
-                    // Package is installed, check version
-                    string installedVersion = GetVersionFromPipShow(output);
-                    string latestVersion = GetLatestVersionFromGitHub();
-                    if (new Version(installedVersion) < new Version(latestVersion))
-                    {
-                        Debug.Log(
-                            $"Updating {PackageName} from {installedVersion} to {latestVersion}..."
-                        );
-                        RunCommand(uvPath, "pip install --upgrade " + GitUrl);
-                        Debug.Log($"{PackageName} updated successfully.");
-                    }
-                    else
-                    {
-                        Debug.Log($"{PackageName} is up to date (version {installedVersion}).");
-                    }
-                }
-                else if (process.ExitCode == 1 && output.Contains("Package(s) not found"))
-                {
-                    // Package not found, install it from GitHub
-                    Debug.Log("Installing " + PackageName + "...");
-                    RunCommand(uvPath, "pip install " + GitUrl);
-                    Debug.Log(PackageName + " installed successfully.");
+                    Debug.Log("Server not found. Installing...");
+                    InstallServer(saveLocation);
                 }
                 else
                 {
-                    throw new Exception(
-                        $"Command 'uv pip show {PackageName}' failed with exit code {process.ExitCode}. Output: {output} Error: {error}"
-                    );
+                    Debug.Log("Server is installed. Checking version...");
+                    string installedVersion = GetInstalledVersion(saveLocation);
+                    string latestVersion = GetLatestVersion();
+
+                    if (IsNewerVersion(latestVersion, installedVersion))
+                    {
+                        Debug.Log(
+                            $"Newer version available ({latestVersion} > {installedVersion}). Updating..."
+                        );
+                        UpdateServer(saveLocation);
+                    }
+                    else
+                    {
+                        Debug.Log("Server is up to date.");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Failed to ensure {PackageName} is installed: {ex.Message}");
-                Debug.LogWarning(
-                    "Please install "
-                        + PackageName
-                        + " manually using 'uv pip install "
-                        + GitUrl
-                        + "'."
-                );
+                Debug.LogError($"Failed to ensure server installation: {ex.Message}");
             }
         }
 
-        private static void RunCommand(string uvPath, string arguments)
+        /// <summary>
+        /// Gets the platform-specific save location for the server.
+        /// </summary>
+        private static string GetSaveLocation()
         {
-            System.Diagnostics.Process installProcess = new();
-            installProcess.StartInfo.FileName = uvPath;
-            installProcess.StartInfo.Arguments = arguments;
-            installProcess.StartInfo.UseShellExecute = false;
-            installProcess.StartInfo.RedirectStandardOutput = true;
-            installProcess.StartInfo.RedirectStandardError = true;
-            installProcess.Start();
-            string installOutput = installProcess.StandardOutput.ReadToEnd();
-            string installError = installProcess.StandardError.ReadToEnd();
-            installProcess.WaitForExit();
-
-            if (installProcess.ExitCode != 0)
-            {
-                throw new Exception(
-                    $"Command '{uvPath} {arguments}' failed. Output: {installOutput} Error: {installError}"
-                );
-            }
-        }
-
-        private static string FindUvExecutable()
-        {
-            string username = Environment.UserName;
-            string[] uvPaths;
-
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                uvPaths = WindowsUvPaths.Select(p => p.Replace("$USER$", username)).ToArray();
+                // Use a user-specific program directory under %USERPROFILE%\AppData\Local\Programs
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "AppData",
+                    "Local",
+                    "Programs",
+                    PackageName
+                );
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                uvPaths = LinuxUvPaths.Select(p => p.Replace("$USER$", username)).ToArray();
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "bin",
+                    PackageName
+                );
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                uvPaths = MacUvPaths.Select(p => p.Replace("$USER$", username)).ToArray();
+                string path = "/usr/local/bin";
+                if (!Directory.Exists(path) || !IsDirectoryWritable(path))
+                {
+                    return Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        "Applications",
+                        PackageName
+                    );
+                }
+                return Path.Combine(path, PackageName);
             }
-            else
-            {
-                throw new PlatformNotSupportedException("Unsupported operating system.");
-            }
+            throw new Exception("Unsupported operating system.");
+        }
 
-            // First, try 'uv' directly from PATH
+        private static bool IsDirectoryWritable(string path)
+        {
             try
             {
-                System.Diagnostics.Process process = new();
-                process.StartInfo.FileName = "uv";
-                process.StartInfo.Arguments = "--version";
-                process.StartInfo.UseShellExecute = false;
-                process.StartInfo.RedirectStandardOutput = true;
-                process.StartInfo.RedirectStandardError = true;
-                process.Start();
-                process.WaitForExit(2000); // Wait up to 2 seconds
-                if (process.ExitCode == 0)
-                {
-                    return "uv"; // Found in PATH
-                }
+                File.Create(Path.Combine(path, "test.txt")).Dispose();
+                File.Delete(Path.Combine(path, "test.txt"));
+                return true;
             }
             catch
             {
-                // Not in PATH, proceed to check specific locations
+                return false;
             }
+        }
 
-            // Check specific paths
-            foreach (string path in uvPaths)
+        /// <summary>
+        /// Checks if the server is installed at the specified location.
+        /// </summary>
+        private static bool IsServerInstalled(string location)
+        {
+            return Directory.Exists(location) && File.Exists(Path.Combine(location, "version.txt"));
+        }
+
+        /// <summary>
+        /// Installs the server by cloning the repository and setting up dependencies.
+        /// </summary>
+        private static void InstallServer(string location)
+        {
+            // Clone the repository
+            RunCommand("git", $"clone -b {BranchName} {GitUrl} \"{location}\"");
+
+            // Set up virtual environment and install dependencies
+            string venvPath = Path.Combine(location, "venv");
+            RunCommand("python", $"-m venv \"{venvPath}\"");
+            string uvPath = Path.Combine(
+                venvPath,
+                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "Scripts/uv.exe" : "bin/uv"
+            );
+            RunCommand(uvPath, "install");
+        }
+
+        /// <summary>
+        /// Retrieves the installed server version from version.txt.
+        /// </summary>
+        private static string GetInstalledVersion(string location)
+        {
+            string versionFile = Path.Combine(location, "version.txt");
+            return File.ReadAllText(versionFile).Trim();
+        }
+
+        /// <summary>
+        /// Fetches the latest version from the GitHub pyproject.toml file.
+        /// </summary>
+        private static string GetLatestVersion()
+        {
+            using var webClient = new WebClient();
+            string pyprojectContent = webClient.DownloadString(PyprojectUrl);
+            return ParseVersionFromPyproject(pyprojectContent);
+        }
+
+        /// <summary>
+        /// Updates the server by pulling the latest changes.
+        /// </summary>
+        private static void UpdateServer(string location)
+        {
+            RunCommand("git", $"-C \"{location}\" pull");
+            // Optionally reinstall dependencies if requirements changed
+        }
+
+        /// <summary>
+        /// Parses the version number from pyproject.toml content.
+        /// </summary>
+        private static string ParseVersionFromPyproject(string content)
+        {
+            foreach (var line in content.Split('\n'))
             {
-                if (File.Exists(path))
+                if (line.Trim().StartsWith("version ="))
                 {
-                    return path;
+                    var parts = line.Split('=');
+                    if (parts.Length == 2)
+                        return parts[1].Trim().Trim('"');
                 }
             }
-
-            return null; // Not found
+            throw new Exception("Version not found in pyproject.toml");
         }
 
-        private static string GetVersionFromPipShow(string output)
+        /// <summary>
+        /// Compares two version strings to determine if the latest is newer.
+        /// </summary>
+        private static bool IsNewerVersion(string latest, string installed)
         {
-            string[] lines = output.Split('\n');
-            foreach (string line in lines)
+            var latestParts = latest.Split('.').Select(int.Parse).ToArray();
+            var installedParts = installed.Split('.').Select(int.Parse).ToArray();
+            for (int i = 0; i < Math.Min(latestParts.Length, installedParts.Length); i++)
             {
-                if (line.StartsWith("Version:"))
+                if (latestParts[i] > installedParts[i])
+                    return true;
+                if (latestParts[i] < installedParts[i])
+                    return false;
+            }
+            return latestParts.Length > installedParts.Length;
+        }
+
+        /// <summary>
+        /// Runs a command-line process and handles output/errors.
+        /// </summary>
+        private static void RunCommand(string command, string arguments)
+        {
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
                 {
-                    return line["Version:".Length..].Trim();
-                }
-            }
-            throw new Exception("Version not found in pip show output");
-        }
-
-        private static string GetLatestVersionFromGitHub()
-        {
-            using HttpClient client = new();
-            client.DefaultRequestHeaders.Add("User-Agent", "UnityMcpBridge");
-            string content = client.GetStringAsync(PyprojectUrl).Result;
-            string pattern = @"version\s*=\s*""(.*?)""";
-            Match match = Regex.Match(content, pattern);
-            return match.Success
-                ? match.Groups[1].Value
-                : throw new Exception("Could not find version in pyproject.toml");
-        }
-
-        private static string GetUvNotFoundMessage()
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    FileName = command,
+                    Arguments = arguments,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                },
+            };
+            process.Start();
+            string output = process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
             {
-                return "uv not found in PATH or typical Windows locations.";
+                throw new Exception(
+                    $"Command failed: {command} {arguments}\nOutput: {output}\nError: {error}"
+                );
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                return "uv not found in PATH or typical Linux locations.";
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                return "uv not found in PATH or typical macOS locations.";
-            }
-            return "uv not found on this platform.";
-        }
-
-        private static string GetInstallInstructions()
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                return "Install uv with: powershell -c \"irm https://astral.sh/uv/install.ps1 | iex\" and ensure it's in your PATH.";
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                return "Install uv with: curl -LsSf https://astral.sh/uv/install.sh | sh and ensure it's in your PATH.";
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                return "Install uv with: brew install uv or curl -LsSf https://astral.sh/uv/install.sh | sh and ensure it's in your PATH.";
-            }
-            return "Install uv following platform-specific instructions and add it to your PATH.";
         }
     }
 }
