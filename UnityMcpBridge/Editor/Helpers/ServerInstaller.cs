@@ -14,9 +14,9 @@ namespace UnityMcpBridge.Editor.Helpers
         private const string BranchName = "feature/install-overhaul"; // Adjust branch as needed
         private const string GitUrl = "https://github.com/justinpbarnett/unity-mcp.git";
         private const string PyprojectUrl =
-            "https://raw.githubusercontent.com/justinpbarnett/unity-mcp/"
+            "https://raw.githubusercontent.com/justinpbarnett/unity-mcp/refs/heads/"
             + BranchName
-            + "/UnityMcpServer/pyproject.toml";
+            + "/UnityMcpServer/src/pyproject.toml";
 
         /// <summary>
         /// Ensures the unity-mcp-server is installed and up to date.
@@ -167,7 +167,10 @@ namespace UnityMcpBridge.Editor.Helpers
         private static string GetInstalledVersion(string location)
         {
             string versionFile = Path.Combine(location, ServerFolder, "version.txt");
-            return File.ReadAllText(versionFile).Trim();
+            Debug.Log($"Looking for version at: {versionFile}");
+            string versionFileText = File.ReadAllText(versionFile).Trim();
+            Debug.Log($"versionFile text: {versionFileText}");
+            return versionFileText;
         }
 
         /// <summary>
@@ -175,6 +178,7 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static string GetLatestVersion()
         {
+            Debug.Log("Getting latest version.");
             using WebClient webClient = new();
             string pyprojectContent = webClient.DownloadString(PyprojectUrl);
             return ParseVersionFromPyproject(pyprojectContent);
