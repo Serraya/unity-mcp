@@ -33,7 +33,12 @@ namespace UnityMcpBridge.Editor.Helpers
                 }
                 else
                 {
-                    string pyprojectPath = Path.Combine(saveLocation, ServerFolder, "src");
+                    string pyprojectPath = Path.Combine(
+                        saveLocation,
+                        ServerFolder,
+                        "src",
+                        "pyproject.toml"
+                    );
                     string installedVersion = ParseVersionFromPyproject(pyprojectPath);
                     string latestVersion = GetLatestVersion();
 
