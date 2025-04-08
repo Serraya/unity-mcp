@@ -85,15 +85,13 @@ namespace UnityMcpBridge.Editor.Helpers
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
                 string path = "/usr/local/bin";
-                if (!Directory.Exists(path) || !IsDirectoryWritable(path))
-                {
-                    return Path.Combine(
+                return !Directory.Exists(path) || !IsDirectoryWritable(path)
+                    ? Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                         "Applications",
                         RootFolder
-                    );
-                }
-                return Path.Combine(path, RootFolder);
+                    )
+                    : Path.Combine(path, RootFolder);
             }
             throw new Exception("Unsupported operating system.");
         }
@@ -162,28 +160,6 @@ namespace UnityMcpBridge.Editor.Helpers
             {
                 throw new Exception("Failed to find pyproject.toml after checkout");
             }
-
-            // Set up virtual environment at the root level
-            string venvPath = Path.Combine(location, "venv");
-            RunCommand("python", $"-m venv \"{venvPath}\"");
-
-            // Determine the path to the virtual environment's Python interpreter
-            string pythonPath = Path.Combine(
-                venvPath,
-                RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                    ? "Scripts\\python.exe"
-                    : "bin/python"
-            );
-
-            // Install uv into the virtual environment
-            RunCommand(pythonPath, "-m pip install uv");
-
-            // Use uv to install dependencies from the UnityMcpServer subdirectory in src
-            string uvPath = Path.Combine(
-                venvPath,
-                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "Scripts\\uv.exe" : "bin/uv"
-            );
-            RunCommand(uvPath, "pip install ./src/UnityMcpServer", workingDirectory: location);
         }
 
         /// <summary>
@@ -200,7 +176,7 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static string GetLatestVersion()
         {
-            using var webClient = new WebClient();
+            using WebClient webClient = new();
             string pyprojectContent = webClient.DownloadString(PyprojectUrl);
             return ParseVersionFromPyproject(pyprojectContent);
         }
@@ -237,13 +213,15 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static string ParseVersionFromPyproject(string content)
         {
-            foreach (var line in content.Split('\n'))
+            foreach (string line in content.Split('\n'))
             {
                 if (line.Trim().StartsWith("version ="))
                 {
-                    var parts = line.Split('=');
+                    string[] parts = line.Split('=');
                     if (parts.Length == 2)
+                    {
                         return parts[1].Trim().Trim('"');
+                    }
                 }
             }
             throw new Exception("Version not found in pyproject.toml");
@@ -254,14 +232,19 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static bool IsNewerVersion(string latest, string installed)
         {
-            var latestParts = latest.Split('.').Select(int.Parse).ToArray();
-            var installedParts = installed.Split('.').Select(int.Parse).ToArray();
+            int[] latestParts = latest.Split('.').Select(int.Parse).ToArray();
+            int[] installedParts = installed.Split('.').Select(int.Parse).ToArray();
             for (int i = 0; i < Math.Min(latestParts.Length, installedParts.Length); i++)
             {
                 if (latestParts[i] > installedParts[i])
+                {
                     return true;
+                }
+
                 if (latestParts[i] < installedParts[i])
+                {
                     return false;
+                }
             }
             return latestParts.Length > installedParts.Length;
         }
@@ -275,7 +258,7 @@ namespace UnityMcpBridge.Editor.Helpers
             string workingDirectory = null
         )
         {
-            var process = new System.Diagnostics.Process
+            System.Diagnostics.Process process = new()
             {
                 StartInfo = new System.Diagnostics.ProcessStartInfo
                 {
