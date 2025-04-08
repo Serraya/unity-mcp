@@ -4,8 +4,7 @@
 CLAUDE.md
 
 # Code-copy related files
-.codeignore
-*codeclip*
+.clipignore
 
 # Python-generated files
 __pycache__/
