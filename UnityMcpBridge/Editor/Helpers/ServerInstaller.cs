@@ -24,8 +24,8 @@ namespace UnityMcpBridge.Editor.Helpers
         // Typical uv installation paths per OS
         private static readonly string[] WindowsUvPaths = new[]
         {
-            @"C:\Users\$USER$\.local\bin\uv.exe", // Default uv install path
-            @"C:\Program Files\uv\uv.exe", // Possible system-wide install
+            @"C:\Users\$USER$\.local\bin\uv.exe",
+            @"C:\Program Files\uv\uv.exe",
             @"C:\Users\$USER$\AppData\Local\Programs\uv\uv.exe",
         };
 
@@ -40,7 +40,7 @@ namespace UnityMcpBridge.Editor.Helpers
         {
             "/Users/$USER$/.local/bin/uv",
             "/usr/local/bin/uv",
-            "/opt/homebrew/bin/uv", // Homebrew on Apple Silicon
+            "/opt/homebrew/bin/uv",
         };
 
         public static void EnsureServerInstalled()
@@ -50,19 +50,26 @@ namespace UnityMcpBridge.Editor.Helpers
                 string uvPath = FindUvExecutable();
                 if (string.IsNullOrEmpty(uvPath))
                 {
-                    throw new Exception(GetUvNotFoundMessage());
+                    throw new Exception(
+                        "Could not find 'uv' executable. Please ensure it is installed."
+                    );
                 }
 
-                // Check if unity-mcp-server is installed
-                string output = RunCommand(uvPath, $"pip show {PackageName}");
-                if (output.Contains("WARNING: Package(s) not found"))
+                // Check if the package is installed
+                System.Diagnostics.Process process = new();
+                process.StartInfo.FileName = uvPath;
+                process.StartInfo.Arguments = "pip show " + PackageName;
+                process.StartInfo.UseShellExecute = false;
+                process.StartInfo.RedirectStandardOutput = true;
+                process.StartInfo.RedirectStandardError = true;
+                process.Start();
+                string output = process.StandardOutput.ReadToEnd();
+                string error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+                if (process.ExitCode == 0)
                 {
-                    Debug.Log($"Installing {PackageName}...");
-                    RunCommand(uvPath, $"pip install {GitUrl}");
-                    Debug.Log($"{PackageName} installed successfully.");
-                }
-                else
-                {
+                    // Package is installed, check version
                     string installedVersion = GetVersionFromPipShow(output);
                     string latestVersion = GetLatestVersionFromGitHub();
                     if (new Version(installedVersion) < new Version(latestVersion))
@@ -70,7 +77,7 @@ namespace UnityMcpBridge.Editor.Helpers
                         Debug.Log(
                             $"Updating {PackageName} from {installedVersion} to {latestVersion}..."
                         );
-                        RunCommand(uvPath, $"pip install --upgrade {GitUrl}");
+                        RunCommand(uvPath, "pip install --upgrade " + GitUrl);
                         Debug.Log($"{PackageName} updated successfully.");
                     }
                     else
@@ -78,11 +85,51 @@ namespace UnityMcpBridge.Editor.Helpers
                         Debug.Log($"{PackageName} is up to date (version {installedVersion}).");
                     }
                 }
+                else if (process.ExitCode == 1 && output.Contains("Package(s) not found"))
+                {
+                    // Package not found, install it from GitHub
+                    Debug.Log("Installing " + PackageName + "...");
+                    RunCommand(uvPath, "pip install " + GitUrl);
+                    Debug.Log(PackageName + " installed successfully.");
+                }
+                else
+                {
+                    throw new Exception(
+                        $"Command 'uv pip show {PackageName}' failed with exit code {process.ExitCode}. Output: {output} Error: {error}"
+                    );
+                }
             }
             catch (Exception ex)
             {
                 Debug.LogError($"Failed to ensure {PackageName} is installed: {ex.Message}");
-                Debug.LogWarning(GetInstallInstructions());
+                Debug.LogWarning(
+                    "Please install "
+                        + PackageName
+                        + " manually using 'uv pip install "
+                        + GitUrl
+                        + "'."
+                );
+            }
+        }
+
+        private static void RunCommand(string uvPath, string arguments)
+        {
+            System.Diagnostics.Process installProcess = new();
+            installProcess.StartInfo.FileName = uvPath;
+            installProcess.StartInfo.Arguments = arguments;
+            installProcess.StartInfo.UseShellExecute = false;
+            installProcess.StartInfo.RedirectStandardOutput = true;
+            installProcess.StartInfo.RedirectStandardError = true;
+            installProcess.Start();
+            string installOutput = installProcess.StandardOutput.ReadToEnd();
+            string installError = installProcess.StandardError.ReadToEnd();
+            installProcess.WaitForExit();
+
+            if (installProcess.ExitCode != 0)
+            {
+                throw new Exception(
+                    $"Command '{uvPath} {arguments}' failed. Output: {installOutput} Error: {installError}"
+                );
             }
         }
 
@@ -141,46 +188,14 @@ namespace UnityMcpBridge.Editor.Helpers
             return null; // Not found
         }
 
-        private static string RunCommand(string fileName, string arguments)
-        {
-            System.Diagnostics.Process process = new();
-            process.StartInfo.FileName = fileName;
-
-            // On non-Windows, might need to adjust for shell execution
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                process.StartInfo.FileName = "/bin/sh";
-                process.StartInfo.Arguments = $"-c \"{fileName} {arguments}\"";
-            }
-            else
-            {
-                process.StartInfo.Arguments = arguments;
-            }
-
-            process.StartInfo.UseShellExecute = false;
-            process.StartInfo.RedirectStandardOutput = true;
-            process.StartInfo.RedirectStandardError = true;
-            process.Start();
-            string output = process.StandardOutput.ReadToEnd();
-            string error = process.StandardError.ReadToEnd();
-            process.WaitForExit();
-            if (process.ExitCode != 0)
-            {
-                throw new Exception(
-                    $"Command '{fileName} {arguments}' failed with exit code {process.ExitCode}: {error}"
-                );
-            }
-            return output;
-        }
-
         private static string GetVersionFromPipShow(string output)
         {
-            var lines = output.Split('\n');
-            foreach (var line in lines)
+            string[] lines = output.Split('\n');
+            foreach (string line in lines)
             {
                 if (line.StartsWith("Version:"))
                 {
-                    return line.Substring("Version:".Length).Trim();
+                    return line["Version:".Length..].Trim();
                 }
             }
             throw new Exception("Version not found in pip show output");
@@ -188,18 +203,14 @@ namespace UnityMcpBridge.Editor.Helpers
 
         private static string GetLatestVersionFromGitHub()
         {
-            using (HttpClient client = new HttpClient())
-            {
-                client.DefaultRequestHeaders.Add("User-Agent", "UnityMcpBridge");
-                string content = client.GetStringAsync(PyprojectUrl).Result;
-                string pattern = @"version\s*=\s*""(.*?)""";
-                Match match = Regex.Match(content, pattern);
-                if (match.Success)
-                {
-                    return match.Groups[1].Value;
-                }
-                throw new Exception("Could not find version in pyproject.toml");
-            }
+            using HttpClient client = new();
+            client.DefaultRequestHeaders.Add("User-Agent", "UnityMcpBridge");
+            string content = client.GetStringAsync(PyprojectUrl).Result;
+            string pattern = @"version\s*=\s*""(.*?)""";
+            Match match = Regex.Match(content, pattern);
+            return match.Success
+                ? match.Groups[1].Value
+                : throw new Exception("Could not find version in pyproject.toml");
         }
 
         private static string GetUvNotFoundMessage()
