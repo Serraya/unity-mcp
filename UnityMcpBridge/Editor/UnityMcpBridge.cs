@@ -9,6 +9,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
+using UnityMcpBridge.Editor.Helpers;
 using UnityMcpBridge.Editor.Models;
 using UnityMcpBridge.Editor.Tools;
 
@@ -31,14 +32,18 @@ namespace UnityMcpBridge.Editor
         public static bool FolderExists(string path)
         {
             if (string.IsNullOrEmpty(path))
+            {
                 return false;
+            }
 
             if (path.Equals("Assets", StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
 
             string fullPath = Path.Combine(
                 Application.dataPath,
-                path.StartsWith("Assets/") ? path.Substring(7) : path
+                path.StartsWith("Assets/") ? path[7..] : path
             );
             return Directory.Exists(fullPath);
         }
@@ -51,12 +56,23 @@ namespace UnityMcpBridge.Editor
 
         public static void Start()
         {
+            try
+            {
+                ServerInstaller.EnsureServerInstalled();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Failed to ensure UnityMcpServer is installed: {ex.Message}");
+            }
+
             if (isRunning)
+            {
                 return;
+            }
+
             isRunning = true;
             listener = new TcpListener(IPAddress.Loopback, unityPort);
             listener.Start();
-            Debug.Log($"UnityMCPBridge started on port {unityPort}.");
             Task.Run(ListenerLoop);
             EditorApplication.update += ProcessCommands;
         }
@@ -64,7 +80,10 @@ namespace UnityMcpBridge.Editor
         public static void Stop()
         {
             if (!isRunning)
+            {
                 return;
+            }
+
             isRunning = false;
             listener.Stop();
             EditorApplication.update -= ProcessCommands;
@@ -77,7 +96,7 @@ namespace UnityMcpBridge.Editor
             {
                 try
                 {
-                    var client = await listener.AcceptTcpClientAsync();
+                    TcpClient client = await listener.AcceptTcpClientAsync();
                     // Enable basic socket keepalive
                     client.Client.SetSocketOption(
                         SocketOptionLevel.Socket,
@@ -94,7 +113,9 @@ namespace UnityMcpBridge.Editor
                 catch (Exception ex)
                 {
                     if (isRunning)
+                    {
                         Debug.LogError($"Listener error: {ex.Message}");
+                    }
                 }
             }
         }
@@ -102,16 +123,18 @@ namespace UnityMcpBridge.Editor
         private static async Task HandleClientAsync(TcpClient client)
         {
             using (client)
-            using (var stream = client.GetStream())
+            using (NetworkStream stream = client.GetStream())
             {
-                var buffer = new byte[8192];
+                byte[] buffer = new byte[8192];
                 while (isRunning)
                 {
                     try
                     {
                         int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
                         if (bytesRead == 0)
+                        {
                             break; // Client disconnected
+                        }
 
                         string commandText = System.Text.Encoding.UTF8.GetString(
                             buffer,
@@ -119,13 +142,14 @@ namespace UnityMcpBridge.Editor
                             bytesRead
                         );
                         string commandId = Guid.NewGuid().ToString();
-                        var tcs = new TaskCompletionSource<string>();
+                        TaskCompletionSource<string> tcs = new();
 
                         // Special handling for ping command to avoid JSON parsing
                         if (commandText.Trim() == "ping")
                         {
                             // Direct response to ping without going through JSON parsing
                             byte[] pingResponseBytes = System.Text.Encoding.UTF8.GetBytes(
+                                /*lang=json,strict*/
                                 "{\"status\":\"success\",\"result\":{\"message\":\"pong\"}}"
                             );
                             await stream.WriteAsync(pingResponseBytes, 0, pingResponseBytes.Length);
@@ -155,11 +179,16 @@ namespace UnityMcpBridge.Editor
             List<string> processedIds = new();
             lock (lockObj)
             {
-                foreach (var kvp in commandQueue.ToList())
+                foreach (
+                    KeyValuePair<
+                        string,
+                        (string commandJson, TaskCompletionSource<string> tcs)
+                    > kvp in commandQueue.ToList()
+                )
                 {
                     string id = kvp.Key;
                     string commandText = kvp.Value.commandJson;
-                    var tcs = kvp.Value.tcs;
+                    TaskCompletionSource<string> tcs = kvp.Value.tcs;
 
                     try
                     {
@@ -200,7 +229,7 @@ namespace UnityMcpBridge.Editor
                                 status = "error",
                                 error = "Invalid JSON format",
                                 receivedText = commandText.Length > 50
-                                    ? commandText.Substring(0, 50) + "..."
+                                    ? commandText[..50] + "..."
                                     : commandText,
                             };
                             tcs.SetResult(JsonConvert.SerializeObject(invalidJsonResponse));
@@ -209,7 +238,7 @@ namespace UnityMcpBridge.Editor
                         }
 
                         // Normal JSON command processing
-                        var command = JsonConvert.DeserializeObject<Command>(commandText);
+                        Command command = JsonConvert.DeserializeObject<Command>(commandText);
                         if (command == null)
                         {
                             var nullCommandResponse = new
@@ -236,7 +265,7 @@ namespace UnityMcpBridge.Editor
                             error = ex.Message,
                             commandType = "Unknown (error during processing)",
                             receivedText = commandText?.Length > 50
-                                ? commandText.Substring(0, 50) + "..."
+                                ? commandText[..50] + "..."
                                 : commandText,
                         };
                         string responseJson = JsonConvert.SerializeObject(response);
@@ -246,7 +275,7 @@ namespace UnityMcpBridge.Editor
                     processedIds.Add(id);
                 }
 
-                foreach (var id in processedIds)
+                foreach (string id in processedIds)
                 {
                     commandQueue.Remove(id);
                 }
@@ -257,7 +286,9 @@ namespace UnityMcpBridge.Editor
         private static bool IsValidJson(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
+            {
                 return false;
+            }
 
             text = text.Trim();
             if (
@@ -357,17 +388,16 @@ namespace UnityMcpBridge.Editor
         {
             try
             {
-                if (@params == null || !@params.HasValues)
-                    return "No parameters";
-
-                return string.Join(
-                    ", ",
-                    @params
-                        .Properties()
-                        .Select(p =>
-                            $"{p.Name}: {p.Value?.ToString()?.Substring(0, Math.Min(20, p.Value?.ToString()?.Length ?? 0))}"
-                        )
-                );
+                return @params == null || !@params.HasValues
+                    ? "No parameters"
+                    : string.Join(
+                        ", ",
+                        @params
+                            .Properties()
+                            .Select(static p =>
+                                $"{p.Name}: {p.Value?.ToString()?[..Math.Min(20, p.Value?.ToString()?.Length ?? 0)]}"
+                            )
+                    );
             }
             catch
             {
