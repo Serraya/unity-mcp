@@ -1,5 +1,8 @@
 using System;
+using System.IO;
+using System.Linq;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
@@ -8,44 +11,61 @@ namespace UnityMcpBridge.Editor.Helpers
     public static class ServerInstaller
     {
         private const string PackageName = "unity-mcp-server";
-        private const string GitUrlTemplate =
-            "git+https://github.com/justinpbarnett/unity-mcp.git@{0}#subdirectory=UnityMcpServer";
-        private const string PyprojectUrlTemplate =
-            "https://raw.githubusercontent.com/justinpbarnett/unity-mcp/{0}/UnityMcpServer/pyproject.toml";
-        private const string DefaultBranch = "master";
+        private const string GitUrl =
+            "git+https://github.com/justinpbarnett/unity-mcp.git#subdirectory=UnityMcpServer";
+        private const string PyprojectUrl =
+            "https://raw.githubusercontent.com/justinpbarnett/unity-mcp/master/UnityMcpServer/pyproject.toml";
 
-        /// <summary>
-        /// Ensures that UnityMcpServer is installed and up to date by checking the typical application path via Python's package manager.
-        /// </summary>
-        /// <param name="branch">The GitHub branch to install from. Defaults to "master" if not specified.</param>
-        public static void EnsureServerInstalled(string branch = DefaultBranch)
+        // Typical uv installation paths per OS
+        private static readonly string[] WindowsUvPaths = new[]
+        {
+            @"C:\Users\$USER$\.local\bin\uv.exe", // Default uv install path
+            @"C:\Program Files\uv\uv.exe", // Possible system-wide install
+            @"C:\Users\$USER$\AppData\Local\Programs\uv\uv.exe",
+        };
+
+        private static readonly string[] LinuxUvPaths = new[]
+        {
+            "/home/$USER$/.local/bin/uv",
+            "/usr/local/bin/uv",
+            "/usr/bin/uv",
+        };
+
+        private static readonly string[] MacUvPaths = new[]
+        {
+            "/Users/$USER$/.local/bin/uv",
+            "/usr/local/bin/uv",
+            "/opt/homebrew/bin/uv", // Homebrew on Apple Silicon
+        };
+
+        public static void EnsureServerInstalled()
         {
             try
             {
-                // Format the URLs with the specified branch
-                string gitUrl = string.Format(GitUrlTemplate, branch);
+                string uvPath = FindUvExecutable();
+                if (string.IsNullOrEmpty(uvPath))
+                {
+                    throw new Exception(GetUvNotFoundMessage());
+                }
 
-                // Check if unity-mcp-server is installed using uv
-                string output = RunCommand("uv", $"pip show {PackageName}");
+                // Check if unity-mcp-server is installed
+                string output = RunCommand(uvPath, $"pip show {PackageName}");
                 if (output.Contains("WARNING: Package(s) not found"))
                 {
-                    Debug.Log($"Installing {PackageName} from branch '{branch}'...");
-                    RunCommand("uv", $"pip install {gitUrl}");
+                    Debug.Log($"Installing {PackageName}...");
+                    RunCommand(uvPath, $"pip install {GitUrl}");
                     Debug.Log($"{PackageName} installed successfully.");
                 }
                 else
                 {
-                    // Extract the installed version
                     string installedVersion = GetVersionFromPipShow(output);
-                    // Get the latest version from GitHub
-                    string latestVersion = GetLatestVersionFromGitHub(branch);
-                    // Compare versions
+                    string latestVersion = GetLatestVersionFromGitHub();
                     if (new Version(installedVersion) < new Version(latestVersion))
                     {
                         Debug.Log(
-                            $"Updating {PackageName} from {installedVersion} to {latestVersion} (branch '{branch}')..."
+                            $"Updating {PackageName} from {installedVersion} to {latestVersion}..."
                         );
-                        RunCommand("uv", $"pip install --upgrade {gitUrl}");
+                        RunCommand(uvPath, $"pip install --upgrade {GitUrl}");
                         Debug.Log($"{PackageName} updated successfully.");
                     }
                     else
@@ -57,20 +77,81 @@ namespace UnityMcpBridge.Editor.Helpers
             catch (Exception ex)
             {
                 Debug.LogError($"Failed to ensure {PackageName} is installed: {ex.Message}");
-                Debug.LogWarning(
-                    "Please ensure 'uv' is installed and accessible. See the Unity MCP README for installation instructions."
-                );
+                Debug.LogWarning(GetInstallInstructions());
             }
         }
 
-        /// <summary>
-        /// Executes a command and returns its output.
-        /// </summary>
+        private static string FindUvExecutable()
+        {
+            string username = Environment.UserName;
+            string[] uvPaths;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                uvPaths = WindowsUvPaths.Select(p => p.Replace("$USER$", username)).ToArray();
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                uvPaths = LinuxUvPaths.Select(p => p.Replace("$USER$", username)).ToArray();
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                uvPaths = MacUvPaths.Select(p => p.Replace("$USER$", username)).ToArray();
+            }
+            else
+            {
+                throw new PlatformNotSupportedException("Unsupported operating system.");
+            }
+
+            // First, try 'uv' directly from PATH
+            try
+            {
+                System.Diagnostics.Process process = new();
+                process.StartInfo.FileName = "uv";
+                process.StartInfo.Arguments = "--version";
+                process.StartInfo.UseShellExecute = false;
+                process.StartInfo.RedirectStandardOutput = true;
+                process.StartInfo.RedirectStandardError = true;
+                process.Start();
+                process.WaitForExit(2000); // Wait up to 2 seconds
+                if (process.ExitCode == 0)
+                {
+                    return "uv"; // Found in PATH
+                }
+            }
+            catch
+            {
+                // Not in PATH, proceed to check specific locations
+            }
+
+            // Check specific paths
+            foreach (string path in uvPaths)
+            {
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+            }
+
+            return null; // Not found
+        }
+
         private static string RunCommand(string fileName, string arguments)
         {
             System.Diagnostics.Process process = new();
             process.StartInfo.FileName = fileName;
-            process.StartInfo.Arguments = arguments;
+
+            // On non-Windows, might need to adjust for shell execution
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                process.StartInfo.FileName = "/bin/sh";
+                process.StartInfo.Arguments = $"-c \"{fileName} {arguments}\"";
+            }
+            else
+            {
+                process.StartInfo.Arguments = arguments;
+            }
+
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.RedirectStandardOutput = true;
             process.StartInfo.RedirectStandardError = true;
@@ -87,38 +168,67 @@ namespace UnityMcpBridge.Editor.Helpers
             return output;
         }
 
-        /// <summary>
-        /// Extracts the version from 'uv pip show' output.
-        /// </summary>
         private static string GetVersionFromPipShow(string output)
         {
-            string[] lines = output.Split('\n');
-            foreach (string line in lines)
+            var lines = output.Split('\n');
+            foreach (var line in lines)
             {
                 if (line.StartsWith("Version:"))
                 {
-                    return line["Version:".Length..].Trim();
+                    return line.Substring("Version:".Length).Trim();
                 }
             }
             throw new Exception("Version not found in pip show output");
         }
 
-        /// <summary>
-        /// Fetches the latest version from the GitHub repository's pyproject.toml.
-        /// </summary>
-        /// <param name="branch">The GitHub branch to fetch the version from.</param>
-        private static string GetLatestVersionFromGitHub(string branch)
+        private static string GetLatestVersionFromGitHub()
         {
-            string pyprojectUrl = string.Format(PyprojectUrlTemplate, branch);
-            using HttpClient client = new();
-            // Add GitHub headers to avoid rate limiting
-            client.DefaultRequestHeaders.Add("User-Agent", "UnityMcpBridge");
-            string content = client.GetStringAsync(pyprojectUrl).Result;
-            string pattern = @"version\s*=\s*""(.*?)""";
-            Match match = Regex.Match(content, pattern);
-            return match.Success
-                ? match.Groups[1].Value
-                : throw new Exception("Could not find version in pyproject.toml");
+            using (HttpClient client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Add("User-Agent", "UnityMcpBridge");
+                string content = client.GetStringAsync(PyprojectUrl).Result;
+                string pattern = @"version\s*=\s*""(.*?)""";
+                Match match = Regex.Match(content, pattern);
+                if (match.Success)
+                {
+                    return match.Groups[1].Value;
+                }
+                throw new Exception("Could not find version in pyproject.toml");
+            }
+        }
+
+        private static string GetUvNotFoundMessage()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return "uv not found in PATH or typical Windows locations.";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                return "uv not found in PATH or typical Linux locations.";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return "uv not found in PATH or typical macOS locations.";
+            }
+            return "uv not found on this platform.";
+        }
+
+        private static string GetInstallInstructions()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return "Install uv with: powershell -c \"irm https://astral.sh/uv/install.ps1 | iex\" and ensure it's in your PATH.";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                return "Install uv with: curl -LsSf https://astral.sh/uv/install.sh | sh and ensure it's in your PATH.";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return "Install uv with: brew install uv or curl -LsSf https://astral.sh/uv/install.sh | sh and ensure it's in your PATH.";
+            }
+            return "Install uv following platform-specific instructions and add it to your PATH.";
         }
     }
 }
