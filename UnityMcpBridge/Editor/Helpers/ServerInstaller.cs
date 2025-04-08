@@ -146,7 +146,12 @@ namespace UnityMcpBridge.Editor.Helpers
             RunCommand("git", $"checkout {BranchName}", workingDirectory: location);
 
             // Create version.txt file based on pyproject.toml, stored at the root level
-            string pyprojectPath = Path.Combine(location, "UnityMcpServer", "pyproject.toml");
+            string pyprojectPath = Path.Combine(
+                location,
+                "UnityMcpServer",
+                "src",
+                "pyproject.toml"
+            );
             if (File.Exists(pyprojectPath))
             {
                 string pyprojectContent = File.ReadAllText(pyprojectPath);
