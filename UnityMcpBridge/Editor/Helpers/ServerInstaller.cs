@@ -11,7 +11,7 @@ namespace UnityMcpBridge.Editor.Helpers
     {
         private const string RootFolder = "UnityMCP";
         private const string ServerFolder = "UnityMcpServer";
-        private const string BranchName = "feature/install-overhaul"; // Adjust branch as needed
+        private const string BranchName = "feature/install-overhaul";
         private const string GitUrl = "https://github.com/justinpbarnett/unity-mcp.git";
         private const string PyprojectUrl =
             "https://raw.githubusercontent.com/justinpbarnett/unity-mcp/refs/heads/"
@@ -26,36 +26,32 @@ namespace UnityMcpBridge.Editor.Helpers
             try
             {
                 string saveLocation = GetSaveLocation();
-                Debug.Log($"Server save location: {saveLocation}");
 
                 if (!IsServerInstalled(saveLocation))
                 {
-                    Debug.Log("Server not found. Installing...");
                     InstallServer(saveLocation);
                 }
                 else
                 {
-                    Debug.Log("Server is installed. Checking version...");
                     string installedVersion = GetInstalledVersion(saveLocation);
                     string latestVersion = GetLatestVersion();
 
                     if (IsNewerVersion(latestVersion, installedVersion))
                     {
-                        Debug.Log(
-                            $"Newer version available ({latestVersion} > {installedVersion}). Updating..."
-                        );
                         UpdateServer(saveLocation);
                     }
-                    else
-                    {
-                        Debug.Log("Server is up to date.");
-                    }
+                    else { }
                 }
             }
             catch (Exception ex)
             {
                 Debug.LogError($"Failed to ensure server installation: {ex.Message}");
             }
+        }
+
+        public static string GetServerPath()
+        {
+            return Path.Combine(GetSaveLocation(), ServerFolder, "src");
         }
 
         /// <summary>
@@ -65,7 +61,6 @@ namespace UnityMcpBridge.Editor.Helpers
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                // Use a user-specific program directory under %USERPROFILE%\AppData\Local\Programs
                 return Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     "AppData",
@@ -115,11 +110,8 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static bool IsServerInstalled(string location)
         {
-            bool doesExist =
-                Directory.Exists(location)
+            return Directory.Exists(location)
                 && File.Exists(Path.Combine(location, ServerFolder, "version.txt"));
-            Debug.Log($"Server does exist: {doesExist}");
-            return doesExist;
         }
 
         /// <summary>
@@ -167,10 +159,7 @@ namespace UnityMcpBridge.Editor.Helpers
         private static string GetInstalledVersion(string location)
         {
             string versionFile = Path.Combine(location, ServerFolder, "version.txt");
-            Debug.Log($"Looking for version at: {versionFile}");
-            string versionFileText = File.ReadAllText(versionFile).Trim();
-            Debug.Log($"versionFile text: {versionFileText}");
-            return versionFileText;
+            return File.ReadAllText(versionFile).Trim();
         }
 
         /// <summary>
@@ -178,7 +167,6 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static string GetLatestVersion()
         {
-            Debug.Log("Getting latest version.");
             using WebClient webClient = new();
             string pyprojectContent = webClient.DownloadString(PyprojectUrl);
             return ParseVersionFromPyproject(pyprojectContent);
@@ -189,7 +177,6 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static void UpdateServer(string location)
         {
-            Debug.Log("Updating Server");
             // Pull latest changes in the src directory
             string serverDir = Path.Combine(location, ServerFolder, "src");
             RunCommand("git", $"pull origin {BranchName}", workingDirectory: serverDir);
@@ -216,9 +203,7 @@ namespace UnityMcpBridge.Editor.Helpers
                     string[] parts = line.Split('=');
                     if (parts.Length == 2)
                     {
-                        string version = parts[1].Trim().Trim('"');
-                        Debug.Log($"Version is: {version}");
-                        return version;
+                        return parts[1].Trim().Trim('"');
                     }
                 }
             }
