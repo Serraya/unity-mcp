@@ -115,7 +115,11 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static bool IsServerInstalled(string location)
         {
-            return Directory.Exists(location) && File.Exists(Path.Combine(location, "version.txt"));
+            bool doesExist =
+                Directory.Exists(location)
+                && File.Exists(Path.Combine(location, ServerFolder, "version.txt"));
+            Debug.Log($"Server does exist: {doesExist}");
+            return doesExist;
         }
 
         /// <summary>
@@ -137,24 +141,19 @@ namespace UnityMcpBridge.Editor.Helpers
 
             // Set sparse checkout path to only include UnityMcpServer folder
             string sparseCheckoutPath = Path.Combine(location, ".git", "info", "sparse-checkout");
-            File.WriteAllText(sparseCheckoutPath, "UnityMcpServer/");
+            File.WriteAllText(sparseCheckoutPath, $"{ServerFolder}/");
 
             // Fetch and checkout the branch
             RunCommand("git", $"fetch --depth=1 origin {BranchName}", workingDirectory: location);
             RunCommand("git", $"checkout {BranchName}", workingDirectory: location);
 
             // Create version.txt file based on pyproject.toml, stored at the root level
-            string pyprojectPath = Path.Combine(
-                location,
-                "UnityMcpServer",
-                "src",
-                "pyproject.toml"
-            );
+            string pyprojectPath = Path.Combine(location, ServerFolder, "src", "pyproject.toml");
             if (File.Exists(pyprojectPath))
             {
                 string pyprojectContent = File.ReadAllText(pyprojectPath);
                 string version = ParseVersionFromPyproject(pyprojectContent);
-                File.WriteAllText(Path.Combine(location, "version.txt"), version);
+                File.WriteAllText(Path.Combine(location, ServerFolder, "version.txt"), version);
             }
             else
             {
@@ -167,7 +166,7 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static string GetInstalledVersion(string location)
         {
-            string versionFile = Path.Combine(location, "version.txt");
+            string versionFile = Path.Combine(location, ServerFolder, "version.txt");
             return File.ReadAllText(versionFile).Trim();
         }
 
@@ -186,26 +185,19 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static void UpdateServer(string location)
         {
+            Debug.Log("Updating Server");
             // Pull latest changes in the src directory
             string serverDir = Path.Combine(location, ServerFolder, "src");
             RunCommand("git", $"pull origin {BranchName}", workingDirectory: serverDir);
 
             // Update version.txt file based on pyproject.toml in src
-            string pyprojectPath = Path.Combine(serverDir, "UnityMcpServer", "pyproject.toml");
+            string pyprojectPath = Path.Combine(serverDir, "pyproject.toml");
             if (File.Exists(pyprojectPath))
             {
                 string pyprojectContent = File.ReadAllText(pyprojectPath);
                 string version = ParseVersionFromPyproject(pyprojectContent);
-                File.WriteAllText(Path.Combine(location, "version.txt"), version);
+                File.WriteAllText(Path.Combine(location, ServerFolder, "version.txt"), version);
             }
-
-            // Reinstall dependencies to ensure they're up to date
-            string venvPath = Path.Combine(location, "venv");
-            string uvPath = Path.Combine(
-                venvPath,
-                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "Scripts\\uv.exe" : "bin/uv"
-            );
-            RunCommand(uvPath, "pip install -U ./src/UnityMcpServer", workingDirectory: location);
         }
 
         /// <summary>
@@ -220,7 +212,9 @@ namespace UnityMcpBridge.Editor.Helpers
                     string[] parts = line.Split('=');
                     if (parts.Length == 2)
                     {
-                        return parts[1].Trim().Trim('"');
+                        string version = parts[1].Trim().Trim('"');
+                        Debug.Log($"Version is: {version}");
+                        return version;
                     }
                 }
             }
