@@ -125,7 +125,8 @@ namespace UnityMcpBridge.Editor.Helpers
         private static void InstallServer(string location)
         {
             // Create the directory if it doesn't exist
-            Directory.CreateDirectory(location);
+            string serverDir = Path.Combine(location, "src");
+            Directory.CreateDirectory(serverDir);
 
             // Initialize git repo
             RunCommand("git", $"init", workingDirectory: location);
