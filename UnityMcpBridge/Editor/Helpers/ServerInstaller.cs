@@ -120,12 +120,42 @@ namespace UnityMcpBridge.Editor.Helpers
         }
 
         /// <summary>
-        /// Installs the server by cloning the repository and setting up dependencies.
+        /// Installs the server by cloning only the UnityMcpServer folder from the repository and setting up dependencies.
         /// </summary>
         private static void InstallServer(string location)
         {
-            // Clone the repository
-            RunCommand("git", $"clone -b {BranchName} {GitUrl} \"{location}\"");
+            // Create the directory if it doesn't exist
+            Directory.CreateDirectory(location);
+
+            // Initialize git repo
+            RunCommand("git", $"init", workingDirectory: location);
+
+            // Add remote
+            RunCommand("git", $"remote add origin {GitUrl}", workingDirectory: location);
+
+            // Configure sparse checkout
+            RunCommand("git", "config core.sparseCheckout true", workingDirectory: location);
+
+            // Set sparse checkout path to only include UnityMcpServer folder
+            string sparseCheckoutPath = Path.Combine(location, ".git", "info", "sparse-checkout");
+            File.WriteAllText(sparseCheckoutPath, "UnityMcpServer/");
+
+            // Fetch and checkout the branch
+            RunCommand("git", $"fetch --depth=1 origin {BranchName}", workingDirectory: location);
+            RunCommand("git", $"checkout {BranchName}", workingDirectory: location);
+
+            // Create version.txt file based on the pyproject.toml
+            string pyprojectPath = Path.Combine(location, "UnityMcpServer", "pyproject.toml");
+            if (File.Exists(pyprojectPath))
+            {
+                string pyprojectContent = File.ReadAllText(pyprojectPath);
+                string version = ParseVersionFromPyproject(pyprojectContent);
+                File.WriteAllText(Path.Combine(location, "version.txt"), version);
+            }
+            else
+            {
+                throw new Exception("Failed to find pyproject.toml after checkout");
+            }
 
             // Set up virtual environment
             string venvPath = Path.Combine(location, "venv");
@@ -142,12 +172,12 @@ namespace UnityMcpBridge.Editor.Helpers
             // Install uv into the virtual environment
             RunCommand(pythonPath, "-m pip install uv");
 
-            // Use uv to install dependencies
+            // Use uv to install dependencies from the UnityMcpServer subdirectory
             string uvPath = Path.Combine(
                 venvPath,
                 RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "Scripts\\uv.exe" : "bin/uv"
             );
-            RunCommand(uvPath, "install");
+            RunCommand(uvPath, "pip install ./UnityMcpServer", workingDirectory: location);
         }
 
         /// <summary>
@@ -170,12 +200,29 @@ namespace UnityMcpBridge.Editor.Helpers
         }
 
         /// <summary>
-        /// Updates the server by pulling the latest changes.
+        /// Updates the server by pulling the latest changes for the UnityMcpServer folder only.
         /// </summary>
         private static void UpdateServer(string location)
         {
-            RunCommand("git", $"-C \"{location}\" pull");
-            // Optionally reinstall dependencies if requirements changed
+            // Pull only the sparse checkout paths (UnityMcpServer folder)
+            RunCommand("git", "pull origin " + BranchName, workingDirectory: location);
+
+            // Update version.txt file
+            string pyprojectPath = Path.Combine(location, "UnityMcpServer", "pyproject.toml");
+            if (File.Exists(pyprojectPath))
+            {
+                string pyprojectContent = File.ReadAllText(pyprojectPath);
+                string version = ParseVersionFromPyproject(pyprojectContent);
+                File.WriteAllText(Path.Combine(location, "version.txt"), version);
+            }
+
+            // Reinstall dependencies to ensure they're up to date
+            string venvPath = Path.Combine(location, "venv");
+            string uvPath = Path.Combine(
+                venvPath,
+                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "Scripts\\uv.exe" : "bin/uv"
+            );
+            RunCommand(uvPath, "pip install -U ./UnityMcpServer", workingDirectory: location);
         }
 
         /// <summary>
@@ -215,7 +262,11 @@ namespace UnityMcpBridge.Editor.Helpers
         /// <summary>
         /// Runs a command-line process and handles output/errors.
         /// </summary>
-        private static void RunCommand(string command, string arguments)
+        private static void RunCommand(
+            string command,
+            string arguments,
+            string workingDirectory = null
+        )
         {
             var process = new System.Diagnostics.Process
             {
@@ -227,6 +278,7 @@ namespace UnityMcpBridge.Editor.Helpers
                     RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true,
+                    WorkingDirectory = workingDirectory ?? string.Empty,
                 },
             };
             process.Start();
