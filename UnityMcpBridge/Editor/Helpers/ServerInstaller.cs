@@ -33,7 +33,8 @@ namespace UnityMcpBridge.Editor.Helpers
                 }
                 else
                 {
-                    string installedVersion = GetInstalledVersion(saveLocation);
+                    string pyprojectPath = Path.Combine(saveLocation, ServerFolder, "src");
+                    string installedVersion = ParseVersionFromPyproject(pyprojectPath);
                     string latestVersion = GetLatestVersion();
 
                     if (IsNewerVersion(latestVersion, installedVersion))
@@ -111,7 +112,7 @@ namespace UnityMcpBridge.Editor.Helpers
         private static bool IsServerInstalled(string location)
         {
             return Directory.Exists(location)
-                && File.Exists(Path.Combine(location, ServerFolder, "version.txt"));
+                && File.Exists(Path.Combine(location, ServerFolder, "src", "pyproject.toml"));
         }
 
         /// <summary>
@@ -138,28 +139,6 @@ namespace UnityMcpBridge.Editor.Helpers
             // Fetch and checkout the branch
             RunCommand("git", $"fetch --depth=1 origin {BranchName}", workingDirectory: location);
             RunCommand("git", $"checkout {BranchName}", workingDirectory: location);
-
-            // Create version.txt file based on pyproject.toml, stored at the root level
-            string pyprojectPath = Path.Combine(location, ServerFolder, "src", "pyproject.toml");
-            if (File.Exists(pyprojectPath))
-            {
-                string pyprojectContent = File.ReadAllText(pyprojectPath);
-                string version = ParseVersionFromPyproject(pyprojectContent);
-                File.WriteAllText(Path.Combine(location, ServerFolder, "version.txt"), version);
-            }
-            else
-            {
-                throw new Exception("Failed to find pyproject.toml after checkout");
-            }
-        }
-
-        /// <summary>
-        /// Retrieves the installed server version from version.txt.
-        /// </summary>
-        private static string GetInstalledVersion(string location)
-        {
-            string versionFile = Path.Combine(location, ServerFolder, "version.txt");
-            return File.ReadAllText(versionFile).Trim();
         }
 
         /// <summary>
@@ -180,15 +159,6 @@ namespace UnityMcpBridge.Editor.Helpers
             // Pull latest changes in the src directory
             string serverDir = Path.Combine(location, ServerFolder, "src");
             RunCommand("git", $"pull origin {BranchName}", workingDirectory: serverDir);
-
-            // Update version.txt file based on pyproject.toml in src
-            string pyprojectPath = Path.Combine(serverDir, "pyproject.toml");
-            if (File.Exists(pyprojectPath))
-            {
-                string pyprojectContent = File.ReadAllText(pyprojectPath);
-                string version = ParseVersionFromPyproject(pyprojectContent);
-                File.WriteAllText(Path.Combine(location, ServerFolder, "version.txt"), version);
-            }
         }
 
         /// <summary>
