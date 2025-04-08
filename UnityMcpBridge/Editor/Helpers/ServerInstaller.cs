@@ -11,10 +11,15 @@ namespace UnityMcpBridge.Editor.Helpers
     public static class ServerInstaller
     {
         private const string PackageName = "unity-mcp-server";
+        private const string BranchName = "feature/install-overhaul";
         private const string GitUrl =
-            "git+https://github.com/justinpbarnett/unity-mcp.git#subdirectory=UnityMcpServer";
+            "git+https://github.com/justinpbarnett/unity-mcp.git@"
+            + BranchName
+            + "#subdirectory=UnityMcpServer";
         private const string PyprojectUrl =
-            "https://raw.githubusercontent.com/justinpbarnett/unity-mcp/master/UnityMcpServer/pyproject.toml";
+            "https://raw.githubusercontent.com/justinpbarnett/unity-mcp/"
+            + BranchName
+            + "/UnityMcpServer/pyproject.toml";
 
         // Typical uv installation paths per OS
         private static readonly string[] WindowsUvPaths = new[]
