@@ -33,15 +33,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 }
                 else
                 {
-                    string pyprojectPath = Path.Combine(
-                        saveLocation,
-                        ServerFolder,
-                        "src",
-                        "pyproject.toml"
-                    );
-                    string installedVersion = ParseVersionFromPyproject(
-                        File.ReadAllText(pyprojectPath)
-                    );
+                    string installedVersion = GetInstalledVersion();
                     string latestVersion = GetLatestVersion();
 
                     if (IsNewerVersion(latestVersion, installedVersion))
@@ -149,9 +141,23 @@ namespace UnityMcpBridge.Editor.Helpers
         }
 
         /// <summary>
+        /// Fetches the currently installed version from the local pyproject.toml file.
+        /// </summary>
+        public static string GetInstalledVersion()
+        {
+            string pyprojectPath = Path.Combine(
+                GetSaveLocation(),
+                ServerFolder,
+                "src",
+                "pyproject.toml"
+            );
+            return ParseVersionFromPyproject(File.ReadAllText(pyprojectPath));
+        }
+
+        /// <summary>
         /// Fetches the latest version from the GitHub pyproject.toml file.
         /// </summary>
-        private static string GetLatestVersion()
+        public static string GetLatestVersion()
         {
             using WebClient webClient = new();
             string pyprojectContent = webClient.DownloadString(PyprojectUrl);
@@ -188,7 +194,7 @@ namespace UnityMcpBridge.Editor.Helpers
         /// <summary>
         /// Compares two version strings to determine if the latest is newer.
         /// </summary>
-        private static bool IsNewerVersion(string latest, string installed)
+        public static bool IsNewerVersion(string latest, string installed)
         {
             int[] latestParts = latest.Split('.').Select(int.Parse).ToArray();
             int[] installedParts = installed.Split('.').Select(int.Parse).ToArray();
