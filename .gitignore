@@ -4,8 +4,7 @@
 CLAUDE.md
 
 # Code-copy related files
-.codeignore
-*codeclip*
+.clipignore
 
 # Python-generated files
 __pycache__/
@@ -14,6 +13,8 @@ build/
 dist/
 wheels/
 *.egg-info
+UnityMcpServer/**/*.meta
+UnityMcpServer.meta
 
 # Virtual environments
 .venv
@@ -21,6 +22,10 @@ wheels/
 # Unity Editor
 *.unitypackage
 *.asset
+UnityMcpBridge.meta
+LICENSE.meta
+README.md.meta
+CONTRIBUTING.md.meta
 
 # IDE
 .idea/
