@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -18,13 +21,14 @@ namespace UnityMcpBridge.Editor.Windows
     {
         private bool isUnityBridgeRunning = false;
         private Vector2 scrollPosition;
-        private string claudeConfigStatus = "Not configured";
-        private string cursorConfigStatus = "Not configured";
-        private string pythonServerStatus = "Not Connected";
-        private Color pythonServerStatusColor = Color.red;
+        private string pythonServerInstallationStatus = "Not Installed";
+        private Color pythonServerInstallationStatusColor = Color.red;
+        private string pythonServerConnectionStatus = "Not Connected";
+        private Color pythonServerConnectionStatusColor = Color.red;
+        private DateTime lastConnectionCheck;
         private const int unityPort = 6400; // Hardcoded Unity port
         private const int mcpPort = 6500; // Hardcoded MCP port
-        private McpClients mcpClients = new();
+        private readonly McpClients mcpClients = new();
 
         [MenuItem("Window/Unity MCP")]
         public static void ShowWindow()
@@ -34,11 +38,23 @@ namespace UnityMcpBridge.Editor.Windows
 
         private void OnEnable()
         {
-            // Check initial states
+            UpdatePythonServerInstallationStatus();
+            UpdatePythonServerConnectionStatus();
+
             isUnityBridgeRunning = UnityMcpBridge.IsRunning;
             foreach (McpClient mcpClient in mcpClients.clients)
             {
                 CheckMcpConfiguration(mcpClient);
+            }
+        }
+
+        private void Update()
+        {
+            if (lastConnectionCheck.AddSeconds(2) < DateTime.Now)
+            {
+                UpdatePythonServerConnectionStatus();
+
+                lastConnectionCheck = DateTime.Now;
             }
         }
 
@@ -55,6 +71,62 @@ namespace UnityMcpBridge.Editor.Windows
                 McpStatus.NoResponse => Color.yellow,
                 _ => Color.red, // Default to red for error states or not configured
             };
+        }
+
+        private void UpdatePythonServerInstallationStatus()
+        {
+            string serverPath = ServerInstaller.GetServerPath();
+
+            if (File.Exists(Path.Combine(serverPath, "server.py")))
+            {
+                string installedVersion = ServerInstaller.GetInstalledVersion();
+                string latestVersion = ServerInstaller.GetLatestVersion();
+
+                if (ServerInstaller.IsNewerVersion(latestVersion, installedVersion))
+                {
+                    pythonServerInstallationStatus = "Up to Date";
+                    pythonServerInstallationStatusColor = Color.green;
+                }
+                else
+                {
+                    pythonServerInstallationStatus = "Newer Version Available";
+                    pythonServerInstallationStatusColor = Color.yellow;
+                }
+            }
+            else
+            {
+                pythonServerInstallationStatus = "Not Installed";
+                pythonServerInstallationStatusColor = Color.red;
+            }
+        }
+
+        private void UpdatePythonServerConnectionStatus()
+        {
+            IPGlobalProperties ipGlobalProperties = IPGlobalProperties.GetIPGlobalProperties();
+            TcpConnectionInformation[] tcpConnections =
+                ipGlobalProperties.GetActiveTcpConnections();
+            IPEndPoint[] tcpListeners = ipGlobalProperties.GetActiveTcpListeners();
+
+            // Check if the port is in use by any active listener
+            bool isListenerActive = tcpListeners.Any(static endpoint => endpoint.Port == mcpPort);
+
+            // Optionally, check if the port is in use by any active connection
+            bool isConnectionActive = tcpConnections.Any(static connection =>
+                connection.LocalEndPoint.Port == mcpPort
+                || connection.RemoteEndPoint.Port == mcpPort
+            );
+
+            // Return true if either a listener or connection is using the port
+            if (isListenerActive || isConnectionActive)
+            {
+                pythonServerConnectionStatus = "Connected";
+                pythonServerConnectionStatusColor = Color.green;
+            }
+            else
+            {
+                pythonServerConnectionStatus = "Not Connected";
+                pythonServerConnectionStatusColor = Color.red;
+            }
         }
 
         private void ConfigurationSection(McpClient mcpClient)
@@ -197,8 +269,8 @@ namespace UnityMcpBridge.Editor.Windows
 
             // Status indicator with colored dot
             var statusRect = EditorGUILayout.BeginHorizontal(GUILayout.Height(20));
-            DrawStatusDot(statusRect, pythonServerStatusColor);
-            EditorGUILayout.LabelField("      " + pythonServerStatus);
+            DrawStatusDot(statusRect, pythonServerInstallationStatusColor);
+            EditorGUILayout.LabelField("      " + pythonServerInstallationStatus);
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.LabelField($"Unity Port: {unityPort}");
