@@ -1,142 +1,249 @@
-# Unity MCP Package
+# Unity MCP ✨
 
-A Unity package that enables seamless communication between Unity and Large Language Models (LLMs) like Claude Desktop via the **Model Context Protocol (MCP)**. This server acts as a bridge, allowing Unity to send commands to and receive responses from MCP-compliant tools, empowering developers to automate workflows, manipulate assets, and control the Unity Editor programmatically.
+**Connect your Unity Editor to LLMs using the Model Context Protocol.**
 
-Welcome to the initial release of this open-source project! Whether you're looking to integrate LLMs into your Unity workflow or contribute to an exciting new tool, I appreciate you taking the time to check it out!
+Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to interact directly with your Unity Editor via a local **MCP (Model Context Protocol) Client**. Give your LLM tools to manage assets, control scenes, edit scripts, and automate tasks within Unity.
 
-## Overview
+---
 
-The Unity MCP Server provides a bidirectional communication channel between Unity (via C#) and a Python server, enabling:
+## <picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/justinpbarnett/unity-mcp/assets/11047284/c279675a-dd58-406b-9613-5b16b5c6bb63"><source media="(prefers-color-scheme: light)" srcset="https://github.com/justinpbarnett/unity-mcp/assets/11047284/b54f891d-961b-4048-a9c4-3af46e2a52fc"><img alt="UnityMCP Workflow" width="100%" style="max-width: 600px; display: block; margin-left: auto; margin-right: auto;"></picture>
 
-- **Asset Management**: Create, import, and manipulate Unity assets programmatically.
-- **Scene Control**: Manage scenes, objects, and their properties.
-- **Material Editing**: Modify materials and their properties.
-- **Script Integration**: View, create, and update Unity scripts.
-- **Editor Automation**: Control Unity Editor functions like undo, redo, play, and build.
+## Key Features 🚀
 
-This project is perfect for developers who want to leverage LLMs to enhance their Unity projects or automate repetitive tasks.
+*   **🗣️ Natural Language Control:** Instruct your LLM to perform Unity tasks.
+*   **🛠️ Powerful Tools:** Manage assets, scenes, materials, scripts, and editor functions.
+*   **🤖 Automation:** Automate repetitive Unity workflows.
+*   **🧩 Extensible:** Designed to work with various MCP Clients.
 
-## Installation
+<details>
+  <summary><strong>Expand for Available Tools...</strong></summary>
 
-To use the Unity MCP Package, ensure you have the following installed:
+  Your LLM can use functions like:
 
-- **Unity 2020.3 LTS or newer** (⚠️ Currently only works in URP projects)
-- **Python 3.12 or newer**
-- **uv package manager**
+  *   `read_console`: Gets messages from or clears the console.
+  *   `manage_script`: Manages C# scripts (create, read, update, delete).
+  *   `manage_editor`: Controls and queries the editor's state and settings.
+  *   `manage_scene`: Manages scenes (load, save, create, get hierarchy, etc.).
+  *   `manage_asset`: Performs asset operations (import, create, modify, delete, etc.).
+  *   `manage_gameobject`: Manages GameObjects: create, modify, delete, find, and component operations.
+  *   `execute_menu_item`: Executes a menu item via its path (e.g., "File/Save Project").
+</details>
 
-### Step 1: Install Python
+---
 
-Download and install Python 3.12 or newer from [python.org](https://www.python.org/downloads/). Make sure to add Python to your system’s PATH during installation.
+## How It Works 🤔
 
-### Step 2: Install uv
+Unity MCP connects your tools using two components:
 
-uv is a Python package manager that simplifies dependency management. Install it using the command below based on your operating system:
+1.  **Unity MCP Bridge:** A Unity package running inside the Editor. (Installed via Package Manager).
+2.  **Unity MCP Server:** A Python server that runs locally, communicating between the Unity Bridge and your MCP Client. (Installed manually).
 
-- **Mac**:
+**Flow:** `[Your LLM via MCP Client] <-> [Unity MCP Server (Python)] <-> [Unity MCP Bridge (Unity Editor)]`
 
-  ```bash
-  brew install uv
-  ```
+---
 
-- **Windows**:
+## Installation ⚙️
 
-  ```bash
-  powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
+> **Note:** The setup is constantly improving as we update the package. Check back if you randomly start to run into issues.
 
-  Then, add uv to your PATH:
+### Prerequisites
 
-  ```bash
-  set Path=%USERPROFILE%\.local\bin;%Path%
-  ```
+<details>
+  <summary><strong>Click to view required software...</strong></summary>
 
-- **Linux**:
+  *   **Git CLI:** For cloning the server code. [Download Git](https://git-scm.com/downloads)
+  *   **Python:** Version 3.12 or newer. [Download Python](https://www.python.org/downloads/)
+  *   **Unity Hub & Editor:** Version 2020.3 LTS or newer. [Download Unity](https://unity.com/download)
+  *   **uv (Python package manager):**
+      ```bash
+      pip install uv
+      # Or see: https://docs.astral.sh/uv/getting-started/installation/
+      ```
+  *   **An MCP Client:**
+      *   [Claude Desktop](https://claude.ai/download)
+      *   [Cursor](https://www.cursor.com/en/downloads)
+      *   *(Others may work with manual config)*
+</details>
 
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
+### Step 1: Install the Unity Package (Bridge)
 
-For alternative installation methods, see the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
+1.  Open your Unity project.
+2.  Go to `Window > Package Manager`.
+3.  Click `+` -> `Add package from git URL...`.
+4.  Enter:
+    ```
+    https://github.com/justinpbarnett/unity-mcp.git?path=/UnityMcpBridge
+    ```
+5.  Click `Add`.
+6. The MCP Server should automatically be installed onto your machine as a result of this process.
 
-**Important**: Do not proceed without installing uv.
+### Step 2: Configure Your MCP Client
 
-### Step 3: Install the Unity Package
+Connect your MCP Client (Claude, Cursor, etc.) to the Python server you installed in Step 1.
 
-1. Open Unity and go to `Window > Package Manager`.
-2. Click the `+` button and select `Add package from git URL`.
-3. Enter: `https://github.com/justinpbarnett/unity-mcp.git`
+**Option A: Auto-Configure (Recommended for Claude/Cursor)**
 
-Once installed, the Unity MCP Package will be available in your Unity project. The server will start automatically when used with an MCP client like Claude Desktop or Cursor.
+1.  In Unity, go to `Window > Unity MCP`.
+2.  Click `Auto Configure Claude` or `Auto Configure Cursor`.
+3.  Look for a green status indicator 🟢 and "Connected". *(This attempts to modify the MCP Client's config file automatically)*.
 
-## Features
+**Option B: Manual Configuration**
 
-- **Bidirectional Communication**: Seamlessly send and receive data between Unity and LLMs.
-- **Asset Management**: Import assets, instantiate prefabs, and create new prefabs programmatically.
-- **Scene Control**: Open, save, and modify scenes, plus create and manipulate game objects.
-- **Material Editing**: Apply and modify materials with ease.
-- **Script Integration**: Create, view, and update C# scripts within Unity.
-- **Editor Automation**: Automate Unity Editor tasks like building projects or entering play mode.
+If Auto-Configure fails or you use a different client:
 
-## Contributing
+1.  **Find your MCP Client's configuration file.** (Check client documentation).
+    *   *Claude Example (macOS):* `~/Library/Application Support/Claude/claude_desktop_config.json`
+    *   *Claude Example (Windows):* `%APPDATA%\Claude\claude_desktop_config.json`
+2.  **Edit the file** to add/update the `mcpServers` section, using the *exact* paths from Step 1.
 
-I’d love your help to make the Unity MCP Server even better! Here’s how to contribute:
+<details>
+<summary><strong>Click for OS-Specific JSON Configuration Snippets...</strong></summary>
 
-1. **Fork the Repository**  
-   Fork [github.com/justinpbarnett/unity-mcp](https://github.com/justinpbarnett/unity-mcp) to your GitHub account.
+**Windows:**
 
-2. **Create a Branch**
+  ```json
+  {
+    "mcpServers": {
+      "UnityMCP": {
+        "command": "uv",
+        "args": [
+          "run",
+          "--directory",
+          "C:\\Users\\YOUR_USERNAME\\AppData\\Local\\Programs\\UnityMCP\\UnityMcpServer\\src",
+          "server.py"
+        ]
+      }
+      // ... other servers might be here ...
+    }
+  }
+``` 
 
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
+(Remember to replace YOUR_USERNAME and use double backslashes \\)
 
-   or
+**macOS:**
 
-   ```bash
-   git checkout -b bugfix/your-bugfix-name
-   ```
+```json
+{
+  "mcpServers": {
+    "UnityMCP": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/usr/local/bin/UnityMCP/UnityMcpServer/src",
+        "server.py"
+      ]
+    }
+    // ... other servers might be here ...
+  }
+}
+```
+(Replace YOUR_USERNAME if using ~/bin)
 
-3. **Make Changes**  
-   Implement your feature or fix.
+**Linux:**
 
-4. **Commit and Push**  
-   Use clear, descriptive commit messages:
+```json
+{
+  "mcpServers": {
+    "UnityMCP": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/home/YOUR_USERNAME/bin/UnityMCP/UnityMcpServer/src",
+        "server.py"
+      ]
+    }
+    // ... other servers might be here ...
+  }
+}
+```
 
-   ```bash
-   git commit -m "Add feature: your feature description"
-   git push origin feature/your-feature-name
-   ```
+(Replace YOUR_USERNAME)
 
-5. **Submit a Pull Request**  
-   Open a pull request to the `master` branch with a description of your changes.
+</details>
 
-## License
+---
 
-This project is licensed under the **MIT License**. Feel free to use, modify, and distribute it as you see fit. See the full license [here](https://github.com/justinpbarnett/unity-mcp/blob/master/LICENSE).
+## Usage ▶️
 
-## Troubleshooting
+1. **Open your Unity Project.** The Unity MCP Bridge (package) should connect automatically. Check status via Window > Unity MCP.
+    
+2. **Start your MCP Client** (Claude, Cursor, etc.). It should automatically launch the Unity MCP Server (Python) using the configuration from Installation Step 3.
+    
+3. **Interact!** Unity tools should now be available in your MCP Client.
+    
+    Example Prompt: `Create a 3D player controller.`
+    
 
-Encountering issues? Try these fixes:
+---
 
-- **Unity Bridge Not Running**  
-  Ensure the Unity Editor is open and the MCP window is active. Restart Unity if needed.
+## Contributing 🤝
 
-- **Python Server Not Connected**  
-  Verify that Python and uv are correctly installed and that the Unity MCP package is properly set up.
+Help make Unity MCP better!
 
-- **Configuration Issues with Claude Desktop or Cursor**  
-  Ensure your MCP client is configured to communicate with the Unity MCP server.
+1. **Fork** the main repository.
+    
+2. **Create a branch** (`feature/your-idea` or `bugfix/your-fix`).
+    
+3. **Make changes.**
+    
+4. **Commit** (feat: Add cool new feature).
+    
+5. **Push** your branch.
+    
+6. **Open a Pull Request** against the master branch.
+    
 
-For more help, visit the [issue tracker](https://github.com/justinpbarnett/unity-mcp/issues) or file a new issue.
+---
 
-## Contact
+## Troubleshooting ❓
 
-Have questions or want to chat about the project? Reach out!
+<details>  
+<summary><strong>Click to view common issues and fixes...</strong></summary>  
 
-- **X**: [@justinpbarnett](https://x.com/justinpbarnett)
+- **Unity Bridge Not Running/Connecting:**
+    
+    - Ensure Unity Editor is open.
+        
+    - Check the status window: Window > Unity MCP.
+        
+    - Restart Unity.
+        
+- **MCP Client Not Connecting / Server Not Starting:**
+    
+    - **Verify Server Path:** Double-check the --directory path in your MCP Client's JSON config. It must exactly match the location where you cloned the UnityMCP repository in Installation Step 1 (e.g., .../Programs/UnityMCP/UnityMcpServer/src).
+        
+    - **Verify uv:** Make sure uv is installed and working (pip show uv).
+        
+    - **Run Manually:** Try running the server directly from the terminal to see errors: `# Navigate to the src directory first! cd /path/to/your/UnityMCP/UnityMcpServer/src uv run server.py`
+        
+    - **Permissions (macOS/Linux):** If you installed the server in a system location like /usr/local/bin, ensure the user running the MCP client has permission to execute uv and access files there. Installing in ~/bin might be easier.
+        
+- **Auto-Configure Failed:**
+    
+    - Use the Manual Configuration steps. Auto-configure might lack permissions to write to the MCP client's config file.
+        
 
-## Acknowledgments
+</details>  
 
-A huge thanks to everyone who’s supported this project’s initial release. Special shoutout to Unity Technologies for their excellent Editor API.
+Still stuck? [Open an Issue](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fissues).
 
-Happy coding, and enjoy integrating LLMs with Unity!
+---
+
+## License 📜
+
+MIT License. See [LICENSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fblob%2Fmaster%2FLICENSE) file.
+
+---
+
+## Contact 👋
+
+- **X/Twitter:** [@justinpbarnett](https://www.google.com/url?sa=E&q=https%3A%2F%2Fx.com%2Fjustinpbarnett)
+    
+
+---
+
+## Acknowledgments 🙏
+
+Thanks to the contributors and the Unity team.
