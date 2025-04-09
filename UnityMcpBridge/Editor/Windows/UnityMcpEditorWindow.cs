@@ -1,10 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Net.Sockets;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine;
@@ -18,13 +14,11 @@ namespace UnityMcpBridge.Editor.Windows
     {
         private bool isUnityBridgeRunning = false;
         private Vector2 scrollPosition;
-        private string claudeConfigStatus = "Not configured";
-        private string cursorConfigStatus = "Not configured";
-        private string pythonServerStatus = "Not Connected";
-        private Color pythonServerStatusColor = Color.red;
+        private string pythonServerInstallationStatus = "Not Installed";
+        private Color pythonServerInstallationStatusColor = Color.red;
         private const int unityPort = 6400; // Hardcoded Unity port
         private const int mcpPort = 6500; // Hardcoded MCP port
-        private McpClients mcpClients = new();
+        private readonly McpClients mcpClients = new();
 
         [MenuItem("Window/Unity MCP")]
         public static void ShowWindow()
@@ -34,7 +28,8 @@ namespace UnityMcpBridge.Editor.Windows
 
         private void OnEnable()
         {
-            // Check initial states
+            UpdatePythonServerInstallationStatus();
+
             isUnityBridgeRunning = UnityMcpBridge.IsRunning;
             foreach (McpClient mcpClient in mcpClients.clients)
             {
@@ -57,12 +52,39 @@ namespace UnityMcpBridge.Editor.Windows
             };
         }
 
+        private void UpdatePythonServerInstallationStatus()
+        {
+            string serverPath = ServerInstaller.GetServerPath();
+
+            if (File.Exists(Path.Combine(serverPath, "server.py")))
+            {
+                string installedVersion = ServerInstaller.GetInstalledVersion();
+                string latestVersion = ServerInstaller.GetLatestVersion();
+
+                if (ServerInstaller.IsNewerVersion(latestVersion, installedVersion))
+                {
+                    pythonServerInstallationStatus = "Newer Version Available";
+                    pythonServerInstallationStatusColor = Color.yellow;
+                }
+                else
+                {
+                    pythonServerInstallationStatus = "Up to Date";
+                    pythonServerInstallationStatusColor = Color.green;
+                }
+            }
+            else
+            {
+                pythonServerInstallationStatus = "Not Installed";
+                pythonServerInstallationStatusColor = Color.red;
+            }
+        }
+
         private void ConfigurationSection(McpClient mcpClient)
         {
             // Calculate if we should use half-width layout
             // Minimum width for half-width layout is 400 pixels
             bool useHalfWidth = position.width >= 800;
-            float sectionWidth = useHalfWidth ? position.width / 2 - 15 : position.width - 20;
+            float sectionWidth = useHalfWidth ? (position.width / 2) - 15 : position.width - 20;
 
             // Begin horizontal layout if using half-width
             if (useHalfWidth && mcpClients.clients.IndexOf(mcpClient) % 2 == 0)
@@ -106,9 +128,11 @@ namespace UnityMcpBridge.Editor.Windows
             EditorGUILayout.Space(8);
 
             // Configure button with improved styling
-            GUIStyle buttonStyle = new(GUI.skin.button);
-            buttonStyle.padding = new RectOffset(15, 15, 5, 5);
-            buttonStyle.margin = new RectOffset(10, 10, 5, 5);
+            GUIStyle buttonStyle = new(GUI.skin.button)
+            {
+                padding = new RectOffset(15, 15, 5, 5),
+                margin = new RectOffset(10, 10, 5, 5),
+            };
 
             // Create muted button style for Manual Setup
             GUIStyle mutedButtonStyle = new(buttonStyle);
@@ -156,7 +180,11 @@ namespace UnityMcpBridge.Editor.Windows
         private void DrawStatusDot(Rect statusRect, Color statusColor)
         {
             Rect dotRect = new(statusRect.x + 6, statusRect.y + 4, 12, 12);
-            Vector3 center = new(dotRect.x + dotRect.width / 2, dotRect.y + dotRect.height / 2, 0);
+            Vector3 center = new(
+                dotRect.x + (dotRect.width / 2),
+                dotRect.y + (dotRect.height / 2),
+                0
+            );
             float radius = dotRect.width / 2;
 
             // Draw the main dot
@@ -191,14 +219,14 @@ namespace UnityMcpBridge.Editor.Windows
             );
             EditorGUILayout.Space(10);
 
-            // Python Server Status Section
+            // Python Server Installation Status Section
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.LabelField("Python Server Status", EditorStyles.boldLabel);
 
             // Status indicator with colored dot
-            var statusRect = EditorGUILayout.BeginHorizontal(GUILayout.Height(20));
-            DrawStatusDot(statusRect, pythonServerStatusColor);
-            EditorGUILayout.LabelField("      " + pythonServerStatus);
+            Rect installStatusRect = EditorGUILayout.BeginHorizontal(GUILayout.Height(20));
+            DrawStatusDot(installStatusRect, pythonServerInstallationStatusColor);
+            EditorGUILayout.LabelField("      " + pythonServerInstallationStatus);
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.LabelField($"Unity Port: {unityPort}");
@@ -249,13 +277,13 @@ namespace UnityMcpBridge.Editor.Windows
         private string WriteToConfig(string pythonDir, string configPath)
         {
             // Create configuration object for unityMCP
-            var unityMCPConfig = new McpConfigServer
+            McpConfigServer unityMCPConfig = new()
             {
                 command = "uv",
                 args = new[] { "--directory", pythonDir, "run", "server.py" },
             };
 
-            var jsonSettings = new JsonSerializerSettings { Formatting = Formatting.Indented };
+            JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
 
             // Read existing config if it exists
             string existingJson = "{}";
@@ -267,16 +295,13 @@ namespace UnityMcpBridge.Editor.Windows
                 }
                 catch (Exception e)
                 {
-                    UnityEngine.Debug.LogWarning($"Error reading existing config: {e.Message}.");
+                    Debug.LogWarning($"Error reading existing config: {e.Message}.");
                 }
             }
 
             // Parse the existing JSON while preserving all properties
             dynamic existingConfig = JsonConvert.DeserializeObject(existingJson);
-            if (existingConfig == null)
-            {
-                existingConfig = new Newtonsoft.Json.Linq.JObject();
-            }
+            existingConfig ??= new Newtonsoft.Json.Linq.JObject();
 
             // Ensure mcpServers object exists
             if (existingConfig.mcpServers == null)
@@ -311,7 +336,7 @@ namespace UnityMcpBridge.Editor.Windows
             string pythonDir = FindPackagePythonDirectory();
 
             // Create the manual configuration message
-            var jsonConfig = new McpConfig
+            McpConfig jsonConfig = new()
             {
                 mcpServers = new McpConfigServers
                 {
@@ -323,7 +348,7 @@ namespace UnityMcpBridge.Editor.Windows
                 },
             };
 
-            var jsonSettings = new JsonSerializerSettings { Formatting = Formatting.Indented };
+            JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
             string manualConfigJson = JsonConvert.SerializeObject(jsonConfig, jsonSettings);
 
             ManualConfigEditorWindow.ShowWindow(configPath, manualConfigJson, mcpClient);
@@ -331,17 +356,18 @@ namespace UnityMcpBridge.Editor.Windows
 
         private string FindPackagePythonDirectory()
         {
-            string pythonDir = "/path/to/your/unity-mcp/Python";
+            string pythonDir = ServerInstaller.GetServerPath();
 
             try
             {
                 // Try to find the package using Package Manager API
-                var request = UnityEditor.PackageManager.Client.List();
+                UnityEditor.PackageManager.Requests.ListRequest request =
+                    UnityEditor.PackageManager.Client.List();
                 while (!request.IsCompleted) { } // Wait for the request to complete
 
                 if (request.Status == UnityEditor.PackageManager.StatusCode.Success)
                 {
-                    foreach (var package in request.Result)
+                    foreach (UnityEditor.PackageManager.PackageInfo package in request.Result)
                     {
                         if (package.name == "com.justinpbarnett.unity-mcp")
                         {
@@ -360,7 +386,7 @@ namespace UnityMcpBridge.Editor.Windows
                 }
                 else if (request.Error != null)
                 {
-                    UnityEngine.Debug.LogError("Failed to list packages: " + request.Error.message);
+                    Debug.LogError("Failed to list packages: " + request.Error.message);
                 }
 
                 // If not found via Package Manager, try manual approaches
@@ -370,7 +396,7 @@ namespace UnityMcpBridge.Editor.Windows
                     Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python")),
                 };
 
-                foreach (var dir in possibleDirs)
+                foreach (string dir in possibleDirs)
                 {
                     if (Directory.Exists(dir) && File.Exists(Path.Combine(dir, "server.py")))
                     {
@@ -379,13 +405,11 @@ namespace UnityMcpBridge.Editor.Windows
                 }
 
                 // If still not found, return the placeholder path
-                UnityEngine.Debug.LogWarning(
-                    "Could not find Python directory, using placeholder path"
-                );
+                Debug.LogWarning("Could not find Python directory, using placeholder path");
             }
             catch (Exception e)
             {
-                UnityEngine.Debug.LogError($"Error finding package path: {e.Message}");
+                Debug.LogError($"Error finding package path: {e.Message}");
             }
 
             return pythonDir;
@@ -453,7 +477,7 @@ namespace UnityMcpBridge.Editor.Windows
                 }
 
                 ShowManualInstructionsWindow(configPath, mcpClient);
-                UnityEngine.Debug.LogError(
+                Debug.LogError(
                     $"Failed to configure {mcpClient.name}: {e.Message}\n{e.StackTrace}"
                 );
                 return $"Failed to configure {mcpClient.name}";
@@ -471,7 +495,7 @@ namespace UnityMcpBridge.Editor.Windows
             string pythonDir = FindPackagePythonDirectory();
 
             // Create the manual configuration message
-            var jsonConfig = new McpConfig
+            McpConfig jsonConfig = new()
             {
                 mcpServers = new McpConfigServers
                 {
@@ -483,7 +507,7 @@ namespace UnityMcpBridge.Editor.Windows
                 },
             };
 
-            var jsonSettings = new JsonSerializerSettings { Formatting = Formatting.Indented };
+            JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
             string manualConfigJson = JsonConvert.SerializeObject(jsonConfig, jsonSettings);
 
             ManualConfigEditorWindow.ShowWindow(configPath, manualConfigJson, mcpClient);
@@ -518,7 +542,7 @@ namespace UnityMcpBridge.Editor.Windows
                 }
 
                 string configJson = File.ReadAllText(configPath);
-                var config = JsonConvert.DeserializeObject<McpConfig>(configJson);
+                McpConfig config = JsonConvert.DeserializeObject<McpConfig>(configJson);
 
                 if (config?.mcpServers?.unityMCP != null)
                 {
