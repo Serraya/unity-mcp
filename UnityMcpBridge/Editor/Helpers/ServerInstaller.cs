@@ -11,7 +11,7 @@ namespace UnityMcpBridge.Editor.Helpers
     {
         private const string RootFolder = "UnityMCP";
         private const string ServerFolder = "UnityMcpServer";
-        private const string BranchName = "feature/install-overhaul";
+        private const string BranchName = "master";
         private const string GitUrl = "https://github.com/justinpbarnett/unity-mcp.git";
         private const string PyprojectUrl =
             "https://raw.githubusercontent.com/justinpbarnett/unity-mcp/refs/heads/"
@@ -46,7 +46,6 @@ namespace UnityMcpBridge.Editor.Helpers
 
                     if (IsNewerVersion(latestVersion, installedVersion))
                     {
-                        Debug.Log($"is newer version");
                         UpdateServer(saveLocation);
                     }
                     else { }
@@ -164,7 +163,6 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static void UpdateServer(string location)
         {
-            Debug.Log("updating server");
             RunCommand("git", $"pull origin {BranchName}", workingDirectory: location);
         }
 
