@@ -2182,38 +2182,137 @@ namespace UnityMcpBridge.Editor.Tools
         }
 
         /// <summary>
-        /// Creates a serializable representation of a Component.
-        /// TODO: Add property serialization.
+        /// Creates a serializable representation of a Component, attempting to serialize
+        /// public properties and fields using reflection.
         /// </summary>
         private static object GetComponentData(Component c)
         {
-            if (c == null)
-                return null;
+            if (c == null) return null;
+
             var data = new Dictionary<string, object>
             {
                 { "typeName", c.GetType().FullName },
-                { "instanceID", c.GetInstanceID() },
+                { "instanceID", c.GetInstanceID() }
             };
 
-            // Attempt to serialize public properties/fields (can be noisy/complex)
-            /*
-            try {
-                var properties = new Dictionary<string, object>();
-                var type = c.GetType();
-                BindingFlags flags = BindingFlags.Public | BindingFlags.Instance;
-                
-                foreach (var prop in type.GetProperties(flags).Where(p => p.CanRead && p.GetIndexParameters().Length == 0)) {
-                    try { properties[prop.Name] = prop.GetValue(c); } catch { }
+            var serializableProperties = new Dictionary<string, object>();
+            Type componentType = c.GetType();
+            // Include NonPublic flags for fields, keep Public for properties initially
+            BindingFlags fieldFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+            BindingFlags propFlags = BindingFlags.Public | BindingFlags.Instance;
+
+            // Process Properties (Still only public for properties)
+            // Using propFlags here
+            foreach (var propInfo in componentType.GetProperties(propFlags))
+            {
+                // Skip indexers and write-only properties, and skip the transform property as it's handled by GetGameObjectData
+                if (!propInfo.CanRead || propInfo.GetIndexParameters().Length > 0 || propInfo.Name == "transform") continue;
+
+                try
+                {
+                    object value = propInfo.GetValue(c);
+                    string propName = propInfo.Name;
+                    Type propType = propInfo.PropertyType;
+
+                    AddSerializableValue(serializableProperties, propName, propType, value);
                 }
-                foreach (var field in type.GetFields(flags)) {
-                     try { properties[field.Name] = field.GetValue(c); } catch { }
+                catch (Exception ex)
+                {
+                     Debug.LogWarning($"Could not read property {propInfo.Name} on {componentType.Name}: {ex.Message}");
                 }
-                data["properties"] = properties;
-            } catch (Exception ex) {
-                data["propertiesError"] = ex.Message;
             }
-            */
+
+            // Process Fields (Include NonPublic)
+            // Using fieldFlags here
+            foreach (var fieldInfo in componentType.GetFields(fieldFlags))
+            {
+                 // Skip backing fields for properties (common pattern)
+                 if (fieldInfo.Name.EndsWith("k__BackingField")) continue;
+
+                 // Only include public fields or non-public fields with [SerializeField]
+                 // Check if the field is explicitly marked with SerializeField or if it's public
+                 bool isSerializable = fieldInfo.IsPublic || fieldInfo.IsDefined(typeof(SerializeField), inherit: false); // inherit: false is typical for SerializeField
+
+                 if (!isSerializable) continue; // Skip if not public and not explicitly serialized
+
+                 try
+                {
+                    object value = fieldInfo.GetValue(c);
+                    string fieldName = fieldInfo.Name;
+                    Type fieldType = fieldInfo.FieldType;
+
+                    AddSerializableValue(serializableProperties, fieldName, fieldType, value);
+                }
+                catch (Exception ex)
+                {
+                     Debug.LogWarning($"Could not read field {fieldInfo.Name} on {componentType.Name}: {ex.Message}");
+                }
+            }
+
+            if (serializableProperties.Count > 0)
+            {
+                data["properties"] = serializableProperties; // Add the collected properties
+            }
+
             return data;
+        }
+
+        // Helper function to decide how to serialize different types
+        private static void AddSerializableValue(Dictionary<string, object> dict, string name, Type type, object value)
+        {
+            if (value == null)
+            {
+                dict[name] = null;
+                return;
+            }
+
+            // Primitives & Enums
+            if (type.IsPrimitive || type.IsEnum || type == typeof(string))
+            {
+                dict[name] = value;
+            }
+            // Known Unity Structs (add more as needed: Rect, Bounds, etc.)
+            else if (type == typeof(Vector2)) { var v = (Vector2)value; dict[name] = new { v.x, v.y }; }
+            else if (type == typeof(Vector3)) { var v = (Vector3)value; dict[name] = new { v.x, v.y, v.z }; }
+            else if (type == typeof(Vector4)) { var v = (Vector4)value; dict[name] = new { v.x, v.y, v.z, v.w }; }
+            else if (type == typeof(Quaternion)) { var q = (Quaternion)value; dict[name] = new { x = q.eulerAngles.x, y = q.eulerAngles.y, z = q.eulerAngles.z }; } // Serialize as Euler angles for readability
+            else if (type == typeof(Color)) { var c = (Color)value; dict[name] = new { c.r, c.g, c.b, c.a }; }
+            // UnityEngine.Object References
+            else if (typeof(UnityEngine.Object).IsAssignableFrom(type))
+            {
+                var obj = value as UnityEngine.Object;
+                if (obj != null) {
+                     // Use dynamic or a helper class for flexible properties if adding assetPath
+                     var refData = new Dictionary<string, object> {
+                        { "name", obj.name },
+                        { "instanceID", obj.GetInstanceID() },
+                        { "typeName", obj.GetType().FullName }
+                     };
+                     string assetPath = AssetDatabase.GetAssetPath(obj);
+                     if (!string.IsNullOrEmpty(assetPath)) {
+                        refData["assetPath"] = assetPath;
+                     }
+                     dict[name] = refData;
+
+                } else {
+                     dict[name] = null; // The object reference is null
+                }
+            }
+            // Add handling for basic Lists/Arrays of primitives? (Example for List<string>)
+            else if (type == typeof(List<string>)) {
+                 dict[name] = value as List<string>; // Directly serializable
+            }
+            else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>)) {
+                 // Could attempt to serialize lists of primitives/structs/references here if needed
+                 dict[name] = $"[Skipped List<{type.GetGenericArguments()[0].Name}>]";
+            }
+             else if (type.IsArray) {
+                 dict[name] = $"[Skipped Array<{type.GetElementType().Name}>]";
+             }
+            // Skip other complex types for now
+            else {
+                dict[name] = $"[Skipped complex type: {type.FullName}]";
+            }
         }
     }
 }
