@@ -157,6 +157,69 @@ namespace UnityMcpBridge.Editor.Helpers
             }
             // --- End Special handling for Transform --- 
 
+            // --- Special handling for Camera to avoid matrix-related crashes ---
+            if (componentType == typeof(Camera))
+            {
+                Camera cam = c as Camera;
+                var cameraProperties = new Dictionary<string, object>();
+
+                // List of safe properties to serialize
+                var safeProperties = new Dictionary<string, Func<object>>
+                {
+                    { "nearClipPlane", () => cam.nearClipPlane },
+                    { "farClipPlane", () => cam.farClipPlane },
+                    { "fieldOfView", () => cam.fieldOfView },
+                    { "renderingPath", () => (int)cam.renderingPath },
+                    { "actualRenderingPath", () => (int)cam.actualRenderingPath },
+                    { "allowHDR", () => cam.allowHDR },
+                    { "allowMSAA", () => cam.allowMSAA },
+                    { "allowDynamicResolution", () => cam.allowDynamicResolution },
+                    { "forceIntoRenderTexture", () => cam.forceIntoRenderTexture },
+                    { "orthographicSize", () => cam.orthographicSize },
+                    { "orthographic", () => cam.orthographic },
+                    { "opaqueSortMode", () => (int)cam.opaqueSortMode },
+                    { "transparencySortMode", () => (int)cam.transparencySortMode },
+                    { "depth", () => cam.depth },
+                    { "aspect", () => cam.aspect },
+                    { "cullingMask", () => cam.cullingMask },
+                    { "eventMask", () => cam.eventMask },
+                    { "backgroundColor", () => cam.backgroundColor },
+                    { "clearFlags", () => (int)cam.clearFlags },
+                    { "stereoEnabled", () => cam.stereoEnabled },
+                    { "stereoSeparation", () => cam.stereoSeparation },
+                    { "stereoConvergence", () => cam.stereoConvergence },
+                    { "enabled", () => cam.enabled },
+                    { "name", () => cam.name },
+                    { "tag", () => cam.tag },
+                    { "gameObject", () => new { name = cam.gameObject.name, instanceID = cam.gameObject.GetInstanceID() } }
+                };
+
+                foreach (var prop in safeProperties)
+                {
+                    try
+                    {
+                        var value = prop.Value();
+                        if (value != null)
+                        {
+                            AddSerializableValue(cameraProperties, prop.Key, value.GetType(), value);
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Silently skip any property that fails
+                        continue;
+                    }
+                }
+
+                return new Dictionary<string, object>
+                {
+                    { "typeName", componentType.FullName },
+                    { "instanceID", cam.GetInstanceID() },
+                    { "properties", cameraProperties }
+                };
+            }
+            // --- End Special handling for Camera ---
+
             var data = new Dictionary<string, object>
             {
                 { "typeName", componentType.FullName },
@@ -257,7 +320,13 @@ namespace UnityMcpBridge.Editor.Helpers
                 if (componentType == typeof(Camera) && 
                     (propName == "pixelRect" || 
                      propName == "rect" || 
-                     propName == "cullingMatrix"))
+                     propName == "cullingMatrix" ||
+                     propName == "useOcclusionCulling" ||
+                     propName == "worldToCameraMatrix" ||
+                     propName == "projectionMatrix" ||
+                     propName == "nonJitteredProjectionMatrix" ||
+                     propName == "previousViewProjectionMatrix" ||
+                     propName == "cameraToWorldMatrix"))
                 {
                     // Debug.Log($"[GetComponentData] Explicitly skipping Camera property: {propName}");
                     skipProperty = true;
@@ -265,7 +334,11 @@ namespace UnityMcpBridge.Editor.Helpers
                 // --- End Skip Camera Properties ---
 
                 // --- Skip specific potentially problematic Transform properties ---
-                if (componentType == typeof(Transform) && (propName == "lossyScale" || propName == "rotation"))
+                if (componentType == typeof(Transform) && 
+                    (propName == "lossyScale" || 
+                     propName == "rotation" ||
+                     propName == "worldToLocalMatrix" ||
+                     propName == "localToWorldMatrix"))
                 {
                     // Debug.Log($"[GetComponentData] Explicitly skipping Transform property: {propName}");
                     skipProperty = true;
