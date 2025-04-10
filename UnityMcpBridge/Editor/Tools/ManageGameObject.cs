@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Newtonsoft.Json; // Added for JsonSerializationException
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -21,6 +22,11 @@ namespace UnityMcpBridge.Editor.Tools
 
         public static object HandleCommand(JObject @params)
         {
+            // --- DEBUG --- Log the raw parameter value ---
+            // JToken rawIncludeFlag = @params["includeNonPublicSerialized"];
+            // Debug.Log($"[HandleCommand Debug] Raw includeNonPublicSerialized parameter: Type={rawIncludeFlag?.Type.ToString() ?? "Null"}, Value={rawIncludeFlag?.ToString() ?? "N/A"}");
+            // --- END DEBUG ---
+
             string action = @params["action"]?.ToString().ToLower();
             if (string.IsNullOrEmpty(action))
             {
@@ -36,6 +42,13 @@ namespace UnityMcpBridge.Editor.Tools
             string tag = @params["tag"]?.ToString();
             string layer = @params["layer"]?.ToString();
             JToken parentToken = @params["parent"];
+
+            // --- Add parameter for controlling non-public field inclusion ---
+            // Reverting to original logic, assuming external system will be fixed to send the parameter correctly.
+            bool includeNonPublicSerialized = @params["includeNonPublicSerialized"]?.ToObject<bool>() ?? true; // Default to true
+            // Revised: Explicitly check for null, default to false if null/missing. -- REMOVED
+            // bool includeNonPublicSerialized = @params["includeNonPublicSerialized"] != null && @params["includeNonPublicSerialized"].ToObject<bool>();
+            // --- End add parameter ---
 
             // --- Prefab Redirection Check ---
             string targetPath =
@@ -125,7 +138,8 @@ namespace UnityMcpBridge.Editor.Tools
                             return Response.Error(
                                 "'target' parameter required for get_components."
                             );
-                        return GetComponentsFromTarget(getCompTarget, searchMethod);
+                        // Pass the includeNonPublicSerialized flag here
+                        return GetComponentsFromTarget(getCompTarget, searchMethod, includeNonPublicSerialized);
                     case "add_component":
                         return AddComponentToTarget(@params, targetToken, searchMethod);
                     case "remove_component":
@@ -865,7 +879,7 @@ namespace UnityMcpBridge.Editor.Tools
             return Response.Success($"Found {results.Count} GameObject(s).", results);
         }
 
-        private static object GetComponentsFromTarget(string target, string searchMethod)
+        private static object GetComponentsFromTarget(string target, string searchMethod, bool includeNonPublicSerialized)
         {
             GameObject targetGo = FindObjectInternal(target, searchMethod);
             if (targetGo == null)
@@ -878,7 +892,8 @@ namespace UnityMcpBridge.Editor.Tools
             try
             {
                 Component[] components = targetGo.GetComponents<Component>();
-                var componentData = components.Select(c => GetComponentData(c)).ToList();
+                // Pass the flag to GetComponentData
+                var componentData = components.Select(c => GetComponentData(c, includeNonPublicSerialized)).ToList();
                 return Response.Success(
                     $"Retrieved {componentData.Count} components from '{targetGo.name}'.",
                     componentData
@@ -1815,6 +1830,7 @@ namespace UnityMcpBridge.Editor.Tools
                     string materialPath = token["path"]?.ToString();
                     if (!string.IsNullOrEmpty(materialPath))
                     {
+#if UNITY_EDITOR // AssetDatabase is editor-only
                         // Load the material by path
                         Material material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
                         if (material != null)
@@ -1836,9 +1852,14 @@ namespace UnityMcpBridge.Editor.Tools
                             );
                             return null;
                         }
+#else
+                        Debug.LogWarning("[ConvertJTokenToType] Material loading by path is only supported in the Unity Editor.");
+                        return null;
+#endif
                     }
 
                     // If no path is specified, could be a dynamic material or instance set by reference
+                    // In a build, we can't load by path, so we rely on direct reference or null.
                     return null;
                 }
 
@@ -1970,6 +1991,7 @@ namespace UnityMcpBridge.Editor.Tools
                         string assetPath = token.ToString();
                         if (!string.IsNullOrEmpty(assetPath))
                         {
+#if UNITY_EDITOR // AssetDatabase is editor-only
                             // Attempt to load the asset from the provided path using the target type
                             UnityEngine.Object loadedAsset = AssetDatabase.LoadAssetAtPath(
                                 assetPath,
@@ -1983,10 +2005,13 @@ namespace UnityMcpBridge.Editor.Tools
                             {
                                 // Log a warning if the asset could not be found at the path
                                 Debug.LogWarning(
-                                    $"[ConvertJTokenToType] Could not load asset of type '{targetType.Name}' from path: '{assetPath}'. Make sure the path is correct and the asset exists."
-                                );
+                                    $"[ConvertJTokenToType] Could not load asset of type '{targetType.Name}' from path: '{assetPath}'. Make sure the path is correct and the asset exists.");
                                 return null;
                             }
+#else
+                            Debug.LogWarning($"[ConvertJTokenToType] Asset loading by path ('{assetPath}') is only supported in the Unity Editor.");
+                            return null;
+#endif
                         }
                         else
                         {
@@ -2181,77 +2206,174 @@ namespace UnityMcpBridge.Editor.Tools
             };
         }
 
+        // --- Metadata Caching for Reflection ---
+        private class CachedMetadata
+        {
+            public readonly List<PropertyInfo> SerializableProperties;
+            public readonly List<FieldInfo> SerializableFields;
+
+            public CachedMetadata(List<PropertyInfo> properties, List<FieldInfo> fields)
+            {
+                SerializableProperties = properties;
+                SerializableFields = fields;
+            }
+        }
+        // Key becomes Tuple<Type, bool>
+        private static readonly Dictionary<Tuple<Type, bool>, CachedMetadata> _metadataCache = new Dictionary<Tuple<Type, bool>, CachedMetadata>();
+        // --- End Metadata Caching ---
+
         /// <summary>
         /// Creates a serializable representation of a Component, attempting to serialize
-        /// public properties and fields using reflection.
+        /// public properties and fields using reflection, with caching and control over non-public fields.
         /// </summary>
-        private static object GetComponentData(Component c)
+        // Add the flag parameter here
+        private static object GetComponentData(Component c, bool includeNonPublicSerializedFields = true)
         {
             if (c == null) return null;
+            Type componentType = c.GetType();
+
+            // TEMP: Clear cache for testing again -- REMOVING
+            // _metadataCache.Clear(); 
 
             var data = new Dictionary<string, object>
             {
-                { "typeName", c.GetType().FullName },
+                { "typeName", componentType.FullName },
                 { "instanceID", c.GetInstanceID() }
             };
 
-            var serializableProperties = new Dictionary<string, object>();
-            Type componentType = c.GetType();
-            // Include NonPublic flags for fields, keep Public for properties initially
-            BindingFlags fieldFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-            BindingFlags propFlags = BindingFlags.Public | BindingFlags.Instance;
-
-            // Process Properties (Still only public for properties)
-            // Using propFlags here
-            foreach (var propInfo in componentType.GetProperties(propFlags))
+            // --- Get Cached or Generate Metadata (using new cache key) ---
+            // _metadataCache.Clear(); // TEMP: Clear cache for testing - REMOVED
+            Tuple<Type, bool> cacheKey = new Tuple<Type, bool>(componentType, includeNonPublicSerializedFields);
+            if (!_metadataCache.TryGetValue(cacheKey, out CachedMetadata cachedData))
             {
-                // Skip indexers and write-only properties, and skip the transform property as it's handled by GetGameObjectData
-                if (!propInfo.CanRead || propInfo.GetIndexParameters().Length > 0 || propInfo.Name == "transform") continue;
+                // ---- ADD THIS ----
+                // UnityEngine.Debug.Log($"[MCP Cache Test] Metadata MISS for Type: {componentType.FullName}, IncludeNonPublic: {includeNonPublicSerializedFields}. Generating...");
+                // -----------------
+                var propertiesToCache = new List<PropertyInfo>();
+                var fieldsToCache = new List<FieldInfo>();
+//test
+                // Traverse the hierarchy from the component type up to MonoBehaviour
+                Type currentType = componentType;
+                while (currentType != null && currentType != typeof(MonoBehaviour) && currentType != typeof(object))
+                {
+                    // Get properties declared only at the current type level
+                    BindingFlags propFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+                    foreach (var propInfo in currentType.GetProperties(propFlags))
+                    {
+                        // Basic filtering (readable, not indexer, not transform which is handled elsewhere)
+                        if (!propInfo.CanRead || propInfo.GetIndexParameters().Length > 0 || propInfo.Name == "transform") continue;
+                        // Add if not already added (handles overrides - keep the most derived version)
+                        if (!propertiesToCache.Any(p => p.Name == propInfo.Name)) {
+                             propertiesToCache.Add(propInfo);
+                        }
+                    }
+
+                    // Get fields declared only at the current type level (both public and non-public)
+                    BindingFlags fieldFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+                    var declaredFields = currentType.GetFields(fieldFlags);
+
+                    // Process the declared Fields for caching
+                    foreach (var fieldInfo in declaredFields)
+                    {
+                        if (fieldInfo.Name.EndsWith("k__BackingField")) continue; // Skip backing fields
+
+                         // Add if not already added (handles hiding - keep the most derived version)
+                         if (fieldsToCache.Any(f => f.Name == fieldInfo.Name)) continue;
+
+                        bool shouldInclude = false;
+                        if (includeNonPublicSerializedFields)
+                        {
+                            // If TRUE, include Public OR NonPublic with [SerializeField]
+                            shouldInclude = fieldInfo.IsPublic || (fieldInfo.IsPrivate && fieldInfo.IsDefined(typeof(SerializeField), inherit: false));
+                        }
+                        else // includeNonPublicSerializedFields is FALSE
+                        {
+                            // If FALSE, include ONLY if it is explicitly Public.
+                            shouldInclude = fieldInfo.IsPublic;
+                        }
+
+                        if (shouldInclude)
+                        {
+                            fieldsToCache.Add(fieldInfo);
+                        }
+                    }
+                    
+                    // Move to the base type
+                    currentType = currentType.BaseType;
+                }
+                // --- End Hierarchy Traversal ---
+
+                // REMOVED Original non-hierarchical property/field gathering logic
+                /*
+                BindingFlags propFlags = BindingFlags.Public | BindingFlags.Instance;
+                BindingFlags fieldFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+
+                foreach (var propInfo in componentType.GetProperties(propFlags)) { ... }
+                var allQueriedFields = componentType.GetFields(fieldFlags);
+                foreach (var fieldInfo in allQueriedFields) { ... }
+                */
+
+                cachedData = new CachedMetadata(propertiesToCache, fieldsToCache);
+                _metadataCache[cacheKey] = cachedData; // Add to cache with combined key
+            }
+            // ---- ADD THIS ----
+            // UnityEngine.Debug.Log($"[MCP Cache Test] Metadata HIT for Type: {componentType.FullName}, IncludeNonPublic: {includeNonPublicSerializedFields}. Using cache.");
+            // -----------------
+            // --- End Get Cached or Generate Metadata ---
+
+            // --- Use cached metadata (no changes needed here) ---
+            var serializablePropertiesOutput = new Dictionary<string, object>();
+            // Use cached properties
+            foreach (var propInfo in cachedData.SerializableProperties)
+            {
+                // --- Skip known obsolete/problematic Component shortcut properties ---
+                string propName = propInfo.Name;
+                if (propName == "rigidbody" || propName == "rigidbody2D" || propName == "camera" ||
+                    propName == "light" || propName == "animation" || propName == "constantForce" ||
+                    propName == "renderer" || propName == "audio" || propName == "networkView" ||
+                    propName == "collider" || propName == "collider2D" || propName == "hingeJoint" ||
+                    propName == "particleSystem" || 
+                    // Also skip potentially problematic Matrix properties prone to cycles/errors
+                    propName == "worldToLocalMatrix" || propName == "localToWorldMatrix")
+                 {
+                     continue; // Skip these properties
+                 }
+                // --- End Skip ---
 
                 try
                 {
                     object value = propInfo.GetValue(c);
-                    string propName = propInfo.Name;
+                    // string propName = propInfo.Name; // Moved up
                     Type propType = propInfo.PropertyType;
-
-                    AddSerializableValue(serializableProperties, propName, propType, value);
+                    AddSerializableValue(serializablePropertiesOutput, propName, propType, value);
                 }
                 catch (Exception ex)
                 {
-                     Debug.LogWarning($"Could not read property {propInfo.Name} on {componentType.Name}: {ex.Message}");
+                     Debug.LogWarning($"Could not read property {propName} on {componentType.Name}: {ex.Message}");
                 }
             }
 
-            // Process Fields (Include NonPublic)
-            // Using fieldFlags here
-            foreach (var fieldInfo in componentType.GetFields(fieldFlags))
+            // Use cached fields
+            foreach (var fieldInfo in cachedData.SerializableFields)
             {
-                 // Skip backing fields for properties (common pattern)
-                 if (fieldInfo.Name.EndsWith("k__BackingField")) continue;
-
-                 // Only include public fields or non-public fields with [SerializeField]
-                 // Check if the field is explicitly marked with SerializeField or if it's public
-                 bool isSerializable = fieldInfo.IsPublic || fieldInfo.IsDefined(typeof(SerializeField), inherit: false); // inherit: false is typical for SerializeField
-
-                 if (!isSerializable) continue; // Skip if not public and not explicitly serialized
-
                  try
                 {
                     object value = fieldInfo.GetValue(c);
                     string fieldName = fieldInfo.Name;
                     Type fieldType = fieldInfo.FieldType;
-
-                    AddSerializableValue(serializableProperties, fieldName, fieldType, value);
+                    AddSerializableValue(serializablePropertiesOutput, fieldName, fieldType, value);
                 }
                 catch (Exception ex)
                 {
+                     // Corrected: Use fieldInfo.Name here as fieldName is out of scope
                      Debug.LogWarning($"Could not read field {fieldInfo.Name} on {componentType.Name}: {ex.Message}");
                 }
             }
+            // --- End Use cached metadata ---
 
-            if (serializableProperties.Count > 0)
+            if (serializablePropertiesOutput.Count > 0)
             {
-                data["properties"] = serializableProperties; // Add the collected properties
+                data["properties"] = serializablePropertiesOutput;
             }
 
             return data;
@@ -2282,16 +2404,23 @@ namespace UnityMcpBridge.Editor.Tools
             {
                 var obj = value as UnityEngine.Object;
                 if (obj != null) {
-                     // Use dynamic or a helper class for flexible properties if adding assetPath
                      var refData = new Dictionary<string, object> {
                         { "name", obj.name },
                         { "instanceID", obj.GetInstanceID() },
                         { "typeName", obj.GetType().FullName }
                      };
+                     // Attempt to get asset path and GUID
+#if UNITY_EDITOR // AssetDatabase is editor-only
                      string assetPath = AssetDatabase.GetAssetPath(obj);
                      if (!string.IsNullOrEmpty(assetPath)) {
                         refData["assetPath"] = assetPath;
+                        // Add GUID if asset path exists
+                        string guid = AssetDatabase.AssetPathToGUID(assetPath);
+                        if (!string.IsNullOrEmpty(guid)) {
+                           refData["guid"] = guid;
+                        }
                      }
+#endif
                      dict[name] = refData;
 
                 } else {
@@ -2302,16 +2431,46 @@ namespace UnityMcpBridge.Editor.Tools
             else if (type == typeof(List<string>)) {
                  dict[name] = value as List<string>; // Directly serializable
             }
-            else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>)) {
-                 // Could attempt to serialize lists of primitives/structs/references here if needed
-                 dict[name] = $"[Skipped List<{type.GetGenericArguments()[0].Name}>]";
+            // Explicit handling for List<Vector3>
+            else if (type == typeof(List<Vector3>)) {
+                var vectorList = value as List<Vector3>;
+                if (vectorList != null) {
+                    // Serialize each Vector3 into a list of dictionaries
+                    var serializableList = vectorList.Select(v => new Dictionary<string, float> {
+                        { "x", v.x },
+                        { "y", v.y },
+                        { "z", v.z }
+                    }).ToList();
+                    dict[name] = serializableList;
+                } else {
+                    dict[name] = null; // Or an empty list, or an error message
+                }
             }
-             else if (type.IsArray) {
-                 dict[name] = $"[Skipped Array<{type.GetElementType().Name}>]";
-             }
-            // Skip other complex types for now
+            // Attempt to serialize other complex types using JToken
             else {
-                dict[name] = $"[Skipped complex type: {type.FullName}]";
+                 // UnityEngine.Debug.Log($"[MCP Debug] Attempting JToken serialization for field: {name} (Type: {type.FullName})"); // Removed this debug log
+                 try
+                 {
+                    // Let Newtonsoft.Json attempt to serialize the value into a JToken
+                    JToken jValue = JToken.FromObject(value);
+                    // We store the JToken itself; the final JSON serialization will handle it.
+                    // Important: Avoid potential cycles by not serializing excessively deep objects here.
+                    // JToken.FromObject handles basic cycle detection, but complex scenarios might still occur.
+                    // Consider adding depth limits if necessary.
+                    dict[name] = jValue; 
+                 }
+                 catch (JsonSerializationException jsonEx)
+                 {
+                    // Handle potential serialization issues (e.g., cycles, unsupported types)
+                     Debug.LogWarning($"[AddSerializableValue] Could not serialize complex type '{type.FullName}' for property '{name}' using JToken: {jsonEx.Message}. Storing skip message.");
+                     dict[name] = $"[Serialization Error: {type.FullName} - {jsonEx.Message}]";
+                 }
+                 catch (Exception ex)
+                 {
+                     // Catch other unexpected errors during serialization
+                     Debug.LogWarning($"[AddSerializableValue] Unexpected error serializing complex type '{type.FullName}' for property '{name}' using JToken: {ex.Message}");
+                     dict[name] = $"[Serialization Error: {type.FullName} - Unexpected]";
+                 }
             }
         }
     }
