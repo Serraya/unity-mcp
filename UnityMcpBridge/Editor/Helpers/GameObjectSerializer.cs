@@ -13,7 +13,7 @@ namespace UnityMcpBridge.Editor.Helpers
     /// <summary>
     /// Handles serialization of GameObjects and Components for MCP responses.
     /// Includes reflection helpers and caching for performance.
-    /// </summary>
+    /// </summary> tew
     public static class GameObjectSerializer
     {
         // --- Data Serialization ---
@@ -121,8 +121,41 @@ namespace UnityMcpBridge.Editor.Helpers
         // Add the flag parameter here
         public static object GetComponentData(Component c, bool includeNonPublicSerializedFields = true)
         {
+            // --- Add Early Logging --- 
+            // Debug.Log($"[GetComponentData] Starting for component: {c?.GetType()?.FullName ?? "null"} (ID: {c?.GetInstanceID() ?? 0})");
+            // --- End Early Logging ---
+            
             if (c == null) return null;
             Type componentType = c.GetType();
+
+            // --- Special handling for Transform to avoid reflection crashes and problematic properties --- 
+            if (componentType == typeof(Transform))
+            {
+                Transform tr = c as Transform;
+                // Debug.Log($"[GetComponentData] Manually serializing Transform (ID: {tr.GetInstanceID()})");
+                return new Dictionary<string, object>
+                {
+                    { "typeName", componentType.FullName },
+                    { "instanceID", tr.GetInstanceID() },
+                    // Manually extract known-safe properties. Avoid Quaternion 'rotation' and 'lossyScale'.
+                    { "position", CreateTokenFromValue(tr.position, typeof(Vector3))?.ToObject<object>() ?? new JObject() },
+                    { "localPosition", CreateTokenFromValue(tr.localPosition, typeof(Vector3))?.ToObject<object>() ?? new JObject() },
+                    { "eulerAngles", CreateTokenFromValue(tr.eulerAngles, typeof(Vector3))?.ToObject<object>() ?? new JObject() }, // Use Euler angles
+                    { "localEulerAngles", CreateTokenFromValue(tr.localEulerAngles, typeof(Vector3))?.ToObject<object>() ?? new JObject() },
+                    { "localScale", CreateTokenFromValue(tr.localScale, typeof(Vector3))?.ToObject<object>() ?? new JObject() },
+                    { "right", CreateTokenFromValue(tr.right, typeof(Vector3))?.ToObject<object>() ?? new JObject() },
+                    { "up", CreateTokenFromValue(tr.up, typeof(Vector3))?.ToObject<object>() ?? new JObject() },
+                    { "forward", CreateTokenFromValue(tr.forward, typeof(Vector3))?.ToObject<object>() ?? new JObject() },
+                    { "parentInstanceID", tr.parent?.gameObject.GetInstanceID() ?? 0 },
+                    { "rootInstanceID", tr.root?.gameObject.GetInstanceID() ?? 0 },
+                    { "childCount", tr.childCount },
+                    // Include standard Object/Component properties
+                    { "name", tr.name }, 
+                    { "tag", tr.tag }, 
+                    { "gameObjectInstanceID", tr.gameObject?.GetInstanceID() ?? 0 }
+                };
+            }
+            // --- End Special handling for Transform --- 
 
             var data = new Dictionary<string, object>
             {
@@ -195,11 +228,18 @@ namespace UnityMcpBridge.Editor.Helpers
 
             // --- Use cached metadata ---
             var serializablePropertiesOutput = new Dictionary<string, object>();
+            
+            // --- Add Logging Before Property Loop ---
+            // Debug.Log($"[GetComponentData] Starting property loop for {componentType.Name}...");
+            // --- End Logging Before Property Loop ---
+
             // Use cached properties
             foreach (var propInfo in cachedData.SerializableProperties)
             {
-                // --- Skip known obsolete/problematic Component shortcut properties ---
                 string propName = propInfo.Name;
+
+                // --- Skip known obsolete/problematic Component shortcut properties ---
+                bool skipProperty = false;
                 if (propName == "rigidbody" || propName == "rigidbody2D" || propName == "camera" ||
                     propName == "light" || propName == "animation" || propName == "constantForce" ||
                     propName == "renderer" || propName == "audio" || propName == "networkView" ||
@@ -208,27 +248,63 @@ namespace UnityMcpBridge.Editor.Helpers
                     // Also skip potentially problematic Matrix properties prone to cycles/errors
                     propName == "worldToLocalMatrix" || propName == "localToWorldMatrix")
                  {
-                     continue; // Skip these properties
+                     // Debug.Log($"[GetComponentData] Explicitly skipping generic property: {propName}"); // Optional log
+                     skipProperty = true;
                  }
-                // --- End Skip ---
+                // --- End Skip Generic Properties ---
+
+                // --- Skip specific potentially problematic Camera properties ---
+                if (componentType == typeof(Camera) && 
+                    (propName == "pixelRect" || 
+                     propName == "rect" || 
+                     propName == "cullingMatrix"))
+                {
+                    // Debug.Log($"[GetComponentData] Explicitly skipping Camera property: {propName}");
+                    skipProperty = true;
+                }
+                // --- End Skip Camera Properties ---
+
+                // --- Skip specific potentially problematic Transform properties ---
+                if (componentType == typeof(Transform) && (propName == "lossyScale" || propName == "rotation"))
+                {
+                    // Debug.Log($"[GetComponentData] Explicitly skipping Transform property: {propName}");
+                    skipProperty = true;
+                }
+                // --- End Skip Transform Properties ---
+
+                 // Skip if flagged
+                 if (skipProperty)
+                 {
+                    continue;
+                 }
 
                 try
                 {
+                    // --- Add detailed logging --- 
+                    // Debug.Log($"[GetComponentData] Accessing: {componentType.Name}.{propName}");
+                    // --- End detailed logging ---
                     object value = propInfo.GetValue(c);
                     Type propType = propInfo.PropertyType;
                     AddSerializableValue(serializablePropertiesOutput, propName, propType, value);
                 }
                 catch (Exception ex)
                 {
-                     Debug.LogWarning($"Could not read property {propName} on {componentType.Name}: {ex.Message}");
+                     // Debug.LogWarning($"Could not read property {propName} on {componentType.Name}: {ex.Message}");
                 }
             }
+
+            // --- Add Logging Before Field Loop ---
+            // Debug.Log($"[GetComponentData] Starting field loop for {componentType.Name}...");
+            // --- End Logging Before Field Loop ---
 
             // Use cached fields
             foreach (var fieldInfo in cachedData.SerializableFields)
             {
                  try
                 {
+                    // --- Add detailed logging for fields --- 
+                    // Debug.Log($"[GetComponentData] Accessing Field: {componentType.Name}.{fieldInfo.Name}");
+                    // --- End detailed logging for fields ---
                     object value = fieldInfo.GetValue(c);
                     string fieldName = fieldInfo.Name;
                     Type fieldType = fieldInfo.FieldType;
@@ -236,7 +312,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 }
                 catch (Exception ex)
                 {
-                     Debug.LogWarning($"Could not read field {fieldInfo.Name} on {componentType.Name}: {ex.Message}");
+                     // Debug.LogWarning($"Could not read field {fieldInfo.Name} on {componentType.Name}: {ex.Message}");
                 }
             }
             // --- End Use cached metadata ---
@@ -273,7 +349,7 @@ namespace UnityMcpBridge.Editor.Helpers
             catch (Exception e)
             {
                 // Catch potential errors during JToken conversion or addition to dictionary
-                 Debug.LogWarning($"[AddSerializableValue] Error processing value for '{name}' (Type: {type.FullName}): {e.Message}. Skipping.");
+                 // Debug.LogWarning($"[AddSerializableValue] Error processing value for '{name}' (Type: {type.FullName}): {e.Message}. Skipping.");
             }
         }
 
@@ -329,7 +405,7 @@ namespace UnityMcpBridge.Editor.Helpers
                     {
                         return jValue.Value;
                     }
-                    Debug.LogWarning($"Unsupported JTokenType encountered: {token.Type}. Returning null.");
+                    // Debug.LogWarning($"Unsupported JTokenType encountered: {token.Type}. Returning null.");
                     return null;
             }
         }
@@ -365,12 +441,12 @@ namespace UnityMcpBridge.Editor.Helpers
             }
             catch (JsonSerializationException e)
             {
-                Debug.LogWarning($"[GameObjectSerializer] Newtonsoft.Json Error serializing value of type {type.FullName}: {e.Message}. Skipping property/field.");
+                // Debug.LogWarning($"[GameObjectSerializer] Newtonsoft.Json Error serializing value of type {type.FullName}: {e.Message}. Skipping property/field.");
                  return null; // Indicate serialization failure
             }
             catch (Exception e) // Catch other unexpected errors
             {
-                Debug.LogWarning($"[GameObjectSerializer] Unexpected error serializing value of type {type.FullName}: {e}. Skipping property/field.");
+                // Debug.LogWarning($"[GameObjectSerializer] Unexpected error serializing value of type {type.FullName}: {e}. Skipping property/field.");
                 return null; // Indicate serialization failure
             }
         }

@@ -837,12 +837,57 @@ namespace UnityMcpBridge.Editor.Tools
 
             try
             {
-                Component[] components = targetGo.GetComponents<Component>();
-                // Use the new serializer helper and pass the flag
-                var componentData = components.Select(c => Helpers.GameObjectSerializer.GetComponentData(c, includeNonPublicSerialized)).ToList();
+                // --- Get components, immediately copy to list, and null original array --- 
+                Component[] originalComponents = targetGo.GetComponents<Component>();
+                List<Component> componentsToIterate = new List<Component>(originalComponents ?? Array.Empty<Component>()); // Copy immediately, handle null case
+                int componentCount = componentsToIterate.Count; 
+                originalComponents = null; // Null the original reference
+                // Debug.Log($"[GetComponentsFromTarget] Found {componentCount} components on {targetGo.name}. Copied to list, nulled original. Starting REVERSE for loop...");
+                // --- End Copy and Null --- 
+                
+                var componentData = new List<object>();
+                
+                for (int i = componentCount - 1; i >= 0; i--) // Iterate backwards over the COPY
+                {
+                    Component c = componentsToIterate[i]; // Use the copy
+                    if (c == null) 
+                    {
+                        // Debug.LogWarning($"[GetComponentsFromTarget REVERSE for] Encountered a null component at index {i} on {targetGo.name}. Skipping.");
+                        continue; // Safety check
+                    }
+                    // Debug.Log($"[GetComponentsFromTarget REVERSE for] Processing component: {c.GetType()?.FullName ?? "null"} (ID: {c.GetInstanceID()}) at index {i} on {targetGo.name}");
+                    try 
+                    {
+                        var data = Helpers.GameObjectSerializer.GetComponentData(c, includeNonPublicSerialized);
+                        if (data != null) // Ensure GetComponentData didn't return null
+                        {
+                            componentData.Insert(0, data); // Insert at beginning to maintain original order in final list
+                        }
+                        // else
+                        // {
+                        //     Debug.LogWarning($"[GetComponentsFromTarget REVERSE for] GetComponentData returned null for component {c.GetType().FullName} (ID: {c.GetInstanceID()}) on {targetGo.name}. Skipping addition.");
+                        // }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"[GetComponentsFromTarget REVERSE for] Error processing component {c.GetType().FullName} (ID: {c.GetInstanceID()}) on {targetGo.name}: {ex.Message}\n{ex.StackTrace}");
+                        // Optionally add placeholder data or just skip
+                        componentData.Insert(0, new JObject( // Insert error marker at beginning
+                            new JProperty("typeName", c.GetType().FullName + " (Serialization Error)"),
+                            new JProperty("instanceID", c.GetInstanceID()),
+                            new JProperty("error", ex.Message)
+                        ));
+                    }
+                }
+                // Debug.Log($"[GetComponentsFromTarget] Finished REVERSE for loop.");
+                
+                // Cleanup the list we created
+                componentsToIterate.Clear();
+                componentsToIterate = null;
+
                 return Response.Success(
                     $"Retrieved {componentData.Count} components from '{targetGo.name}'.",
-                    componentData
+                    componentData // List was built in original order
                 );
             }
             catch (Exception e)
