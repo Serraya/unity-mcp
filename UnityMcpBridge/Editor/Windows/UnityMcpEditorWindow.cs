@@ -168,7 +168,7 @@ namespace UnityMcpBridge.Editor.Windows
                         {
                             servers = new
                             {
-                                UnityMCP = new
+                                unityMCP = new
                                 {
                                     command = "uv",
                                     args = new[] { "--directory", pythonDir, "run", "server.py" }
@@ -180,6 +180,7 @@ namespace UnityMcpBridge.Editor.Windows
                     JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
                     string manualConfigJson = JsonConvert.SerializeObject(vscodeConfig, jsonSettings);
                     
+                    // Use the VSCodeManualSetupWindow directly since we're in the same namespace
                     VSCodeManualSetupWindow.ShowWindow(configPath, manualConfigJson);
                 }
             }
@@ -653,7 +654,7 @@ namespace UnityMcpBridge.Editor.Windows
                             var args = config.mcp.servers.unityMCP.args.ToObject<string[]>();
                             
                             if (pythonDir != null && 
-                                Array.Exists(args, arg => arg.Contains(pythonDir, StringComparison.Ordinal)))
+                                Array.Exists(args, new Predicate<string>(arg => arg.Contains(pythonDir, StringComparison.Ordinal))))
                             {
                                 mcpClient.SetStatus(McpStatus.Configured);
                             }
