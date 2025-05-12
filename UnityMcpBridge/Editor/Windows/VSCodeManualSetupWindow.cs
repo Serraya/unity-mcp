@@ -7,14 +7,6 @@ namespace UnityMcpBridge.Editor.Windows
 {
     public class VSCodeManualSetupWindow : ManualConfigEditorWindow
     {
-        // Not defining fields that are inherited from ManualConfigEditorWindow:
-        // protected string configPath;
-        // protected string configJson;
-        // protected Vector2 scrollPos;
-        // protected bool pathCopied;
-        // protected bool jsonCopied;
-        // protected float copyFeedbackTimer;
-        // protected McpClient mcpClient;
         public static new void ShowWindow(string configPath, string configJson)
         {
             var window = GetWindow<VSCodeManualSetupWindow>("VSCode GitHub Copilot Setup");
