@@ -5,25 +5,34 @@ using UnityMcpBridge.Editor.Models;
 
 namespace UnityMcpBridge.Editor.Windows
 {
-    public class VSCodeManualSetupWindow : EditorWindow
+    public class VSCodeManualSetupWindow : ManualConfigEditorWindow
     {
-        private string configPath;
-        private string configJson;
-        private Vector2 scrollPos;
-        private bool pathCopied = false;
-        private bool jsonCopied = false;
-        private float copyFeedbackTimer = 0;
-
-        public static void ShowWindow(string configPath, string configJson)
+        // Not defining fields that are inherited from ManualConfigEditorWindow:
+        // protected string configPath;
+        // protected string configJson;
+        // protected Vector2 scrollPos;
+        // protected bool pathCopied;
+        // protected bool jsonCopied;
+        // protected float copyFeedbackTimer;
+        // protected McpClient mcpClient;
+        public static new void ShowWindow(string configPath, string configJson)
         {
-            VSCodeManualSetupWindow window = GetWindow<VSCodeManualSetupWindow>("VSCode GitHub Copilot Setup");
+            var window = GetWindow<VSCodeManualSetupWindow>("VSCode GitHub Copilot Setup");
             window.configPath = configPath;
             window.configJson = configJson;
             window.minSize = new Vector2(550, 500);
+            
+            // Create a McpClient for VSCode
+            window.mcpClient = new McpClient
+            {
+                name = "VSCode GitHub Copilot",
+                mcpType = McpTypes.VSCode
+            };
+            
             window.Show();
         }
 
-        private void OnGUI()
+        protected override void OnGUI()
         {
             scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 
@@ -133,6 +142,12 @@ namespace UnityMcpBridge.Editor.Windows
                     "User",
                     "settings.json"
                 );
+            }
+
+            // Store the path in the base class config path
+            if (string.IsNullOrEmpty(configPath))
+            {
+                configPath = displayPath;
             }
 
             // Prevent text overflow by allowing the text field to wrap
@@ -279,19 +294,10 @@ namespace UnityMcpBridge.Editor.Windows
             EditorGUILayout.EndScrollView();
         }
 
-        private void Update()
+        protected override void Update()
         {
-            // Handle the feedback message timer
-            if (copyFeedbackTimer > 0)
-            {
-                copyFeedbackTimer -= Time.deltaTime;
-                if (copyFeedbackTimer <= 0)
-                {
-                    pathCopied = false;
-                    jsonCopied = false;
-                    Repaint();
-                }
-            }
+            // Call the base implementation which handles the copy feedback timer
+            base.Update();
         }
     }
 }

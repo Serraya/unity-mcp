@@ -8,13 +8,13 @@ namespace UnityMcpBridge.Editor.Windows
     // Editor window to display manual configuration instructions
     public class ManualConfigEditorWindow : EditorWindow
     {
-        private string configPath;
-        private string configJson;
-        private Vector2 scrollPos;
-        private bool pathCopied = false;
-        private bool jsonCopied = false;
-        private float copyFeedbackTimer = 0;
-        private McpClient mcpClient;
+        protected string configPath;
+        protected string configJson;
+        protected Vector2 scrollPos;
+        protected bool pathCopied = false;
+        protected bool jsonCopied = false;
+        protected float copyFeedbackTimer = 0;
+        protected McpClient mcpClient;
 
         public static void ShowWindow(string configPath, string configJson, McpClient mcpClient)
         {
@@ -26,7 +26,7 @@ namespace UnityMcpBridge.Editor.Windows
             window.Show();
         }
 
-        private void OnGUI()
+        protected virtual void OnGUI()
         {
             scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 
@@ -245,7 +245,7 @@ namespace UnityMcpBridge.Editor.Windows
             EditorGUILayout.EndScrollView();
         }
 
-        private void Update()
+        protected virtual void Update()
         {
             // Handle the feedback message timer
             if (copyFeedbackTimer > 0)
