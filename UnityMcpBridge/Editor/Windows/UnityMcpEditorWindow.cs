@@ -409,44 +409,46 @@ namespace UnityMcpBridge.Editor.Windows
             string pythonDir = FindPackagePythonDirectory();
             string manualConfigJson;
             
-            if (mcpClient.mcpType == McpTypes.VSCode)
+            // Create common JsonSerializerSettings
+            JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
+            
+            // Use switch statement to handle different client types
+            switch (mcpClient.mcpType)
             {
-                // Create VSCode-specific configuration with proper format
-                var vscodeConfig = new
-                {
-                    mcp = new
+                case McpTypes.VSCode:
+                    // Create VSCode-specific configuration with proper format
+                    var vscodeConfig = new
                     {
-                        servers = new
+                        mcp = new
                         {
-                            unityMCP = new
+                            servers = new
                             {
-                                command = "uv",
-                                args = new[] { "--directory", pythonDir, "run", "server.py" }
+                                unityMCP = new
+                                {
+                                    command = "uv",
+                                    args = new[] { "--directory", pythonDir, "run", "server.py" }
+                                }
                             }
                         }
-                    }
-                };
-                
-                JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
-                manualConfigJson = JsonConvert.SerializeObject(vscodeConfig, jsonSettings);
-            }
-            else
-            {
-                // Create standard MCP configuration for other clients
-                McpConfig jsonConfig = new()
-                {
-                    mcpServers = new McpConfigServers
+                    };
+                    manualConfigJson = JsonConvert.SerializeObject(vscodeConfig, jsonSettings);
+                    break;
+                    
+                default:
+                    // Create standard MCP configuration for other clients
+                    McpConfig jsonConfig = new()
                     {
-                        unityMCP = new McpConfigServer
+                        mcpServers = new McpConfigServers
                         {
-                            command = "uv",
-                            args = new[] { "--directory", pythonDir, "run", "server.py" },
+                            unityMCP = new McpConfigServer
+                            {
+                                command = "uv",
+                                args = new[] { "--directory", pythonDir, "run", "server.py" },
+                            },
                         },
-                    },
-                };
-
-                JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
-                manualConfigJson = JsonConvert.SerializeObject(jsonConfig, jsonSettings);
+                    };
+                    manualConfigJson = JsonConvert.SerializeObject(jsonConfig, jsonSettings);
+                    break;
             }
 
             ManualConfigEditorWindow.ShowWindow(configPath, manualConfigJson, mcpClient);
@@ -642,7 +644,10 @@ namespace UnityMcpBridge.Editor.Windows
                 string configJson = File.ReadAllText(configPath);
                 string pythonDir = ServerInstaller.GetServerPath();
                 
-                // Use switch statement to handle different client types
+                // Use switch statement to handle different client types, extracting common logic
+                string[] args = null;
+                bool configExists = false;
+                
                 switch (mcpClient.mcpType)
                 {
                     case McpTypes.VSCode:
@@ -651,48 +656,39 @@ namespace UnityMcpBridge.Editor.Windows
                         if (config?.mcp?.servers?.unityMCP != null)
                         {
                             // Extract args from VSCode config format
-                            var args = config.mcp.servers.unityMCP.args.ToObject<string[]>();
-                            
-                            if (pythonDir != null && 
-                                Array.Exists(args, new Predicate<string>(arg => arg.Contains(pythonDir, StringComparison.Ordinal))))
-                            {
-                                mcpClient.SetStatus(McpStatus.Configured);
-                            }
-                            else
-                            {
-                                mcpClient.SetStatus(McpStatus.IncorrectPath);
-                            }
-                        }
-                        else
-                        {
-                            mcpClient.SetStatus(McpStatus.MissingConfig);
+                            args = config.mcp.servers.unityMCP.args.ToObject<string[]>();
+                            configExists = true;
                         }
                         break;
                         
                     default:
                         // Standard MCP configuration check for Claude Desktop, Cursor, etc.
                         McpConfig standardConfig = JsonConvert.DeserializeObject<McpConfig>(configJson);
-
+                        
                         if (standardConfig?.mcpServers?.unityMCP != null)
                         {
-                            if (pythonDir != null
-                                && Array.Exists(
-                                    standardConfig.mcpServers.unityMCP.args,
-                                    arg => arg.Contains(pythonDir, StringComparison.Ordinal)
-                                ))
-                            {
-                                mcpClient.SetStatus(McpStatus.Configured);
-                            }
-                            else
-                            {
-                                mcpClient.SetStatus(McpStatus.IncorrectPath);
-                            }
-                        }
-                        else
-                        {
-                            mcpClient.SetStatus(McpStatus.MissingConfig);
+                            args = standardConfig.mcpServers.unityMCP.args;
+                            configExists = true;
                         }
                         break;
+                }
+                
+                // Common logic for checking configuration status
+                if (configExists)
+                {
+                    if (pythonDir != null && 
+                        Array.Exists(args, arg => arg.Contains(pythonDir, StringComparison.Ordinal)))
+                    {
+                        mcpClient.SetStatus(McpStatus.Configured);
+                    }
+                    else
+                    {
+                        mcpClient.SetStatus(McpStatus.IncorrectPath);
+                    }
+                }
+                else
+                {
+                    mcpClient.SetStatus(McpStatus.MissingConfig);
                 }
             }
             catch (Exception e)
