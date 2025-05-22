@@ -956,6 +956,9 @@ namespace UnityMcpBridge.Editor.Tools
             return modified;
         }
 
+        /// <summary>
+        ///  Applies properties from JObject to a PhysicsMaterial.
+        /// </summary>
         private static bool ApplyPhysicsMaterialProperties(PhysicsMaterial pmat, JObject properties)
         {
             if (pmat == null || properties == null)
