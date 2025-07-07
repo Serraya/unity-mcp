@@ -893,6 +893,7 @@ namespace UnityMcpBridge.Editor.Tools
                 }
             } else if (properties["_Color"] is JArray colorArr) //Current Prevention for systems that use _Color instead of color
             {
+                string propName = colorProps["name"]?.ToString() ?? "_Color"; // Default main color
                 try {
                     if (colorArr.Count >= 3)
                     {
