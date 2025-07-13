@@ -6,7 +6,6 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
 
 ---
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/justinpbarnett/unity-mcp/assets/11047284/c279675a-dd58-406b-9613-5b16b5c6bb63"><source media="(prefers-color-scheme: light)" srcset="https://github.com/justinpbarnett/unity-mcp/assets/11047284/b54f891d-961b-4048-a9c4-3af46e2a52fc"><img alt="UnityMCP Workflow" width="100%" style="max-width: 600px; display: block; margin-left: auto; margin-right: auto;"></picture>
 
 ## Key Features 🚀
 
@@ -62,6 +61,7 @@ Unity MCP connects your tools using two components:
   *   **An MCP Client:**
       *   [Claude Desktop](https://claude.ai/download)
       *   [Cursor](https://www.cursor.com/en/downloads)
+      *   [Visual Studio Code Copilot](https://code.visualstudio.com/docs/copilot/overview)
       *   *(Others may work with manual config)*
 </details>
 
@@ -84,7 +84,7 @@ Connect your MCP Client (Claude, Cursor, etc.) to the Python server you installe
 **Option A: Auto-Configure (Recommended for Claude/Cursor)**
 
 1.  In Unity, go to `Window > Unity MCP`.
-2.  Click `Auto Configure Claude` or `Auto Configure Cursor`.
+2.  Click `Auto Configure` on the IDE you uses.
 3.  Look for a green status indicator 🟢 and "Connected". *(This attempts to modify the MCP Client's config file automatically)*.
 
 **Option B: Manual Configuration**
@@ -175,6 +175,28 @@ If Auto-Configure fails or you use a different client:
     
     Example Prompt: `Create a 3D player controller.`
     
+---
+
+## TODOs (Besides PR) 📝
+### High Priority
+- [ ] **AssetsGeneration Improvements** - Better server request handling
+- [ ] **CodeGeneration Improvements** - Better generated code handling
+- [ ] **Error Handling Improvements** - Better error messages and recovery mechanisms
+- [ ] **Remote Connection** - Enable remote connection between host and server
+- [ ] **Documentation Expansion** - Add tutorials on how to add your own tools
+
+### Medium Priority
+- [ ] **Custom Tool Creation** - GUI for users to create their own MCP tools
+- [ ] **Logging System** - Comprehensive logging for debugging and monitoring
+
+### Low Priority
+- [ ] **Mobile Platform Support** - Extended tools for mobile development workflows
+- [ ] **Easier Setup**
+
+### Research & Exploration
+- [ ] **AI-Powered Asset Generation** - Integration with AI tools for automatic asset creation
+- [ ] **Real-time Collaboration** - Live editing sessions between multiple developers (Currently ongoing)
+- [ ] **Analytics Dashboard** - Usage analytics and project insights
 
 ---
 
@@ -239,7 +261,8 @@ MIT License. See [LICENSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithu
 
 ## Contact 👋
 
-- **X/Twitter:** [@justinpbarnett](https://www.google.com/url?sa=E&q=https%3A%2F%2Fx.com%2Fjustinpbarnett)
+- **justinpbarnett:** [X/Twitter](https://www.google.com/url?sa=E&q=https%3A%2F%2Fx.com%2Fjustinpbarnett)
+- **scriptwonder**: [Email](mailto:swu85@ur.rochester.edu), [LinkedIn](https://www.linkedin.com/in/shutong-wu-214043172/)
     
 
 ---

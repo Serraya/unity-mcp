@@ -907,7 +907,7 @@ namespace UnityMcpBridge.Editor.Tools
                         );
                     }
                 }
-            } else if (properties["color"] is JArray colorArr) //Current Prevention for systems that use _Color instead of color
+            } else if (properties["color"] is JArray colorArr) //Use color now with examples set in manage_asset.py
             {
                 string propName =  "_Color"; 
                 try {
