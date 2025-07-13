@@ -1,6 +1,17 @@
 # Unity MCP ✨
 
-**Connect your Unity Editor to LLMs using the Model Context Protocol.**
+
+[![](https://img.shields.io/badge/Unity-000000?style=flat&logo=unity&logoColor=blue 'Unity')](https://unity.com/releases/editor/archive)
+[![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
+[![](https://badge.mcpx.dev?status=on 'MCP Enabled')](https://modelcontextprotocol.io/introduction)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/w/justinpbarnett/unity-mcp)
+![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/justinpbarnett/unity-mcp)
+[![](https://img.shields.io/badge/License-MIT-red.svg 'MIT License')](https://opensource.org/licenses/MIT)
+
+
+
+
+**Create your Unity apps with LLMs!**
 
 Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to interact directly with your Unity Editor via a local **MCP (Model Context Protocol) Client**. Give your LLM tools to manage assets, control scenes, edit scripts, and automate tasks within Unity.
 
@@ -47,8 +58,6 @@ Unity MCP connects your tools using two components:
 
 ### Prerequisites
 
-<details>
-  <summary><strong>Click to view required software...</strong></summary>
 
   *   **Git CLI:** For cloning the server code. [Download Git](https://git-scm.com/downloads)
   *   **Python:** Version 3.12 or newer. [Download Python](https://www.python.org/downloads/)
@@ -63,7 +72,6 @@ Unity MCP connects your tools using two components:
       *   [Cursor](https://www.cursor.com/en/downloads)
       *   [Visual Studio Code Copilot](https://code.visualstudio.com/docs/copilot/overview)
       *   *(Others may work with manual config)*
-</details>
 
 ### Step 1: Install the Unity Package (Bridge)
 
@@ -183,7 +191,7 @@ If Auto-Configure fails or you use a different client:
 - [ ] **CodeGeneration Improvements** - Better generated code handling
 - [ ] **Error Handling Improvements** - Better error messages and recovery mechanisms
 - [ ] **Remote Connection** - Enable remote connection between host and server
-- [ ] **Documentation Expansion** - Add tutorials on how to add your own tools
+- [ ] **Documentation Expansion** - Add tutorials on how to add your own tools, and documentation on existing tools and functions
 
 ### Medium Priority
 - [ ] **Custom Tool Creation** - GUI for users to create their own MCP tools
@@ -249,7 +257,7 @@ Help make Unity MCP better!
 
 </details>  
 
-Still stuck? [Open an Issue](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fissues).
+Still stuck? [Open an Issue](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fissues) or [Join the Discord](https://discord.gg/vhTUxXaqYr)!
 
 ---
 
@@ -270,3 +278,8 @@ MIT License. See [LICENSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithu
 ## Acknowledgments 🙏
 
 Thanks to the contributors and the Unity team.
+
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=unity-mcp/unity-mcp,justinpbarnett/unity-mcp&type=Date)](https://www.star-history.com/#unity-mcp/unity-mcp&justinpbarnett/unity-mcp&Date)
