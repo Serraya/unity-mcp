@@ -8,6 +8,14 @@ using UnityEditor;
 using UnityEngine;
 using UnityMcpBridge.Editor.Helpers; // For Response class
 
+#if UNITY_6000_0_OR_NEWER
+using PhysicsMaterialType = UnityEngine.PhysicsMaterial;
+using PhysicsMaterialCombine = UnityEngine.PhysicsMaterialCombine;  
+#else
+using PhysicsMaterialType = UnityEngine.PhysicMaterial;
+using PhysicsMaterialCombine = UnityEngine.PhysicMaterialCombine;
+#endif
+
 namespace UnityMcpBridge.Editor.Tools
 {
     /// <summary>
@@ -179,7 +187,7 @@ namespace UnityMcpBridge.Editor.Tools
                 }
                 else if (lowerAssetType == "physicsmaterial")
                 {
-                    PhysicsMaterial pmat = new PhysicsMaterial();
+                    PhysicsMaterialType pmat = new PhysicsMaterialType();
                     if (properties != null)
                         ApplyPhysicsMaterialProperties(pmat, properties);
                     AssetDatabase.CreateAsset(pmat, fullPath);
@@ -959,45 +967,45 @@ namespace UnityMcpBridge.Editor.Tools
         /// <summary>
         ///  Applies properties from JObject to a PhysicsMaterial.
         /// </summary>
-        private static bool ApplyPhysicsMaterialProperties(PhysicsMaterial pmat, JObject properties)
+        private static bool ApplyPhysicsMaterialProperties(PhysicsMaterialType pmat, JObject properties)
         {
             if (pmat == null || properties == null)
                 return false;
             bool modified = false;
 
             // Example: Set dynamic friction
-            if (properties["DynamicFriction"]?.Type == JTokenType.Float)
+            if (properties["dynamicFriction"]?.Type == JTokenType.Float)
             {
-                float dynamicFriction = properties["DynamicFriction"].ToObject<float>();
+                float dynamicFriction = properties["dynamicFriction"].ToObject<float>();
                 pmat.dynamicFriction = dynamicFriction;
                 modified = true;
             }
 
             // Example: Set static friction
-            if (properties["StaticFriction"]?.Type == JTokenType.Float)
+            if (properties["staticFriction"]?.Type == JTokenType.Float)
             {
-                float staticFriction = properties["StaticFriction"].ToObject<float>();
+                float staticFriction = properties["staticFriction"].ToObject<float>();
                 pmat.staticFriction = staticFriction;
                 modified = true;
             }
 
             // Example: Set bounciness
-            if (properties["Bounciness"]?.Type == JTokenType.Float)
+            if (properties["bounciness"]?.Type == JTokenType.Float)
             {
-                float bounciness = properties["Bounciness"].ToObject<float>();
+                float bounciness = properties["bounciness"].ToObject<float>();
                 pmat.bounciness = bounciness;
                 modified = true;
             }
 
-            List<String> averageList = new List<String>{"ave", "Ave", "average", "Average"};
-            List<String> multiplyList = new List<String>{"mul", "Mul", "mult", "Mult", "multiply", "Multiply"};
-            List<String> minimumList = new List<String>{"min", "Min", "minimum", "Minimum"};
-            List<String> maximumList = new List<String>{"max", "Max", "maximum", "Maximum"};
+            List<String> averageList = new List<String> { "ave", "Ave", "average", "Average" };
+            List<String> multiplyList = new List<String> { "mul", "Mul", "mult", "Mult", "multiply", "Multiply" };
+            List<String> minimumList = new List<String> { "min", "Min", "minimum", "Minimum" };
+            List<String> maximumList = new List<String> { "max", "Max", "maximum", "Maximum" };
 
             // Example: Set friction combine
-            if (properties["FrictionCombine"]?.Type == JTokenType.String)
+            if (properties["frictionCombine"]?.Type == JTokenType.String)
             {
-                string frictionCombine = properties["FrictionCombine"].ToString();
+                string frictionCombine = properties["frictionCombine"].ToString();
                 if (averageList.Contains(frictionCombine))
                     pmat.frictionCombine = PhysicsMaterialCombine.Average;
                 else if (multiplyList.Contains(frictionCombine))
@@ -1010,9 +1018,9 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // Example: Set bounce combine
-            if (properties["BounceCombine"]?.Type == JTokenType.String)
+            if (properties["bounceCombine"]?.Type == JTokenType.String)
             {
-                string bounceCombine = properties["BounceCombine"].ToString();
+                string bounceCombine = properties["bounceCombine"].ToString();
                 if (averageList.Contains(bounceCombine))
                     pmat.bounceCombine = PhysicsMaterialCombine.Average;
                 else if (multiplyList.Contains(bounceCombine))
