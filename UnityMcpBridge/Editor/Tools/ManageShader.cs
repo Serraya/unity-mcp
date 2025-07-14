@@ -89,7 +89,12 @@ namespace UnityMcpBridge.Editor.Tools
             {
                 try
                 {
-                    Directory.CreateDirectory(fullPathDir);
+                    if (!Directory.Exists(fullPathDir))
+                    {
+                        Directory.CreateDirectory(fullPathDir);
+                        // Refresh AssetDatabase to recognize new folders
+                        AssetDatabase.Refresh();
+                    }
                 }
                 catch (Exception e)
                 {
@@ -150,6 +155,14 @@ namespace UnityMcpBridge.Editor.Tools
                 );
             }
 
+            // Add validation for shader name conflicts in Unity
+            if (Shader.Find(name) != null)
+            {
+                return Response.Error(
+                    $"A shader with name '{name}' already exists in the project. Choose a different name."
+                );
+            }
+
             // Generate default content if none provided
             if (string.IsNullOrEmpty(contents))
             {
@@ -184,6 +197,7 @@ namespace UnityMcpBridge.Editor.Tools
                 string contents = File.ReadAllText(fullPath);
 
                 // Return both normal and encoded contents for larger files
+                //TODO: Consider a threshold for large files
                 bool isLarge = contents.Length > 10000; // If content is large, include encoded version
                 var responseData = new
                 {
@@ -227,6 +241,7 @@ namespace UnityMcpBridge.Editor.Tools
             {
                 File.WriteAllText(fullPath, contents);
                 AssetDatabase.ImportAsset(relativePath);
+                AssetDatabase.Refresh();
                 return Response.Success(
                     $"Shader '{Path.GetFileName(relativePath)}' updated successfully.",
                     new { path = relativePath }
@@ -268,58 +283,60 @@ namespace UnityMcpBridge.Editor.Tools
             }
         }
 
+        //This is a CGProgram template
+        //TODO: making a HLSL template as well?
         private static string GenerateDefaultShaderContent(string name)
         {
             return @"Shader """ + name + @"""
-{
-    Properties
-    {
-        _MainTex (""Texture"", 2D) = ""white"" {}
-    }
-    SubShader
-    {
-        Tags { ""RenderType""=""Opaque"" }
-        LOD 100
-
-        Pass
         {
-            CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
-            #include ""UnityCG.cginc""
-
-            struct appdata
+            Properties
             {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
-
-            sampler2D _MainTex;
-            float4 _MainTex_ST;
-
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
-                return o;
+                _MainTex (""Texture"", 2D) = ""white"" {}
             }
-
-            fixed4 frag (v2f i) : SV_Target
+            SubShader
             {
-                fixed4 col = tex2D(_MainTex, i.uv);
-                return col;
+                Tags { ""RenderType""=""Opaque"" }
+                LOD 100
+
+                Pass
+                {
+                    CGPROGRAM
+                    #pragma vertex vert
+                    #pragma fragment frag
+                    #include ""UnityCG.cginc""
+
+                    struct appdata
+                    {
+                        float4 vertex : POSITION;
+                        float2 uv : TEXCOORD0;
+                    };
+
+                    struct v2f
+                    {
+                        float2 uv : TEXCOORD0;
+                        float4 vertex : SV_POSITION;
+                    };
+
+                    sampler2D _MainTex;
+                    float4 _MainTex_ST;
+
+                    v2f vert (appdata v)
+                    {
+                        v2f o;
+                        o.vertex = UnityObjectToClipPos(v.vertex);
+                        o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                        return o;
+                    }
+
+                    fixed4 frag (v2f i) : SV_Target
+                    {
+                        fixed4 col = tex2D(_MainTex, i.uv);
+                        return col;
+                    }
+                    ENDCG
+                }
             }
-            ENDCG
-        }
-    }
-}";
+        }";
         }
     }
 } 
