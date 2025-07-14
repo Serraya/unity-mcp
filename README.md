@@ -35,6 +35,7 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
   *   `manage_editor`: Controls and queries the editor's state and settings.
   *   `manage_scene`: Manages scenes (load, save, create, get hierarchy, etc.).
   *   `manage_asset`: Performs asset operations (import, create, modify, delete, etc.).
+  *   `manage_shader`: Performs shader CRUD operations (create, read, modify, delete).
   *   `manage_gameobject`: Manages GameObjects: create, modify, delete, find, and component operations.
   *   `execute_menu_item`: Executes a menu item via its path (e.g., "File/Save Project").
 </details>
@@ -89,7 +90,9 @@ Unity MCP connects your tools using two components:
 
 Connect your MCP Client (Claude, Cursor, etc.) to the Python server you installed in Step 1.
 
-**Option A: Auto-Configure (Recommended for Claude/Cursor)**
+<img width="609" alt="image" src="https://github.com/user-attachments/assets/cef3a639-4677-4fd8-84e7-2d82a04d55bb" />
+
+**Option A: Auto-Configure (Recommended for Claude/Cursor/VSC Copilot)**
 
 1.  In Unity, go to `Window > Unity MCP`.
 2.  Click `Auto Configure` on the IDE you uses.
