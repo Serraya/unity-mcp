@@ -25,8 +25,8 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
 *   **🤖 Automation:** Automate repetitive Unity workflows.
 *   **🧩 Extensible:** Designed to work with various MCP Clients.
 
-<details>
-  <summary><strong>Expand for Available Tools...</strong></summary>
+<details open>
+  <summary><strong> Available Tools </strong></summary>
 
   Your LLM can use functions like:
 
@@ -184,30 +184,40 @@ If Auto-Configure fails or you use a different client:
     
 3. **Interact!** Unity tools should now be available in your MCP Client.
     
-    Example Prompt: `Create a 3D player controller.`
+    Example Prompt: `Create a 3D player controller`, `Create a yellow and bridge sun`, `Create a cool shader and apply it on a cube`.
     
 ---
 
-## TODOs (Besides PR) 📝
-### High Priority
-- [ ] **AssetsGeneration Improvements** - Better server request handling
-- [ ] **CodeGeneration Improvements** - Better generated code handling
-- [ ] **Error Handling Improvements** - Better error messages and recovery mechanisms
-- [ ] **Remote Connection** - Enable remote connection between host and server
-- [ ] **Documentation Expansion** - Add tutorials on how to add your own tools, and documentation on existing tools and functions
+## Future Dev Plans (Besides PR) 📝
 
-### Medium Priority
-- [ ] **Custom Tool Creation** - GUI for users to create their own MCP tools
-- [ ] **Logging System** - Comprehensive logging for debugging and monitoring
+### 🔴 High Priority
+- [ ] **Asset Generation Improvements** - Enhanced server request handling and asset pipeline optimization
+- [ ] **Code Generation Enhancements** - Improved generated code quality, validation, and error handling
+- [ ] **Robust Error Handling** - Comprehensive error messages, recovery mechanisms, and graceful degradation
+- [ ] **Remote Connection Support** - Enable seamless remote connection between Unity host and MCP server
+- [ ] **Documentation Expansion** - Complete tutorials for custom tool creation and API reference
 
-### Low Priority
-- [ ] **Mobile Platform Support** - Extended tools for mobile development workflows
-- [ ] **Easier Setup**
+### 🟡 Medium Priority
+- [ ] **Custom Tool Creation GUI** - Visual interface for users to create and configure their own MCP tools
+- [ ] **Advanced Logging System** - Logging with filtering, export, and debugging capabilities
 
-### Research & Exploration
-- [ ] **AI-Powered Asset Generation** - Integration with AI tools for automatic asset creation
-- [ ] **Real-time Collaboration** - Live editing sessions between multiple developers (Currently ongoing)
-- [ ] **Analytics Dashboard** - Usage analytics and project insights
+### 🟢 Low Priority
+- [ ] **Mobile Platform Support** - Extended toolset for mobile development workflows and platform-specific features
+- [ ] **Easier Tool Setup**
+- [ ] **Plugin Marketplace** - Community-driven tool sharing and distribution platform
+
+<details open>
+  <summary><strong>✅ Completed Features<strong></summary>
+  
+  - [x] **Shader Generation** - Generate shaders using CGProgram template
+</details>
+
+### 🔬 Research & Exploration
+- [ ] **AI-Powered Asset Generation** - Integration with AI tools for automatic 3D models, textures, and animations
+- [ ] **Real-time Collaboration** - Live editing sessions between multiple developers *(Currently in progress)*
+- [ ] **Analytics Dashboard** - Usage analytics, project insights, and performance metrics
+- [ ] **Voice Commands** - Voice-controlled Unity operations for accessibility
+- [ ] **AR/VR Tool Integration** - Extended support for immersive development workflows
 
 ---
 
@@ -264,17 +274,17 @@ Still stuck? [Open an Issue](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgit
 
 ---
 
-## License 📜
-
-MIT License. See [LICENSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fblob%2Fmaster%2FLICENSE) file.
-
----
-
 ## Contact 👋
 
 - **justinpbarnett:** [X/Twitter](https://www.google.com/url?sa=E&q=https%3A%2F%2Fx.com%2Fjustinpbarnett)
 - **scriptwonder**: [Email](mailto:swu85@ur.rochester.edu), [LinkedIn](https://www.linkedin.com/in/shutong-wu-214043172/)
     
+
+---
+
+## License 📜
+
+MIT License. See [LICENSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fblob%2Fmaster%2FLICENSE) file.
 
 ---
 
