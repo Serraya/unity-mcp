@@ -73,6 +73,27 @@ Unity MCP connects your tools using two components:
       *   [Cursor](https://www.cursor.com/en/downloads)
       *   [Visual Studio Code Copilot](https://code.visualstudio.com/docs/copilot/overview)
       *   *(Others may work with manual config)*
+ *    <details> <summary><strong>[Optional] Roslyn for Advanced Script Validation</strong></summary>
+
+        For **Strict** validation level that catches undefined namespaces, types, and methods: 
+
+        **Method 1: NuGet for Unity (Recommended)**
+        1. Install [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity)
+        2. Go to `Window > NuGet Package Manager`
+        3. Search for `Microsoft.CodeAnalysis.CSharp` and install the package
+        5. Go to `Player Settings > Scripting Define Symbols`
+        6. Add `USE_ROSLYN`
+        7. Restart Unity
+
+        **Method 2: Manual DLL Installation**
+        1. Download Microsoft.CodeAnalysis.CSharp.dll and dependencies from [NuGet](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp/)
+        2. Place DLLs in `Assets/Plugins/` folder
+        3. Ensure .NET compatibility settings are correct
+        4. Add `USE_ROSLYN` to Scripting Define Symbols
+        5. Restart Unity
+        
+        **Note:** Without Roslyn, script validation falls back to basic structural checks. Roslyn enables full C# compiler diagnostics with precise error reporting.</details>
+
 
 ### Step 1: Install the Unity Package (Bridge)
 
@@ -192,7 +213,7 @@ If Auto-Configure fails or you use a different client:
 
 ### 🔴 High Priority
 - [ ] **Asset Generation Improvements** - Enhanced server request handling and asset pipeline optimization
-- [ ] **Code Generation Enhancements** - Improved generated code quality, validation, and error handling
+- [ ] **Code Generation Enhancements** - Improved generated code quality and error handling
 - [ ] **Robust Error Handling** - Comprehensive error messages, recovery mechanisms, and graceful degradation
 - [ ] **Remote Connection Support** - Enable seamless remote connection between Unity host and MCP server
 - [ ] **Documentation Expansion** - Complete tutorials for custom tool creation and API reference
@@ -210,6 +231,7 @@ If Auto-Configure fails or you use a different client:
   <summary><strong>✅ Completed Features<strong></summary>
   
   - [x] **Shader Generation** - Generate shaders using CGProgram template
+  - [x] **Advanced Script Validation** - Multi-level validation with semantic analysis, namespace/type checking, and Unity best practices (Will need Roslyn Installed, see [Prerequisite](#prerequisites)).
 </details>
 
 ### 🔬 Research & Exploration
@@ -295,4 +317,4 @@ Thanks to the contributors and the Unity team.
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=unity-mcp/unity-mcp,justinpbarnett/unity-mcp&type=Date)](https://www.star-history.com/#unity-mcp/unity-mcp&justinpbarnett/unity-mcp&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=justinpbarnett/unity-mcp&type=Date)](https://www.star-history.com/#justinpbarnett/unity-mcp&Date)
