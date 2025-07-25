@@ -9,6 +9,7 @@ using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityMcpBridge.Editor.Helpers; // For Response class
+using UnityMcpBridge.Runtime.Serialization;
 
 namespace UnityMcpBridge.Editor.Tools
 {
