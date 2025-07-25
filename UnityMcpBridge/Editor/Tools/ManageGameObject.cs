@@ -1793,6 +1793,7 @@ namespace UnityMcpBridge.Editor.Tools
         /// </summary>
         private static string[] SplitPropertyPath(string path)
         {
+            // Handle complex paths with both dots and array indexers
             List<string> parts = new List<string>();
             int startIndex = 0;
             bool inBrackets = false;
@@ -1811,6 +1812,7 @@ namespace UnityMcpBridge.Editor.Tools
                 }
                 else if (c == '.' && !inBrackets)
                 {
+                    // Found a dot separator outside of brackets
                     parts.Add(path.Substring(startIndex, i - startIndex));
                     startIndex = i + 1;
                 }
