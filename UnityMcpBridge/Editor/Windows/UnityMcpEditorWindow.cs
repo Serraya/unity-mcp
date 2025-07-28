@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -52,6 +53,16 @@ namespace UnityMcpBridge.Editor.Windows
             
             // Load validation level setting
             LoadValidationLevelSetting();
+        }
+        
+        private void OnFocus()
+        {
+            // Refresh configuration status when window gains focus
+            foreach (McpClient mcpClient in mcpClients.clients)
+            {
+                CheckMcpConfiguration(mcpClient);
+            }
+            Repaint();
         }
 
         private Color GetStatusColor(McpStatus status)
@@ -326,6 +337,23 @@ namespace UnityMcpBridge.Editor.Windows
                     ConfigureMcpClient(mcpClient);
                 }
             }
+            else if (mcpClient.mcpType == McpTypes.ClaudeCode)
+            {
+                bool isConfigured = mcpClient.status == McpStatus.Configured;
+                string buttonText = isConfigured ? "Unregister UnityMCP with Claude Code" : "Register with Claude Code";
+                if (GUILayout.Button(buttonText, GUILayout.Height(32)))
+                {
+                    if (isConfigured)
+                    {
+                        UnregisterWithClaudeCode();
+                    }
+                    else
+                    {
+                        string pythonDir = FindPackagePythonDirectory();
+                        RegisterWithClaudeCode(pythonDir);
+                    }
+                }
+            }
             else
             {
                 if (GUILayout.Button($"Auto Configure", GUILayout.Height(32)))
@@ -334,36 +362,39 @@ namespace UnityMcpBridge.Editor.Windows
                 }
             }
             
-            if (GUILayout.Button("Manual Setup", GUILayout.Height(32)))
+            if (mcpClient.mcpType != McpTypes.ClaudeCode)
             {
-                string configPath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                    ? mcpClient.windowsConfigPath
-                    : mcpClient.linuxConfigPath;
-                    
-                if (mcpClient.mcpType == McpTypes.VSCode)
+                if (GUILayout.Button("Manual Setup", GUILayout.Height(32)))
                 {
-                    string pythonDir = FindPackagePythonDirectory();
-                    var vscodeConfig = new
+                    string configPath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                        ? mcpClient.windowsConfigPath
+                        : mcpClient.linuxConfigPath;
+                        
+                    if (mcpClient.mcpType == McpTypes.VSCode)
                     {
-                        mcp = new
+                        string pythonDir = FindPackagePythonDirectory();
+                        var vscodeConfig = new
                         {
-                            servers = new
+                            mcp = new
                             {
-                                unityMCP = new
+                                servers = new
                                 {
-                                    command = "uv",
-                                    args = new[] { "--directory", pythonDir, "run", "server.py" }
+                                    unityMCP = new
+                                    {
+                                        command = "uv",
+                                        args = new[] { "--directory", pythonDir, "run", "server.py" }
+                                    }
                                 }
                             }
-                        }
-                    };
-                    JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
-                    string manualConfigJson = JsonConvert.SerializeObject(vscodeConfig, jsonSettings);
-                    VSCodeManualSetupWindow.ShowWindow(configPath, manualConfigJson);
-                }
-                else
-                {
-                    ShowManualInstructionsWindow(configPath, mcpClient);
+                        };
+                        JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
+                        string manualConfigJson = JsonConvert.SerializeObject(vscodeConfig, jsonSettings);
+                        VSCodeManualSetupWindow.ShowWindow(configPath, manualConfigJson);
+                    }
+                    else
+                    {
+                        ShowManualInstructionsWindow(configPath, mcpClient);
+                    }
                 }
             }
             
@@ -413,7 +444,7 @@ namespace UnityMcpBridge.Editor.Windows
                 }
                 catch (Exception e)
                 {
-                    Debug.LogWarning($"Error reading existing config: {e.Message}.");
+                    UnityEngine.Debug.LogWarning($"Error reading existing config: {e.Message}.");
                 }
             }
 
@@ -546,12 +577,17 @@ namespace UnityMcpBridge.Editor.Windows
                         if (package.name == "com.justinpbarnett.unity-mcp")
                         {
                             string packagePath = package.resolvedPath;
+                            
+                            // Check for local package structure (UnityMcpServer/src)
+                            string localPythonDir = Path.Combine(Path.GetDirectoryName(packagePath), "UnityMcpServer", "src");
+                            if (Directory.Exists(localPythonDir) && File.Exists(Path.Combine(localPythonDir, "server.py")))
+                            {
+                                return localPythonDir;
+                            }
+                            
+                            // Check for old structure (Python subdirectory)
                             string potentialPythonDir = Path.Combine(packagePath, "Python");
-
-                            if (
-                                Directory.Exists(potentialPythonDir)
-                                && File.Exists(Path.Combine(potentialPythonDir, "server.py"))
-                            )
+                            if (Directory.Exists(potentialPythonDir) && File.Exists(Path.Combine(potentialPythonDir, "server.py")))
                             {
                                 return potentialPythonDir;
                             }
@@ -560,13 +596,22 @@ namespace UnityMcpBridge.Editor.Windows
                 }
                 else if (request.Error != null)
                 {
-                    Debug.LogError("Failed to list packages: " + request.Error.message);
+                    UnityEngine.Debug.LogError("Failed to list packages: " + request.Error.message);
                 }
 
                 // If not found via Package Manager, try manual approaches
-                // First check for local installation
+                // Check for local development structure
                 string[] possibleDirs =
                 {
+                    // Check in the Unity project's Packages folder (for local package development)
+                    Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Packages", "unity-mcp", "UnityMcpServer", "src")),
+                    // Check relative to the Unity project (for development)
+                    Path.GetFullPath(Path.Combine(Application.dataPath, "..", "unity-mcp", "UnityMcpServer", "src")),
+                    // Check in user's home directory (common installation location)
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "unity-mcp", "UnityMcpServer", "src"),
+                    // Check in Applications folder (macOS/Linux common location)
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Applications", "UnityMCP", "UnityMcpServer", "src"),
+                    // Legacy Python folder structure
                     Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python")),
                 };
 
@@ -579,11 +624,11 @@ namespace UnityMcpBridge.Editor.Windows
                 }
 
                 // If still not found, return the placeholder path
-                Debug.LogWarning("Could not find Python directory, using placeholder path");
+                UnityEngine.Debug.LogWarning("Could not find Python directory, using placeholder path");
             }
             catch (Exception e)
             {
-                Debug.LogError($"Error finding package path: {e.Message}");
+                UnityEngine.Debug.LogError($"Error finding package path: {e.Message}");
             }
 
             return pythonDir;
@@ -651,7 +696,7 @@ namespace UnityMcpBridge.Editor.Windows
                 }
 
                 ShowManualInstructionsWindow(configPath, mcpClient);
-                Debug.LogError(
+                UnityEngine.Debug.LogError(
                     $"Failed to configure {mcpClient.name}: {e.Message}\n{e.StackTrace}"
                 );
                 return $"Failed to configure {mcpClient.name}";
@@ -735,6 +780,13 @@ namespace UnityMcpBridge.Editor.Windows
         {
             try
             {
+                // Special handling for Claude Code
+                if (mcpClient.mcpType == McpTypes.ClaudeCode)
+                {
+                    CheckClaudeCodeConfiguration(mcpClient);
+                    return;
+                }
+                
                 string configPath;
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
@@ -811,6 +863,256 @@ namespace UnityMcpBridge.Editor.Windows
             }
             catch (Exception e)
             {
+                mcpClient.SetStatus(McpStatus.Error, e.Message);
+            }
+        }
+
+        private void RegisterWithClaudeCode(string pythonDir)
+        {
+            string command;
+            string args;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                command = "claude";
+                
+                // Try to find uv.exe in common locations
+                string uvPath = FindWindowsUvPath();
+                
+                if (string.IsNullOrEmpty(uvPath))
+                {
+                    // Fallback to expecting uv in PATH
+                    args = $"mcp add UnityMCP -- uv --directory \"{pythonDir}\" run server.py";
+                }
+                else
+                {
+                    args = $"mcp add UnityMCP -- \"{uvPath}\" --directory \"{pythonDir}\" run server.py";
+                }
+            }
+            else
+            {
+                // Use full path to claude command
+                command = "/usr/local/bin/claude";
+                args = $"mcp add UnityMCP -- uv --directory \"{pythonDir}\" run server.py";
+            }
+
+            try
+            {
+                // Get the Unity project directory (where the Assets folder is)
+                string unityProjectDir = Application.dataPath;
+                string projectDir = Path.GetDirectoryName(unityProjectDir);
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = command,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    WorkingDirectory = projectDir // Set working directory to Unity project directory
+                };
+
+                // Set PATH to include common binary locations
+                string currentPath = Environment.GetEnvironmentVariable("PATH") ?? "";
+                string additionalPaths = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin";
+                psi.EnvironmentVariables["PATH"] = $"{additionalPaths}:{currentPath}";
+
+                using var process = Process.Start(psi);
+                string output = process.StandardOutput.ReadToEnd();
+                string errors = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+
+                
+                // Check for success or already exists
+                if (output.Contains("Added stdio MCP server") || errors.Contains("already exists"))
+                {
+                    // Force refresh the configuration status
+                    var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
+                    if (claudeClient != null)
+                    {
+                        CheckMcpConfiguration(claudeClient);
+                    }
+                    Repaint();
+                    
+
+                }
+                else if (!string.IsNullOrEmpty(errors))
+                {
+                    UnityEngine.Debug.LogWarning($"Claude MCP errors: {errors}");
+                }
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError($"Claude CLI registration failed: {e.Message}");
+            }
+        }
+
+        private void UnregisterWithClaudeCode()
+        {
+            string command;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                command = "claude";
+            }
+            else
+            {
+                // Use full path to claude command
+                command = "/usr/local/bin/claude";
+            }
+
+            try
+            {
+                // Get the Unity project directory (where the Assets folder is)
+                string unityProjectDir = Application.dataPath;
+                string projectDir = Path.GetDirectoryName(unityProjectDir);
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = command,
+                    Arguments = "mcp remove UnityMCP",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    WorkingDirectory = projectDir // Set working directory to Unity project directory
+                };
+
+                // Set PATH to include common binary locations
+                string currentPath = Environment.GetEnvironmentVariable("PATH") ?? "";
+                string additionalPaths = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin";
+                psi.EnvironmentVariables["PATH"] = $"{additionalPaths}:{currentPath}";
+
+                using var process = Process.Start(psi);
+                string output = process.StandardOutput.ReadToEnd();
+                string errors = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+                // Check for success
+                if (output.Contains("Removed MCP server") || process.ExitCode == 0)
+                {
+                    // Force refresh the configuration status
+                    var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
+                    if (claudeClient != null)
+                    {
+                        CheckMcpConfiguration(claudeClient);
+                    }
+                    Repaint();
+                    
+                    UnityEngine.Debug.Log("UnityMCP server successfully unregistered from Claude Code.");
+                }
+                else if (!string.IsNullOrEmpty(errors))
+                {
+                    UnityEngine.Debug.LogWarning($"Claude MCP removal errors: {errors}");
+                }
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError($"Claude CLI unregistration failed: {e.Message}");
+            }
+        }
+
+        private string FindWindowsUvPath()
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            
+            // Check for different Python versions
+            string[] pythonVersions = { "Python313", "Python312", "Python311", "Python310", "Python39", "Python38" };
+            
+            foreach (string version in pythonVersions)
+            {
+                string uvPath = Path.Combine(appData, version, "Scripts", "uv.exe");
+                if (File.Exists(uvPath))
+                {
+                    return uvPath;
+                }
+            }
+            
+            // Check Program Files locations
+            string[] programFilesPaths = {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Python"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Python"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Python")
+            };
+            
+            foreach (string basePath in programFilesPaths)
+            {
+                if (Directory.Exists(basePath))
+                {
+                    foreach (string dir in Directory.GetDirectories(basePath, "Python*"))
+                    {
+                        string uvPath = Path.Combine(dir, "Scripts", "uv.exe");
+                        if (File.Exists(uvPath))
+                        {
+                            return uvPath;
+                        }
+                    }
+                }
+            }
+            
+            return null; // Will fallback to using 'uv' from PATH
+        }
+
+        private void CheckClaudeCodeConfiguration(McpClient mcpClient)
+        {
+            try
+            {
+                // Get the Unity project directory to check project-specific config
+                string unityProjectDir = Application.dataPath;
+                string projectDir = Path.GetDirectoryName(unityProjectDir);
+                
+                // Read the global Claude config file
+                string configPath = mcpClient.linuxConfigPath; // ~/.claude.json
+                if (!File.Exists(configPath))
+                {
+                    mcpClient.SetStatus(McpStatus.NotConfigured);
+                    return;
+                }
+                
+                string configJson = File.ReadAllText(configPath);
+                dynamic claudeConfig = JsonConvert.DeserializeObject(configJson);
+                
+                // Check for UnityMCP server in the mcpServers section (current format)
+                if (claudeConfig?.mcpServers != null)
+                {
+                    var servers = claudeConfig.mcpServers;
+                    if (servers.UnityMCP != null || servers.unityMCP != null)
+                    {
+                        // Found UnityMCP configured
+                        mcpClient.SetStatus(McpStatus.Configured);
+                        return;
+                    }
+                }
+                
+                // Also check if there's a project-specific configuration for this Unity project (legacy format)
+                if (claudeConfig?.projects != null)
+                {
+                    // Look for the project path in the config
+                    foreach (var project in claudeConfig.projects)
+                    {
+                        string projectPath = project.Name;
+                        if (projectPath == projectDir && project.Value?.mcpServers != null)
+                        {
+                            // Check for UnityMCP (case variations)
+                            var servers = project.Value.mcpServers;
+                            if (servers.UnityMCP != null || servers.unityMCP != null)
+                            {
+                                // Found UnityMCP configured for this project
+                                mcpClient.SetStatus(McpStatus.Configured);
+                                return;
+                            }
+                        }
+                    }
+                }
+                
+                // No configuration found for this project
+                mcpClient.SetStatus(McpStatus.NotConfigured);
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogWarning($"Error checking Claude Code config: {e.Message}");
                 mcpClient.SetStatus(McpStatus.Error, e.Message);
             }
         }

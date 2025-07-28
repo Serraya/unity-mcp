@@ -5,6 +5,7 @@ namespace UnityMcpBridge.Editor.Models
         ClaudeDesktop,
         Cursor,
         VSCode,
+        ClaudeCode,
     }
 }
 

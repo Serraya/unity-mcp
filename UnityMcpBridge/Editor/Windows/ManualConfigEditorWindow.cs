@@ -39,7 +39,7 @@ namespace UnityMcpBridge.Editor.Windows
             );
             GUI.Label(
                 new Rect(titleRect.x + 10, titleRect.y + 6, titleRect.width - 20, titleRect.height),
-                mcpClient.name + " Manual Configuration",
+                (mcpClient?.name ?? "Unknown") + " Manual Configuration",
                 EditorStyles.boldLabel
             );
             EditorGUILayout.Space(10);
@@ -70,17 +70,17 @@ namespace UnityMcpBridge.Editor.Windows
             };
 
             EditorGUILayout.LabelField(
-                "1. Open " + mcpClient.name + " config file by either:",
+                "1. Open " + (mcpClient?.name ?? "Unknown") + " config file by either:",
                 instructionStyle
             );
-            if (mcpClient.mcpType == McpTypes.ClaudeDesktop)
+            if (mcpClient?.mcpType == McpTypes.ClaudeDesktop)
             {
                 EditorGUILayout.LabelField(
                     "    a) Going to Settings > Developer > Edit Config",
                     instructionStyle
                 );
             }
-            else if (mcpClient.mcpType == McpTypes.Cursor)
+            else if (mcpClient?.mcpType == McpTypes.Cursor)
             {
                 EditorGUILayout.LabelField(
                     "    a) Going to File > Preferences > Cursor Settings > MCP > Add new global MCP server",
@@ -96,16 +96,23 @@ namespace UnityMcpBridge.Editor.Windows
             // Path section with improved styling
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             string displayPath;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (mcpClient != null)
             {
-                displayPath = mcpClient.windowsConfigPath;
-            }
-            else if (
-                RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-            )
-            {
-                displayPath = mcpClient.linuxConfigPath;
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    displayPath = mcpClient.windowsConfigPath;
+                }
+                else if (
+                    RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                    || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                )
+                {
+                    displayPath = mcpClient.linuxConfigPath;
+                }
+                else
+                {
+                    displayPath = configPath;
+                }
             }
             else
             {
@@ -224,7 +231,7 @@ namespace UnityMcpBridge.Editor.Windows
 
             EditorGUILayout.Space(10);
             EditorGUILayout.LabelField(
-                "3. Save the file and restart " + mcpClient.name,
+                "3. Save the file and restart " + (mcpClient?.name ?? "Unknown"),
                 instructionStyle
             );
 
