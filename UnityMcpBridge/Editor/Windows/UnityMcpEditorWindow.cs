@@ -373,6 +373,13 @@ namespace UnityMcpBridge.Editor.Windows
                     if (mcpClient.mcpType == McpTypes.VSCode)
                     {
                         string pythonDir = FindPackagePythonDirectory();
+                        string uvPath = FindUvPath();
+                        if (uvPath == null)
+                        {
+                            UnityEngine.Debug.LogError("UV package manager not found. Cannot configure VSCode.");
+                            return;
+                        }
+                        
                         var vscodeConfig = new
                         {
                             mcp = new
@@ -381,7 +388,7 @@ namespace UnityMcpBridge.Editor.Windows
                                 {
                                     unityMCP = new
                                     {
-                                        command = "uv",
+                                        command = uvPath,
                                         args = new[] { "--directory", pythonDir, "run", "server.py" }
                                     }
                                 }
@@ -425,10 +432,16 @@ namespace UnityMcpBridge.Editor.Windows
 
         private string WriteToConfig(string pythonDir, string configPath, McpClient mcpClient = null)
         {
+            string uvPath = FindUvPath();
+            if (uvPath == null)
+            {
+                return "UV package manager not found. Please install UV first.";
+            }
+            
             // Create configuration object for unityMCP
             McpConfigServer unityMCPConfig = new()
             {
-                command = "uv",
+                command = uvPath,
                 args = new[] { "--directory", pythonDir, "run", "server.py" },
             };
 
@@ -541,13 +554,20 @@ namespace UnityMcpBridge.Editor.Windows
                     
                 default:
                     // Create standard MCP configuration for other clients
+                    string uvPath = FindUvPath();
+                    if (uvPath == null)
+                    {
+                        UnityEngine.Debug.LogError("UV package manager not found. Cannot configure manual setup.");
+                        return;
+                    }
+                    
                     McpConfig jsonConfig = new()
                     {
                         mcpServers = new McpConfigServers
                         {
                             unityMCP = new McpConfigServer
                             {
-                                command = "uv",
+                                command = uvPath,
                                 args = new[] { "--directory", pythonDir, "run", "server.py" },
                             },
                         },
@@ -714,13 +734,20 @@ namespace UnityMcpBridge.Editor.Windows
             string pythonDir = FindPackagePythonDirectory();
 
             // Create the manual configuration message
+            string uvPath = FindUvPath();
+            if (uvPath == null)
+            {
+                UnityEngine.Debug.LogError("UV package manager not found. Cannot configure manual setup.");
+                return;
+            }
+            
             McpConfig jsonConfig = new()
             {
                 mcpServers = new McpConfigServers
                 {
                     unityMCP = new McpConfigServer
                     {
-                        command = "uv",
+                        command = uvPath,
                         args = new[] { "--directory", pythonDir, "run", "server.py" },
                     },
                 },
@@ -1012,6 +1039,75 @@ namespace UnityMcpBridge.Editor.Windows
             {
                 UnityEngine.Debug.LogError($"Claude CLI unregistration failed: {e.Message}");
             }
+        }
+
+        private string FindUvPath()
+        {
+            string uvPath = null;
+            
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                uvPath = FindWindowsUvPath();
+            }
+            else
+            {
+                // macOS/Linux paths
+                string[] possiblePaths = {
+                    "/Library/Frameworks/Python.framework/Versions/3.13/bin/uv",
+                    "/usr/local/bin/uv",
+                    "/opt/homebrew/bin/uv",
+                    "/usr/bin/uv"
+                };
+                
+                foreach (string path in possiblePaths)
+                {
+                    if (File.Exists(path))
+                    {
+                        uvPath = path;
+                        break;
+                    }
+                }
+                
+                // If not found in common locations, try to find via which command
+                if (uvPath == null)
+                {
+                    try
+                    {
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = "which",
+                            Arguments = "uv",
+                            UseShellExecute = false,
+                            RedirectStandardOutput = true,
+                            CreateNoWindow = true
+                        };
+                        
+                        using var process = Process.Start(psi);
+                        string output = process.StandardOutput.ReadToEnd().Trim();
+                        process.WaitForExit();
+                        
+                        if (!string.IsNullOrEmpty(output) && File.Exists(output))
+                        {
+                            uvPath = output;
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore errors
+                    }
+                }
+            }
+            
+            if (uvPath == null)
+            {
+                UnityEngine.Debug.LogError("UV package manager not found! Please install UV first:\n" +
+                    "• macOS/Linux: curl -LsSf https://astral.sh/uv/install.sh | sh\n" +
+                    "• Windows: pip install uv\n" +
+                    "• Or visit: https://docs.astral.sh/uv/getting-started/installation");
+                return null;
+            }
+            
+            return uvPath;
         }
 
         private string FindWindowsUvPath()
