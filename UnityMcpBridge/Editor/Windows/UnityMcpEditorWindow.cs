@@ -901,7 +901,13 @@ namespace UnityMcpBridge.Editor.Windows
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                command = "claude";
+                command = FindClaudeCommand();
+                
+                if (string.IsNullOrEmpty(command))
+                {
+                    UnityEngine.Debug.LogError("Claude CLI not found. Please ensure Claude Code is installed and accessible.");
+                    return;
+                }
                 
                 // Try to find uv.exe in common locations
                 string uvPath = FindWindowsUvPath();
@@ -982,7 +988,13 @@ namespace UnityMcpBridge.Editor.Windows
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                command = "claude";
+                command = FindClaudeCommand();
+                
+                if (string.IsNullOrEmpty(command))
+                {
+                    UnityEngine.Debug.LogError("Claude CLI not found. Please ensure Claude Code is installed and accessible.");
+                    return;
+                }
             }
             else
             {
@@ -1149,6 +1161,68 @@ namespace UnityMcpBridge.Editor.Windows
             }
             
             return null; // Will fallback to using 'uv' from PATH
+        }
+
+        private string FindClaudeCommand()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Common locations for Claude CLI on Windows
+                string[] possiblePaths = {
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "claude.cmd"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "npm", "claude.cmd"),
+                    "claude.cmd", // Fallback to PATH
+                    "claude" // Final fallback
+                };
+                
+                foreach (string path in possiblePaths)
+                {
+                    if (path.Contains("\\") && File.Exists(path))
+                    {
+                        return path;
+                    }
+                }
+                
+                // Try to find via where command
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "where",
+                        Arguments = "claude",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        CreateNoWindow = true
+                    };
+                    
+                    using var process = Process.Start(psi);
+                    string output = process.StandardOutput.ReadToEnd().Trim();
+                    process.WaitForExit();
+                    
+                    if (!string.IsNullOrEmpty(output))
+                    {
+                        string[] lines = output.Split('\n');
+                        foreach (string line in lines)
+                        {
+                            string cleanPath = line.Trim();
+                            if (File.Exists(cleanPath))
+                            {
+                                return cleanPath;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore errors and fall back
+                }
+                
+                return "claude"; // Final fallback to PATH
+            }
+            else
+            {
+                return "/usr/local/bin/claude";
+            }
         }
 
         private void CheckClaudeCodeConfiguration(McpClient mcpClient)
