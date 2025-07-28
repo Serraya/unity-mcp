@@ -70,6 +70,7 @@ Unity MCP connects your tools using two components:
       ```
   *   **An MCP Client:**
       *   [Claude Desktop](https://claude.ai/download)
+      *   [Claude Code](https://github.com/anthropics/claude-code)
       *   [Cursor](https://www.cursor.com/en/downloads)
       *   [Visual Studio Code Copilot](https://code.visualstudio.com/docs/copilot/overview)
       *   *(Others may work with manual config)*
@@ -194,6 +195,20 @@ If Auto-Configure fails or you use a different client:
 (Replace YOUR_USERNAME)
 
 </details>
+
+**Option C: Claude Code Registration**
+
+If you're using Claude Code, you can register the MCP server using these commands:
+
+**macOS:**
+```bash
+claude mcp add UnityMCP -- uv --directory /[PATH_TO]/UnityMCP/UnityMcpServer/src run server.py
+```
+
+**Windows:**
+```bash
+claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/Scripts/uv.exe" --directory "C:/Users/USERNAME/AppData/Local/Programs/UnityMCP/UnityMcpServer/src" run server.py
+```
 
 ---
 
