@@ -29,6 +29,20 @@ namespace UnityMcpBridge.Editor.Data
             },
             new()
             {
+                name = "Claude Code",
+                windowsConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".claude.json"
+                ),
+                linuxConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".claude.json"
+                ),
+                mcpType = McpTypes.ClaudeCode,
+                configStatus = "Not Configured",
+            },
+            new()
+            {
                 name = "Cursor",
                 windowsConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -61,20 +75,6 @@ namespace UnityMcpBridge.Editor.Data
                     "settings.json"
                 ),
                 mcpType = McpTypes.VSCode,
-                configStatus = "Not Configured",
-            },
-            new()
-            {
-                name = "Claude Code",
-                windowsConfigPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    ".claude.json"
-                ),
-                linuxConfigPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    ".claude.json"
-                ),
-                mcpType = McpTypes.ClaudeCode,
                 configStatus = "Not Configured",
             },
         };

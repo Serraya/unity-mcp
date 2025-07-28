@@ -957,7 +957,7 @@ namespace UnityMcpBridge.Editor.Windows
                 process.WaitForExit();
 
 
-                
+
                 // Check for success or already exists
                 if (output.Contains("Added stdio MCP server") || errors.Contains("already exists"))
                 {
@@ -968,6 +968,7 @@ namespace UnityMcpBridge.Editor.Windows
                         CheckMcpConfiguration(claudeClient);
                     }
                     Repaint();
+                    UnityEngine.Debug.Log("UnityMCP server successfully registered from Claude Code.");
                     
 
                 }
