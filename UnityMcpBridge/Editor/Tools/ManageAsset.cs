@@ -8,6 +8,14 @@ using UnityEditor;
 using UnityEngine;
 using UnityMcpBridge.Editor.Helpers; // For Response class
 
+#if UNITY_6000_0_OR_NEWER
+using PhysicsMaterialType = UnityEngine.PhysicsMaterial;
+using PhysicsMaterialCombine = UnityEngine.PhysicsMaterialCombine;  
+#else
+using PhysicsMaterialType = UnityEngine.PhysicMaterial;
+using PhysicsMaterialCombine = UnityEngine.PhysicMaterialCombine;
+#endif
+
 namespace UnityMcpBridge.Editor.Tools
 {
     /// <summary>
@@ -176,6 +184,14 @@ namespace UnityMcpBridge.Editor.Tools
                         ApplyMaterialProperties(mat, properties);
                     AssetDatabase.CreateAsset(mat, fullPath);
                     newAsset = mat;
+                }
+                else if (lowerAssetType == "physicsmaterial")
+                {
+                    PhysicsMaterialType pmat = new PhysicsMaterialType();
+                    if (properties != null)
+                        ApplyPhysicsMaterialProperties(pmat, properties);
+                    AssetDatabase.CreateAsset(pmat, fullPath);
+                    newAsset = pmat;
                 }
                 else if (lowerAssetType == "scriptableobject")
                 {
@@ -891,6 +907,30 @@ namespace UnityMcpBridge.Editor.Tools
                         );
                     }
                 }
+            } else if (properties["color"] is JArray colorArr) //Use color now with examples set in manage_asset.py
+            {
+                string propName =  "_Color"; 
+                try {
+                    if (colorArr.Count >= 3)
+                    {
+                        Color newColor = new Color(
+                            colorArr[0].ToObject<float>(),
+                            colorArr[1].ToObject<float>(), 
+                            colorArr[2].ToObject<float>(), 
+                            colorArr.Count > 3 ? colorArr[3].ToObject<float>() : 1.0f
+                        );
+                        if (mat.HasProperty(propName) && mat.GetColor(propName) != newColor)
+                        {
+                            mat.SetColor(propName, newColor);
+                            modified = true;
+                        }
+                    }
+                } 
+                catch (Exception ex) {
+                    Debug.LogWarning(
+                        $"Error parsing color property '{propName}': {ex.Message}"
+                    );
+                }
             }
             // Example: Set float property
             if (properties["float"] is JObject floatProps)
@@ -945,6 +985,77 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // TODO: Add handlers for other property types (Vectors, Ints, Keywords, RenderQueue, etc.)
+            return modified;
+        }
+
+        /// <summary>
+        ///  Applies properties from JObject to a PhysicsMaterial.
+        /// </summary>
+        private static bool ApplyPhysicsMaterialProperties(PhysicsMaterialType pmat, JObject properties)
+        {
+            if (pmat == null || properties == null)
+                return false;
+            bool modified = false;
+
+            // Example: Set dynamic friction
+            if (properties["dynamicFriction"]?.Type == JTokenType.Float)
+            {
+                float dynamicFriction = properties["dynamicFriction"].ToObject<float>();
+                pmat.dynamicFriction = dynamicFriction;
+                modified = true;
+            }
+
+            // Example: Set static friction
+            if (properties["staticFriction"]?.Type == JTokenType.Float)
+            {
+                float staticFriction = properties["staticFriction"].ToObject<float>();
+                pmat.staticFriction = staticFriction;
+                modified = true;
+            }
+
+            // Example: Set bounciness
+            if (properties["bounciness"]?.Type == JTokenType.Float)
+            {
+                float bounciness = properties["bounciness"].ToObject<float>();
+                pmat.bounciness = bounciness;
+                modified = true;
+            }
+
+            List<String> averageList = new List<String> { "ave", "Ave", "average", "Average" };
+            List<String> multiplyList = new List<String> { "mul", "Mul", "mult", "Mult", "multiply", "Multiply" };
+            List<String> minimumList = new List<String> { "min", "Min", "minimum", "Minimum" };
+            List<String> maximumList = new List<String> { "max", "Max", "maximum", "Maximum" };
+
+            // Example: Set friction combine
+            if (properties["frictionCombine"]?.Type == JTokenType.String)
+            {
+                string frictionCombine = properties["frictionCombine"].ToString();
+                if (averageList.Contains(frictionCombine))
+                    pmat.frictionCombine = PhysicsMaterialCombine.Average;
+                else if (multiplyList.Contains(frictionCombine))
+                    pmat.frictionCombine = PhysicsMaterialCombine.Multiply;
+                else if (minimumList.Contains(frictionCombine))
+                    pmat.frictionCombine = PhysicsMaterialCombine.Minimum;
+                else if (maximumList.Contains(frictionCombine))
+                    pmat.frictionCombine = PhysicsMaterialCombine.Maximum;
+                modified = true;
+            }
+
+            // Example: Set bounce combine
+            if (properties["bounceCombine"]?.Type == JTokenType.String)
+            {
+                string bounceCombine = properties["bounceCombine"].ToString();
+                if (averageList.Contains(bounceCombine))
+                    pmat.bounceCombine = PhysicsMaterialCombine.Average;
+                else if (multiplyList.Contains(bounceCombine))
+                    pmat.bounceCombine = PhysicsMaterialCombine.Multiply;
+                else if (minimumList.Contains(bounceCombine))
+                    pmat.bounceCombine = PhysicsMaterialCombine.Minimum;
+                else if (maximumList.Contains(bounceCombine))
+                    pmat.bounceCombine = PhysicsMaterialCombine.Maximum;
+                modified = true;
+            }
+
             return modified;
         }
 

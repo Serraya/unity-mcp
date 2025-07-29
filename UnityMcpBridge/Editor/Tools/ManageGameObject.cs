@@ -9,8 +9,8 @@ using UnityEditor.SceneManagement;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityMcpBridge.Editor.Helpers; // For Response class AND GameObjectSerializer
-using UnityMcpBridge.Runtime.Serialization; // <<< Keep for Converters access? Might not be needed here directly
+using UnityMcpBridge.Editor.Helpers; // For Response class
+using UnityMcpBridge.Runtime.Serialization;
 
 namespace UnityMcpBridge.Editor.Tools
 {
@@ -23,10 +23,6 @@ namespace UnityMcpBridge.Editor.Tools
 
         public static object HandleCommand(JObject @params)
         {
-            // --- DEBUG --- Log the raw parameter value ---
-            // JToken rawIncludeFlag = @params["includeNonPublicSerialized"];
-            // Debug.Log($"[HandleCommand Debug] Raw includeNonPublicSerialized parameter: Type={rawIncludeFlag?.Type.ToString() ?? "Null"}, Value={rawIncludeFlag?.ToString() ?? "N/A"}");
-            // --- END DEBUG ---
 
             string action = @params["action"]?.ToString().ToLower();
             if (string.IsNullOrEmpty(action))
@@ -219,17 +215,22 @@ namespace UnityMcpBridge.Editor.Tools
                         $"[ManageGameObject.Create] Provided prefabPath '{prefabPath}' does not end with .prefab. Assuming it's missing and appending."
                     );
                     prefabPath += ".prefab";
+                    // Note: This path might still not exist, AssetDatabase.LoadAssetAtPath will handle that.
                 }
+                // The logic above now handles finding or assuming the .prefab extension.
 
                 GameObject prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
                 if (prefabAsset != null)
                 {
                     try
                     {
+                        // Instantiate the prefab, initially place it at the root
+                        // Parent will be set later if specified
                         newGo = PrefabUtility.InstantiatePrefab(prefabAsset) as GameObject;
 
                         if (newGo == null)
                         {
+                            // This might happen if the asset exists but isn't a valid GameObject prefab somehow
                             Debug.LogError(
                                 $"[ManageGameObject.Create] Failed to instantiate prefab at '{prefabPath}', asset might be corrupted or not a GameObject."
                             );
@@ -237,12 +238,12 @@ namespace UnityMcpBridge.Editor.Tools
                                 $"Failed to instantiate prefab at '{prefabPath}'."
                             );
                         }
-
+                        // Name the instance based on the 'name' parameter, not the prefab's default name
                         if (!string.IsNullOrEmpty(name))
                         {
                             newGo.name = name;
                         }
-
+                        // Register Undo for prefab instantiation
                         Undo.RegisterCreatedObjectUndo(
                             newGo,
                             $"Instantiate Prefab '{prefabAsset.name}' as '{newGo.name}'"
@@ -260,9 +261,12 @@ namespace UnityMcpBridge.Editor.Tools
                 }
                 else
                 {
+                    // Only return error if prefabPath was specified but not found.
+                    // If prefabPath was empty/null, we proceed to create primitive/empty.
                     Debug.LogWarning(
                         $"[ManageGameObject.Create] Prefab asset not found at path: '{prefabPath}'. Will proceed to create new object if specified."
                     );
+                    // Do not return error here, allow fallback to primitive/empty creation
                 }
             }
 
@@ -277,6 +281,7 @@ namespace UnityMcpBridge.Editor.Tools
                         PrimitiveType type = (PrimitiveType)
                             Enum.Parse(typeof(PrimitiveType), primitiveType, true);
                         newGo = GameObject.CreatePrimitive(type);
+                        // Set name *after* creation for primitives
                         if (!string.IsNullOrEmpty(name))
                             newGo.name = name;
                         else
@@ -309,18 +314,21 @@ namespace UnityMcpBridge.Editor.Tools
                     newGo = new GameObject(name);
                     createdNewObject = true;
                 }
-
+                // Record creation for Undo *only* if we created a new object
                 if (createdNewObject)
                 {
                     Undo.RegisterCreatedObjectUndo(newGo, $"Create GameObject '{newGo.name}'");
                 }
             }
-
+            // --- Common Setup (Parent, Transform, Tag, Components) - Applied AFTER object exists ---
             if (newGo == null)
             {
+                // Should theoretically not happen if logic above is correct, but safety check.
                 return Response.Error("Failed to create or instantiate the GameObject.");
             }
 
+            // Record potential changes to the existing prefab instance or the new GO
+            // Record transform separately in case parent changes affect it
             Undo.RecordObject(newGo.transform, "Set GameObject Transform");
             Undo.RecordObject(newGo, "Set GameObject Properties");
 
@@ -352,6 +360,7 @@ namespace UnityMcpBridge.Editor.Tools
             // Set Tag (added for create action)
             if (!string.IsNullOrEmpty(tag))
             {
+                // Similar logic as in ModifyGameObject for setting/creating tags
                 string tagToSet = string.IsNullOrEmpty(tag) ? "Untagged" : tag;
                 try
                 {
@@ -448,13 +457,16 @@ namespace UnityMcpBridge.Editor.Tools
             if (createdNewObject && saveAsPrefab)
             {
                 string finalPrefabPath = prefabPath; // Use a separate variable for saving path
+                // This check should now happen *before* attempting to save
                 if (string.IsNullOrEmpty(finalPrefabPath))
                 {
+                    // Clean up the created object before returning error
                     UnityEngine.Object.DestroyImmediate(newGo);
                     return Response.Error(
                         "'prefabPath' is required when 'saveAsPrefab' is true and creating a new object."
                     );
                 }
+                // Ensure the *saving* path ends with .prefab
                 if (!finalPrefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
                 {
                     Debug.Log(
@@ -465,6 +477,7 @@ namespace UnityMcpBridge.Editor.Tools
 
                 try
                 {
+                    // Ensure directory exists using the final saving path
                     string directoryPath = System.IO.Path.GetDirectoryName(finalPrefabPath);
                     if (
                         !string.IsNullOrEmpty(directoryPath)
@@ -477,7 +490,7 @@ namespace UnityMcpBridge.Editor.Tools
                             $"[ManageGameObject.Create] Created directory for prefab: {directoryPath}"
                         );
                     }
-
+                    // Use SaveAsPrefabAssetAndConnect with the final saving path
                     finalInstance = PrefabUtility.SaveAsPrefabAssetAndConnect(
                         newGo,
                         finalPrefabPath,
@@ -486,6 +499,7 @@ namespace UnityMcpBridge.Editor.Tools
 
                     if (finalInstance == null)
                     {
+                        // Destroy the original if saving failed somehow (shouldn't usually happen if path is valid)
                         UnityEngine.Object.DestroyImmediate(newGo);
                         return Response.Error(
                             $"Failed to save GameObject '{name}' as prefab at '{finalPrefabPath}'. Check path and permissions."
@@ -494,16 +508,21 @@ namespace UnityMcpBridge.Editor.Tools
                     Debug.Log(
                         $"[ManageGameObject.Create] GameObject '{name}' saved as prefab to '{finalPrefabPath}' and instance connected."
                     );
+                    // Mark the new prefab asset as dirty? Not usually necessary, SaveAsPrefabAsset handles it.
+                    // EditorUtility.SetDirty(finalInstance); // Instance is handled by SaveAsPrefabAssetAndConnect
                 }
                 catch (Exception e)
                 {
+                    // Clean up the instance if prefab saving fails
                     UnityEngine.Object.DestroyImmediate(newGo); // Destroy the original attempt
                     return Response.Error($"Error saving prefab '{finalPrefabPath}': {e.Message}");
                 }
             }
 
+            // Select the instance in the scene (either prefab instance or newly created/saved one)
             Selection.activeGameObject = finalInstance;
 
+            // Determine appropriate success message using the potentially updated or original path
             string messagePrefabPath =
                 finalInstance == null
                     ? originalPrefabPath
@@ -529,6 +548,7 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // Use the new serializer helper
+            //return Response.Success(successMessage, GetGameObjectData(finalInstance));
             return Response.Success(successMessage, Helpers.GameObjectSerializer.GetGameObjectData(finalInstance));
         }
 
@@ -546,6 +566,7 @@ namespace UnityMcpBridge.Editor.Tools
                 );
             }
 
+            // Record state for Undo *before* modifications
             Undo.RecordObject(targetGo.transform, "Modify GameObject Transform");
             Undo.RecordObject(targetGo, "Modify GameObject Properties");
 
@@ -564,6 +585,7 @@ namespace UnityMcpBridge.Editor.Tools
             if (parentToken != null)
             {
                 GameObject newParentGo = FindObjectInternal(parentToken, "by_id_or_name_or_path");
+                // Check for hierarchy loops
                 if (
                     newParentGo == null
                     && !(
@@ -600,8 +622,11 @@ namespace UnityMcpBridge.Editor.Tools
 
             // Change Tag (using consolidated 'tag' parameter)
             string tag = @params["tag"]?.ToString();
+            // Only attempt to change tag if a non-null tag is provided and it's different from the current one.
+            // Allow setting an empty string to remove the tag (Unity uses "Untagged").
             if (tag != null && targetGo.tag != tag)
             {
+                // Ensure the tag is not empty, if empty, it means "Untagged" implicitly
                 string tagToSet = string.IsNullOrEmpty(tag) ? "Untagged" : tag;
                 try
                 {
@@ -610,6 +635,7 @@ namespace UnityMcpBridge.Editor.Tools
                 }
                 catch (UnityException ex)
                 {
+                    // Check if the error is specifically because the tag doesn't exist
                     if (ex.Message.Contains("is not defined"))
                     {
                         Debug.LogWarning(
@@ -617,7 +643,12 @@ namespace UnityMcpBridge.Editor.Tools
                         );
                         try
                         {
+                            // Attempt to create the tag using internal utility
                             InternalEditorUtility.AddTag(tagToSet);
+                            // Wait a frame maybe? Not strictly necessary but sometimes helps editor updates.
+                            // yield return null; // Cannot yield here, editor script limitation
+
+                            // Retry setting the tag immediately after creation
                             targetGo.tag = tagToSet;
                             modified = true;
                             Debug.Log(
@@ -626,6 +657,7 @@ namespace UnityMcpBridge.Editor.Tools
                         }
                         catch (Exception innerEx)
                         {
+                            // Handle failure during tag creation or the second assignment attempt
                             Debug.LogError(
                                 $"[ManageGameObject] Failed to create or assign tag '{tagToSet}' after attempting creation: {innerEx.Message}"
                             );
@@ -636,6 +668,7 @@ namespace UnityMcpBridge.Editor.Tools
                     }
                     else
                     {
+                        // If the exception was for a different reason, return the original error
                         return Response.Error($"Failed to set tag to '{tagToSet}': {ex.Message}.");
                     }
                 }
@@ -681,12 +714,14 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // --- Component Modifications ---
+            // Note: These might need more specific Undo recording per component
 
             // Remove Components
             if (@params["componentsToRemove"] is JArray componentsToRemoveArray)
             {
                 foreach (var compToken in componentsToRemoveArray)
                 {
+                    // ... (parsing logic as in CreateGameObject) ...
                     string typeName = compToken.ToString();
                     if (!string.IsNullOrEmpty(typeName))
                     {
@@ -746,7 +781,11 @@ namespace UnityMcpBridge.Editor.Tools
 
             if (!modified)
             {
-                 // Use the new serializer helper
+                // Use the new serializer helper
+                // return Response.Success(
+                //     $"No modifications applied to GameObject '{targetGo.name}'.",
+                //     GetGameObjectData(targetGo));
+
                 return Response.Success(
                     $"No modifications applied to GameObject '{targetGo.name}'.",
                     Helpers.GameObjectSerializer.GetGameObjectData(targetGo)
@@ -754,11 +793,15 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             EditorUtility.SetDirty(targetGo); // Mark scene as dirty
-             // Use the new serializer helper
+            // Use the new serializer helper
             return Response.Success(
                 $"GameObject '{targetGo.name}' modified successfully.",
                 Helpers.GameObjectSerializer.GetGameObjectData(targetGo)
             );
+            // return Response.Success(
+            //     $"GameObject '{targetGo.name}' modified successfully.",
+            //     GetGameObjectData(targetGo));
+            
         }
 
         private static object DeleteGameObject(JToken targetToken, string searchMethod)
@@ -821,11 +864,12 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // Use the new serializer helper
+            //var results = foundObjects.Select(go => GetGameObjectData(go)).ToList();
             var results = foundObjects.Select(go => Helpers.GameObjectSerializer.GetGameObjectData(go)).ToList();
             return Response.Success($"Found {results.Count} GameObject(s).", results);
         }
 
-        private static object GetComponentsFromTarget(string target, string searchMethod, bool includeNonPublicSerialized)
+        private static object GetComponentsFromTarget(string target, string searchMethod, bool includeNonPublicSerialized = true)
         {
             GameObject targetGo = FindObjectInternal(target, searchMethod);
             if (targetGo == null)
@@ -1443,6 +1487,8 @@ namespace UnityMcpBridge.Editor.Tools
                         Debug.LogWarning(
                             $"[ManageGameObject] Could not set property '{propName}' on component '{compName}' ('{targetComponent.GetType().Name}'). Property might not exist, be read-only, or type mismatch."
                         );
+                        // Optionally return an error here instead of just logging
+                        // return Response.Error($"Could not set property '{propName}' on component '{compName}'.");
                     }
                 }
                 catch (Exception e)
@@ -1450,6 +1496,8 @@ namespace UnityMcpBridge.Editor.Tools
                     Debug.LogError(
                         $"[ManageGameObject] Error setting property '{propName}' on '{compName}': {e.Message}"
                     );
+                    // Optionally return an error here
+                    // return Response.Error($"Error setting property '{propName}' on '{compName}': {e.Message}");
                 }
             }
             EditorUtility.SetDirty(targetComponent);
@@ -1488,6 +1536,7 @@ namespace UnityMcpBridge.Editor.Tools
             try
             {
                 // Handle special case for materials with dot notation (material.property)
+                // Examples: material.color, sharedMaterial.color, materials[0].color
                 if (memberName.Contains('.') || memberName.Contains('['))
                 {
                     // Pass the inputSerializer down for nested conversions
@@ -1538,7 +1587,8 @@ namespace UnityMcpBridge.Editor.Tools
         /// <summary>
         /// Sets a nested property using dot notation (e.g., "material.color") or array access (e.g., "materials[0]")
         /// </summary>
-         // Pass the input serializer for conversions
+        // Pass the input serializer for conversions
+        //Using the serializer helper
         private static bool SetNestedProperty(object target, string path, JToken value, JsonSerializer inputSerializer)
         {
             try
@@ -1560,6 +1610,7 @@ namespace UnityMcpBridge.Editor.Tools
                     bool isArray = false;
                     int arrayIndex = -1;
 
+                    // Check if this part contains array indexing
                     if (part.Contains("["))
                     {
                         int startBracket = part.IndexOf('[');
@@ -1577,7 +1628,7 @@ namespace UnityMcpBridge.Editor.Tools
                             }
                         }
                     }
-
+                    // Get the property/field
                     PropertyInfo propInfo = currentType.GetProperty(part, flags);
                     FieldInfo fieldInfo = null;
                     if (propInfo == null)
@@ -1592,11 +1643,12 @@ namespace UnityMcpBridge.Editor.Tools
                         }
                     }
 
+                    // Get the value
                     currentObject =
                         propInfo != null
                             ? propInfo.GetValue(currentObject)
                             : fieldInfo.GetValue(currentObject);
-
+                    //Need to stop if current property is null
                     if (currentObject == null)
                     {
                         Debug.LogWarning(
@@ -1604,7 +1656,7 @@ namespace UnityMcpBridge.Editor.Tools
                         );
                         return false;
                     }
-
+                    // If this part was an array or list, access the specific index
                     if (isArray)
                     {
                         if (currentObject is Material[])
@@ -1653,32 +1705,32 @@ namespace UnityMcpBridge.Editor.Tools
                     {
                         // Try converting to known types that SetColor/SetVector accept
                         if (jArray.Count == 4) {
-                            try { Color color = value.ToObject<Color>(inputSerializer); material.SetColor(finalPart, color); return true; } catch {}
-                             try { Vector4 vec = value.ToObject<Vector4>(inputSerializer); material.SetVector(finalPart, vec); return true; } catch {}
+                            try { Color color = value.ToObject<Color>(inputSerializer); material.SetColor(finalPart, color); return true; } catch { }
+                            try { Vector4 vec = value.ToObject<Vector4>(inputSerializer); material.SetVector(finalPart, vec); return true; } catch { }
                         } else if (jArray.Count == 3) {
-                             try { Color color = value.ToObject<Color>(inputSerializer); material.SetColor(finalPart, color); return true; } catch {} // ToObject handles conversion to Color
+                            try { Color color = value.ToObject<Color>(inputSerializer); material.SetColor(finalPart, color); return true; } catch { } // ToObject handles conversion to Color
                         } else if (jArray.Count == 2) {
-                             try { Vector2 vec = value.ToObject<Vector2>(inputSerializer); material.SetVector(finalPart, vec); return true; } catch {}
+                            try { Vector2 vec = value.ToObject<Vector2>(inputSerializer); material.SetVector(finalPart, vec); return true; } catch { }
                         }
                     }
                     else if (value.Type == JTokenType.Float || value.Type == JTokenType.Integer)
                     {
-                        try { material.SetFloat(finalPart, value.ToObject<float>(inputSerializer)); return true; } catch {}
+                        try { material.SetFloat(finalPart, value.ToObject<float>(inputSerializer)); return true; } catch { }
                     }
                     else if (value.Type == JTokenType.Boolean)
                     {
-                         try { material.SetFloat(finalPart, value.ToObject<bool>(inputSerializer) ? 1f : 0f); return true; } catch {}
+                        try { material.SetFloat(finalPart, value.ToObject<bool>(inputSerializer) ? 1f : 0f); return true; } catch { }
                     }
                     else if (value.Type == JTokenType.String)
                     {
                         // Try converting to Texture using the serializer/converter
-                         try {
-                             Texture texture = value.ToObject<Texture>(inputSerializer);
-                             if (texture != null) {
-                                 material.SetTexture(finalPart, texture);
-                                 return true;
-                             }
-                         } catch {}
+                        try {
+                            Texture texture = value.ToObject<Texture>(inputSerializer);
+                            if (texture != null) {
+                                material.SetTexture(finalPart, texture);
+                                return true;
+                            }
+                        } catch { }
                     }
 
                     Debug.LogWarning(
@@ -1698,7 +1750,7 @@ namespace UnityMcpBridge.Editor.Tools
                         finalPropInfo.SetValue(currentObject, convertedValue);
                         return true;
                     }
-                     else {
+                    else {
                         Debug.LogWarning($"[SetNestedProperty] Final conversion failed for property '{finalPart}' (Type: {finalPropInfo.PropertyType.Name}) from token: {value.ToString(Formatting.None)}");
                     }
                 }
@@ -1707,16 +1759,16 @@ namespace UnityMcpBridge.Editor.Tools
                     FieldInfo finalFieldInfo = currentType.GetField(finalPart, flags);
                     if (finalFieldInfo != null)
                     {
-                         // Use the inputSerializer for conversion
+                        // Use the inputSerializer for conversion
                         object convertedValue = ConvertJTokenToType(value, finalFieldInfo.FieldType, inputSerializer);
                         if (convertedValue != null || value.Type == JTokenType.Null)
                         {
                             finalFieldInfo.SetValue(currentObject, convertedValue);
                             return true;
                         }
-                         else {
-                             Debug.LogWarning($"[SetNestedProperty] Final conversion failed for field '{finalPart}' (Type: {finalFieldInfo.FieldType.Name}) from token: {value.ToString(Formatting.None)}");
-                         }
+                        else {
+                            Debug.LogWarning($"[SetNestedProperty] Final conversion failed for field '{finalPart}' (Type: {finalFieldInfo.FieldType.Name}) from token: {value.ToString(Formatting.None)}");
+                        }
                     }
                     else
                     {
@@ -1742,6 +1794,7 @@ namespace UnityMcpBridge.Editor.Tools
         /// </summary>
         private static string[] SplitPropertyPath(string path)
         {
+            // Handle complex paths with both dots and array indexers
             List<string> parts = new List<string>();
             int startIndex = 0;
             bool inBrackets = false;
@@ -1760,6 +1813,7 @@ namespace UnityMcpBridge.Editor.Tools
                 }
                 else if (c == '.' && !inBrackets)
                 {
+                    // Found a dot separator outside of brackets
                     parts.Add(path.Substring(startIndex, i - startIndex));
                     startIndex = i + 1;
                 }

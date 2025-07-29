@@ -1,12 +1,22 @@
 # Unity MCP ✨
 
-**Connect your Unity Editor to LLMs using the Model Context Protocol.**
+
+[![](https://img.shields.io/badge/Unity-000000?style=flat&logo=unity&logoColor=blue 'Unity')](https://unity.com/releases/editor/archive)
+[![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
+[![](https://badge.mcpx.dev?status=on 'MCP Enabled')](https://modelcontextprotocol.io/introduction)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/w/justinpbarnett/unity-mcp)
+![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/justinpbarnett/unity-mcp)
+[![](https://img.shields.io/badge/License-MIT-red.svg 'MIT License')](https://opensource.org/licenses/MIT)
+
+
+
+
+**Create your Unity apps with LLMs!**
 
 Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to interact directly with your Unity Editor via a local **MCP (Model Context Protocol) Client**. Give your LLM tools to manage assets, control scenes, edit scripts, and automate tasks within Unity.
 
 ---
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/justinpbarnett/unity-mcp/assets/11047284/c279675a-dd58-406b-9613-5b16b5c6bb63"><source media="(prefers-color-scheme: light)" srcset="https://github.com/justinpbarnett/unity-mcp/assets/11047284/b54f891d-961b-4048-a9c4-3af46e2a52fc"><img alt="UnityMCP Workflow" width="100%" style="max-width: 600px; display: block; margin-left: auto; margin-right: auto;"></picture>
 
 ## Key Features 🚀
 
@@ -15,8 +25,8 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
 *   **🤖 Automation:** Automate repetitive Unity workflows.
 *   **🧩 Extensible:** Designed to work with various MCP Clients.
 
-<details>
-  <summary><strong>Expand for Available Tools...</strong></summary>
+<details open>
+  <summary><strong> Available Tools </strong></summary>
 
   Your LLM can use functions like:
 
@@ -25,6 +35,7 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
   *   `manage_editor`: Controls and queries the editor's state and settings.
   *   `manage_scene`: Manages scenes (load, save, create, get hierarchy, etc.).
   *   `manage_asset`: Performs asset operations (import, create, modify, delete, etc.).
+  *   `manage_shader`: Performs shader CRUD operations (create, read, modify, delete).
   *   `manage_gameobject`: Manages GameObjects: create, modify, delete, find, and component operations.
   *   `execute_menu_item`: Executes a menu item via its path (e.g., "File/Save Project").
 </details>
@@ -48,8 +59,6 @@ Unity MCP connects your tools using two components:
 
 ### Prerequisites
 
-<details>
-  <summary><strong>Click to view required software...</strong></summary>
 
   *   **Git CLI:** For cloning the server code. [Download Git](https://git-scm.com/downloads)
   *   **Python:** Version 3.12 or newer. [Download Python](https://www.python.org/downloads/)
@@ -61,9 +70,31 @@ Unity MCP connects your tools using two components:
       ```
   *   **An MCP Client:**
       *   [Claude Desktop](https://claude.ai/download)
+      *   [Claude Code](https://github.com/anthropics/claude-code)
       *   [Cursor](https://www.cursor.com/en/downloads)
+      *   [Visual Studio Code Copilot](https://code.visualstudio.com/docs/copilot/overview)
       *   *(Others may work with manual config)*
-</details>
+ *    <details> <summary><strong>[Optional] Roslyn for Advanced Script Validation</strong></summary>
+
+        For **Strict** validation level that catches undefined namespaces, types, and methods: 
+
+        **Method 1: NuGet for Unity (Recommended)**
+        1. Install [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity)
+        2. Go to `Window > NuGet Package Manager`
+        3. Search for `Microsoft.CodeAnalysis.CSharp` and install the package
+        5. Go to `Player Settings > Scripting Define Symbols`
+        6. Add `USE_ROSLYN`
+        7. Restart Unity
+
+        **Method 2: Manual DLL Installation**
+        1. Download Microsoft.CodeAnalysis.CSharp.dll and dependencies from [NuGet](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp/)
+        2. Place DLLs in `Assets/Plugins/` folder
+        3. Ensure .NET compatibility settings are correct
+        4. Add `USE_ROSLYN` to Scripting Define Symbols
+        5. Restart Unity
+        
+        **Note:** Without Roslyn, script validation falls back to basic structural checks. Roslyn enables full C# compiler diagnostics with precise error reporting.</details>
+
 
 ### Step 1: Install the Unity Package (Bridge)
 
@@ -81,10 +112,12 @@ Unity MCP connects your tools using two components:
 
 Connect your MCP Client (Claude, Cursor, etc.) to the Python server you installed in Step 1.
 
-**Option A: Auto-Configure (Recommended for Claude/Cursor)**
+<img width="609" alt="image" src="https://github.com/user-attachments/assets/cef3a639-4677-4fd8-84e7-2d82a04d55bb" />
+
+**Option A: Auto-Configure (Recommended for Claude/Cursor/VSC Copilot)**
 
 1.  In Unity, go to `Window > Unity MCP`.
-2.  Click `Auto Configure Claude` or `Auto Configure Cursor`.
+2.  Click `Auto Configure` on the IDE you uses.
 3.  Look for a green status indicator 🟢 and "Connected". *(This attempts to modify the MCP Client's config file automatically)*.
 
 **Option B: Manual Configuration**
@@ -163,6 +196,20 @@ If Auto-Configure fails or you use a different client:
 
 </details>
 
+**Option C: Claude Code Registration**
+
+If you're using Claude Code, you can register the MCP server using these commands:
+
+**macOS:**
+```bash
+claude mcp add UnityMCP -- uv --directory /[PATH_TO]/UnityMCP/UnityMcpServer/src run server.py
+```
+
+**Windows:**
+```bash
+claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/Scripts/uv.exe" --directory "C:/Users/USERNAME/AppData/Local/Programs/UnityMCP/UnityMcpServer/src" run server.py
+```
+
 ---
 
 ## Usage ▶️
@@ -173,8 +220,41 @@ If Auto-Configure fails or you use a different client:
     
 3. **Interact!** Unity tools should now be available in your MCP Client.
     
-    Example Prompt: `Create a 3D player controller.`
+    Example Prompt: `Create a 3D player controller`, `Create a yellow and bridge sun`, `Create a cool shader and apply it on a cube`.
     
+---
+
+## Future Dev Plans (Besides PR) 📝
+
+### 🔴 High Priority
+- [ ] **Asset Generation Improvements** - Enhanced server request handling and asset pipeline optimization
+- [ ] **Code Generation Enhancements** - Improved generated code quality and error handling
+- [ ] **Robust Error Handling** - Comprehensive error messages, recovery mechanisms, and graceful degradation
+- [ ] **Remote Connection Support** - Enable seamless remote connection between Unity host and MCP server
+- [ ] **Documentation Expansion** - Complete tutorials for custom tool creation and API reference
+
+### 🟡 Medium Priority
+- [ ] **Custom Tool Creation GUI** - Visual interface for users to create and configure their own MCP tools
+- [ ] **Advanced Logging System** - Logging with filtering, export, and debugging capabilities
+
+### 🟢 Low Priority
+- [ ] **Mobile Platform Support** - Extended toolset for mobile development workflows and platform-specific features
+- [ ] **Easier Tool Setup**
+- [ ] **Plugin Marketplace** - Community-driven tool sharing and distribution platform
+
+<details open>
+  <summary><strong>✅ Completed Features<strong></summary>
+  
+  - [x] **Shader Generation** - Generate shaders using CGProgram template
+  - [x] **Advanced Script Validation** - Multi-level validation with semantic analysis, namespace/type checking, and Unity best practices (Will need Roslyn Installed, see [Prerequisite](#prerequisites)).
+</details>
+
+### 🔬 Research & Exploration
+- [ ] **AI-Powered Asset Generation** - Integration with AI tools for automatic 3D models, textures, and animations
+- [ ] **Real-time Collaboration** - Live editing sessions between multiple developers *(Currently in progress)*
+- [ ] **Analytics Dashboard** - Usage analytics, project insights, and performance metrics
+- [ ] **Voice Commands** - Voice-controlled Unity operations for accessibility
+- [ ] **AR/VR Tool Integration** - Extended support for immersive development workflows
 
 ---
 
@@ -227,7 +307,15 @@ Help make Unity MCP better!
 
 </details>  
 
-Still stuck? [Open an Issue](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fissues).
+Still stuck? [Open an Issue](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fissues) or [Join the Discord](https://discord.gg/vhTUxXaqYr)!
+
+---
+
+## Contact 👋
+
+- **justinpbarnett:** [X/Twitter](https://www.google.com/url?sa=E&q=https%3A%2F%2Fx.com%2Fjustinpbarnett)
+- **scriptwonder**: [Email](mailto:swu85@ur.rochester.edu), [LinkedIn](https://www.linkedin.com/in/shutong-wu-214043172/)
+    
 
 ---
 
@@ -237,13 +325,11 @@ MIT License. See [LICENSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithu
 
 ---
 
-## Contact 👋
-
-- **X/Twitter:** [@justinpbarnett](https://www.google.com/url?sa=E&q=https%3A%2F%2Fx.com%2Fjustinpbarnett)
-    
-
----
-
 ## Acknowledgments 🙏
 
 Thanks to the contributors and the Unity team.
+
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=justinpbarnett/unity-mcp&type=Date)](https://www.star-history.com/#justinpbarnett/unity-mcp&Date)
