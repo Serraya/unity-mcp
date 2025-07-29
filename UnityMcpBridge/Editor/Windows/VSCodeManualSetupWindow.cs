@@ -7,7 +7,7 @@ namespace UnityMcpBridge.Editor.Windows
 {
     public class VSCodeManualSetupWindow : ManualConfigEditorWindow
     {
-        public static new void ShowWindow(string configPath, string configJson)
+        public static void ShowWindow(string configPath, string configJson)
         {
             var window = GetWindow<VSCodeManualSetupWindow>("VSCode GitHub Copilot Setup");
             window.configPath = configPath;

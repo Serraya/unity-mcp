@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -941,7 +942,7 @@ namespace UnityMcpBridge.Editor.Windows
                 }
                 
                 // Try to find uv.exe in common locations
-                string uvPath = FindWindowsUvPath();
+                string uvPath = FindUvPath();
                 
                 if (string.IsNullOrEmpty(uvPath))
                 {
@@ -966,21 +967,49 @@ namespace UnityMcpBridge.Editor.Windows
                 string unityProjectDir = Application.dataPath;
                 string projectDir = Path.GetDirectoryName(unityProjectDir);
 
-                var psi = new ProcessStartInfo
+                var psi = new ProcessStartInfo();
+                
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
-                    FileName = command,
-                    Arguments = args,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                    WorkingDirectory = projectDir // Set working directory to Unity project directory
-                };
+                    // On Windows, run through PowerShell with explicit PATH setting
+                    psi.FileName = "powershell.exe";
+                    string nodePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs");
+                    psi.Arguments = $"-Command \"$env:PATH += ';{nodePath}'; & '{command}' {args}\"";
+                    UnityEngine.Debug.Log($"Executing: powershell.exe {psi.Arguments}");
+                }
+                else
+                {
+                    psi.FileName = command;
+                    psi.Arguments = args;
+                    UnityEngine.Debug.Log($"Executing: {command} {args}");
+                }
+                
+                psi.UseShellExecute = false;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                psi.CreateNoWindow = true;
+                psi.WorkingDirectory = projectDir;
 
-                // Set PATH to include common binary locations
+                // Set PATH to include common binary locations (OS-specific)
                 string currentPath = Environment.GetEnvironmentVariable("PATH") ?? "";
-                string additionalPaths = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin";
-                psi.EnvironmentVariables["PATH"] = $"{additionalPaths}:{currentPath}";
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    // Windows: Add common Node.js and npm locations
+                    string[] windowsPaths = {
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "nodejs"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "npm")
+                    };
+                    string additionalPaths = string.Join(";", windowsPaths);
+                    psi.EnvironmentVariables["PATH"] = $"{currentPath};{additionalPaths}";
+                }
+                else
+                {
+                    // macOS/Linux: Add common binary locations
+                    string additionalPaths = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin";
+                    psi.EnvironmentVariables["PATH"] = $"{additionalPaths}:{currentPath}";
+                }
 
                 using var process = Process.Start(psi);
                 string output = process.StandardOutput.ReadToEnd();
@@ -996,7 +1025,7 @@ namespace UnityMcpBridge.Editor.Windows
                     var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
                     if (claudeClient != null)
                     {
-                        CheckMcpConfiguration(claudeClient);
+                        CheckClaudeCodeConfiguration(claudeClient);
                     }
                     Repaint();
                     UnityEngine.Debug.Log("UnityMCP server successfully registered from Claude Code.");
@@ -1040,21 +1069,47 @@ namespace UnityMcpBridge.Editor.Windows
                 string unityProjectDir = Application.dataPath;
                 string projectDir = Path.GetDirectoryName(unityProjectDir);
 
-                var psi = new ProcessStartInfo
+                var psi = new ProcessStartInfo();
+                
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
-                    FileName = command,
-                    Arguments = "mcp remove UnityMCP",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                    WorkingDirectory = projectDir // Set working directory to Unity project directory
-                };
+                    // On Windows, run through PowerShell with explicit PATH setting
+                    psi.FileName = "powershell.exe";
+                    string nodePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs");
+                    psi.Arguments = $"-Command \"$env:PATH += ';{nodePath}'; & '{command}' mcp remove UnityMCP\"";
+                }
+                else
+                {
+                    psi.FileName = command;
+                    psi.Arguments = "mcp remove UnityMCP";
+                }
+                
+                psi.UseShellExecute = false;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                psi.CreateNoWindow = true;
+                psi.WorkingDirectory = projectDir;
 
-                // Set PATH to include common binary locations
+                // Set PATH to include common binary locations (OS-specific)
                 string currentPath = Environment.GetEnvironmentVariable("PATH") ?? "";
-                string additionalPaths = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin";
-                psi.EnvironmentVariables["PATH"] = $"{additionalPaths}:{currentPath}";
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    // Windows: Add common Node.js and npm locations
+                    string[] windowsPaths = {
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "nodejs"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "npm")
+                    };
+                    string additionalPaths = string.Join(";", windowsPaths);
+                    psi.EnvironmentVariables["PATH"] = $"{currentPath};{additionalPaths}";
+                }
+                else
+                {
+                    // macOS/Linux: Add common binary locations
+                    string additionalPaths = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin";
+                    psi.EnvironmentVariables["PATH"] = $"{additionalPaths}:{currentPath}";
+                }
 
                 using var process = Process.Start(psi);
                 string output = process.StandardOutput.ReadToEnd();
@@ -1068,7 +1123,7 @@ namespace UnityMcpBridge.Editor.Windows
                     var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
                     if (claudeClient != null)
                     {
-                        CheckMcpConfiguration(claudeClient);
+                        CheckClaudeCodeConfiguration(claudeClient);
                     }
                     Repaint();
                     
@@ -1105,7 +1160,7 @@ namespace UnityMcpBridge.Editor.Windows
                 
                 foreach (string path in possiblePaths)
                 {
-                    if (File.Exists(path))
+                    if (File.Exists(path) && IsValidUvInstallation(path))
                     {
                         uvPath = path;
                         break;
@@ -1130,7 +1185,7 @@ namespace UnityMcpBridge.Editor.Windows
                         string output = process.StandardOutput.ReadToEnd().Trim();
                         process.WaitForExit();
                         
-                        if (!string.IsNullOrEmpty(output) && File.Exists(output))
+                        if (!string.IsNullOrEmpty(output) && File.Exists(output) && IsValidUvInstallation(output))
                         {
                             uvPath = output;
                         }
@@ -1139,6 +1194,17 @@ namespace UnityMcpBridge.Editor.Windows
                     {
                         // Ignore errors
                     }
+                }
+            }
+            
+            // If no specific path found, fall back to using 'uv' from PATH
+            if (uvPath == null)
+            {
+                // Test if 'uv' is available in PATH by trying to run it
+                string uvCommand = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "uv.exe" : "uv";
+                if (IsValidUvInstallation(uvCommand))
+                {
+                    uvPath = uvCommand;
                 }
             }
             
@@ -1154,41 +1220,200 @@ namespace UnityMcpBridge.Editor.Windows
             return uvPath;
         }
 
+        private bool IsValidUvInstallation(string uvPath)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = uvPath,
+                    Arguments = "--version",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                
+                using var process = Process.Start(psi);
+                process.WaitForExit(5000); // 5 second timeout
+                
+                if (process.ExitCode == 0)
+                {
+                    string output = process.StandardOutput.ReadToEnd().Trim();
+                    // Basic validation - just check if it responds with version info
+                    // UV typically outputs "uv 0.x.x" format
+                    if (output.StartsWith("uv ") && output.Contains("."))
+                    {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private string FindWindowsUvPath()
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             
-            // Check for different Python versions
-            string[] pythonVersions = { "Python313", "Python312", "Python311", "Python310", "Python39", "Python38" };
+            // Dynamic Python version detection - check what's actually installed
+            List<string> pythonVersions = new List<string>();
             
+            // Add common versions but also scan for any Python* directories
+            string[] commonVersions = { "Python313", "Python312", "Python311", "Python310", "Python39", "Python38", "Python37" };
+            pythonVersions.AddRange(commonVersions);
+            
+            // Scan for additional Python installations
+            string[] pythonBasePaths = {
+                Path.Combine(appData, "Python"),
+                Path.Combine(localAppData, "Programs", "Python"),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) + "\\Python",
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) + "\\Python"
+            };
+            
+            foreach (string basePath in pythonBasePaths)
+            {
+                if (Directory.Exists(basePath))
+                {
+                    try
+                    {
+                        foreach (string dir in Directory.GetDirectories(basePath, "Python*"))
+                        {
+                            string versionName = Path.GetFileName(dir);
+                            if (!pythonVersions.Contains(versionName))
+                            {
+                                pythonVersions.Add(versionName);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore directory access errors
+                    }
+                }
+            }
+            
+            // Check Python installations for UV
             foreach (string version in pythonVersions)
             {
-                string uvPath = Path.Combine(appData, version, "Scripts", "uv.exe");
-                if (File.Exists(uvPath))
+                string[] pythonPaths = {
+                    Path.Combine(appData, "Python", version, "Scripts", "uv.exe"),
+                    Path.Combine(localAppData, "Programs", "Python", version, "Scripts", "uv.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Python", version, "Scripts", "uv.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Python", version, "Scripts", "uv.exe")
+                };
+                
+                foreach (string uvPath in pythonPaths)
+                {
+                    if (File.Exists(uvPath) && IsValidUvInstallation(uvPath))
+                    {
+                        return uvPath;
+                    }
+                }
+            }
+            
+            // Check package manager installations
+            string[] packageManagerPaths = {
+                // Chocolatey
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "chocolatey", "lib", "uv", "tools", "uv.exe"),
+                Path.Combine("C:", "ProgramData", "chocolatey", "lib", "uv", "tools", "uv.exe"),
+                
+                // Scoop
+                Path.Combine(userProfile, "scoop", "apps", "uv", "current", "uv.exe"),
+                Path.Combine(userProfile, "scoop", "shims", "uv.exe"),
+                
+                // Winget/msstore
+                Path.Combine(localAppData, "Microsoft", "WinGet", "Packages", "astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe", "uv.exe"),
+                
+                // Common standalone installations
+                Path.Combine(localAppData, "uv", "uv.exe"),
+                Path.Combine(appData, "uv", "uv.exe"),
+                Path.Combine(userProfile, ".local", "bin", "uv.exe"),
+                Path.Combine(userProfile, "bin", "uv.exe"),
+                
+                // Cargo/Rust installations
+                Path.Combine(userProfile, ".cargo", "bin", "uv.exe"),
+                
+                // Manual installations in common locations
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "uv", "uv.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "uv", "uv.exe")
+            };
+            
+            foreach (string uvPath in packageManagerPaths)
+            {
+                if (File.Exists(uvPath) && IsValidUvInstallation(uvPath))
                 {
                     return uvPath;
                 }
             }
             
-            // Check Program Files locations
-            string[] programFilesPaths = {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Python"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Python"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Python")
-            };
-            
-            foreach (string basePath in programFilesPaths)
+            // Try to find uv via where command (Windows equivalent of which)
+            // Use where.exe explicitly to avoid PowerShell alias conflicts
+            try
             {
-                if (Directory.Exists(basePath))
+                var psi = new ProcessStartInfo
                 {
-                    foreach (string dir in Directory.GetDirectories(basePath, "Python*"))
+                    FileName = "where.exe",
+                    Arguments = "uv",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                
+                using var process = Process.Start(psi);
+                string output = process.StandardOutput.ReadToEnd().Trim();
+                process.WaitForExit();
+                
+                if (process.ExitCode == 0 && !string.IsNullOrEmpty(output))
+                {
+                    string[] lines = output.Split('\n');
+                    foreach (string line in lines)
                     {
-                        string uvPath = Path.Combine(dir, "Scripts", "uv.exe");
-                        if (File.Exists(uvPath))
+                        string cleanPath = line.Trim();
+                        if (File.Exists(cleanPath) && IsValidUvInstallation(cleanPath))
                         {
-                            return uvPath;
+                            return cleanPath;
                         }
                     }
+                }
+            }
+            catch
+            {
+                // If where.exe fails, try PowerShell's Get-Command as fallback
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "powershell.exe",
+                        Arguments = "-Command \"(Get-Command uv -ErrorAction SilentlyContinue).Source\"",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
+                    
+                    using var process = Process.Start(psi);
+                    string output = process.StandardOutput.ReadToEnd().Trim();
+                    process.WaitForExit();
+                    
+                    if (process.ExitCode == 0 && !string.IsNullOrEmpty(output) && File.Exists(output))
+                    {
+                        if (IsValidUvInstallation(output))
+                        {
+                            return output;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore PowerShell errors too
                 }
             }
             
@@ -1215,15 +1440,16 @@ namespace UnityMcpBridge.Editor.Windows
                     }
                 }
                 
-                // Try to find via where command
+                // Try to find via where command (PowerShell compatible)
                 try
                 {
                     var psi = new ProcessStartInfo
                     {
-                        FileName = "where",
+                        FileName = "where.exe",
                         Arguments = "claude",
                         UseShellExecute = false,
                         RedirectStandardOutput = true,
+                        RedirectStandardError = true,
                         CreateNoWindow = true
                     };
                     
@@ -1231,7 +1457,7 @@ namespace UnityMcpBridge.Editor.Windows
                     string output = process.StandardOutput.ReadToEnd().Trim();
                     process.WaitForExit();
                     
-                    if (!string.IsNullOrEmpty(output))
+                    if (process.ExitCode == 0 && !string.IsNullOrEmpty(output))
                     {
                         string[] lines = output.Split('\n');
                         foreach (string line in lines)
@@ -1246,7 +1472,32 @@ namespace UnityMcpBridge.Editor.Windows
                 }
                 catch
                 {
-                    // Ignore errors and fall back
+                    // If where.exe fails, try PowerShell's Get-Command as fallback
+                    try
+                    {
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = "powershell.exe",
+                            Arguments = "-Command \"(Get-Command claude -ErrorAction SilentlyContinue).Source\"",
+                            UseShellExecute = false,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            CreateNoWindow = true
+                        };
+                        
+                        using var process = Process.Start(psi);
+                        string output = process.StandardOutput.ReadToEnd().Trim();
+                        process.WaitForExit();
+                        
+                        if (process.ExitCode == 0 && !string.IsNullOrEmpty(output) && File.Exists(output))
+                        {
+                            return output;
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore PowerShell errors too
+                    }
                 }
                 
                 return "claude"; // Final fallback to PATH
@@ -1266,9 +1517,15 @@ namespace UnityMcpBridge.Editor.Windows
                 string projectDir = Path.GetDirectoryName(unityProjectDir);
                 
                 // Read the global Claude config file
-                string configPath = mcpClient.linuxConfigPath; // ~/.claude.json
+                string configPath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) 
+                    ? mcpClient.windowsConfigPath 
+                    : mcpClient.linuxConfigPath;
+                
+                UnityEngine.Debug.Log($"Checking Claude config at: {configPath}");
+                
                 if (!File.Exists(configPath))
                 {
+                    UnityEngine.Debug.LogWarning($"Claude config file not found at: {configPath}");
                     mcpClient.SetStatus(McpStatus.NotConfigured);
                     return;
                 }
@@ -1295,7 +1552,12 @@ namespace UnityMcpBridge.Editor.Windows
                     foreach (var project in claudeConfig.projects)
                     {
                         string projectPath = project.Name;
-                        if (projectPath == projectDir && project.Value?.mcpServers != null)
+                        
+                        // Normalize paths for comparison (handle forward/back slash differences)
+                        string normalizedProjectPath = Path.GetFullPath(projectPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                        string normalizedProjectDir = Path.GetFullPath(projectDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                        
+                        if (string.Equals(normalizedProjectPath, normalizedProjectDir, StringComparison.OrdinalIgnoreCase) && project.Value?.mcpServers != null)
                         {
                             // Check for UnityMCP (case variations)
                             var servers = project.Value.mcpServers;
