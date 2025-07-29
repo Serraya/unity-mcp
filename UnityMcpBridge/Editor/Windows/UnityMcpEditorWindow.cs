@@ -18,8 +18,7 @@ namespace UnityMcpBridge.Editor.Windows
         private Vector2 scrollPosition;
         private string pythonServerInstallationStatus = "Not Installed";
         private Color pythonServerInstallationStatusColor = Color.red;
-        private const int unityPort = 6400; // Hardcoded Unity port
-        private const int mcpPort = 6500; // Hardcoded MCP port
+        private const int mcpPort = 6500; // MCP port (still hardcoded for MCP server)
         private readonly McpClients mcpClients = new();
         
         // Script validation settings
@@ -45,6 +44,7 @@ namespace UnityMcpBridge.Editor.Windows
         {
             UpdatePythonServerInstallationStatus();
 
+            // Refresh bridge status
             isUnityBridgeRunning = UnityMcpBridge.IsRunning;
             foreach (McpClient mcpClient in mcpClients.clients)
             {
@@ -210,11 +210,42 @@ namespace UnityMcpBridge.Editor.Windows
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.Space(5);
+            
+            // Connection mode and Auto-Connect button
+            EditorGUILayout.BeginHorizontal();
+            
+            bool isAutoMode = UnityMcpBridge.IsAutoConnectMode();
+            GUIStyle modeStyle = new GUIStyle(EditorStyles.miniLabel) { fontSize = 11 };
+            EditorGUILayout.LabelField($"Mode: {(isAutoMode ? "Auto" : "Standard")}", modeStyle);
+            
+            // Auto-Connect button
+            if (GUILayout.Button(isAutoMode ? "Connected ✓" : "Auto-Connect", GUILayout.Width(100), GUILayout.Height(24)))
+            {
+                if (!isAutoMode)
+                {
+                    try 
+                    {
+                        UnityMcpBridge.StartAutoConnect();
+                        // Update UI state
+                        isUnityBridgeRunning = UnityMcpBridge.IsRunning;
+                        Repaint();
+                    }
+                    catch (Exception ex)
+                    {
+                        EditorUtility.DisplayDialog("Auto-Connect Failed", ex.Message, "OK");
+                    }
+                }
+            }
+            
+            EditorGUILayout.EndHorizontal();
+            
+            // Current ports display
+            int currentUnityPort = UnityMcpBridge.GetCurrentPort();
             GUIStyle portStyle = new GUIStyle(EditorStyles.miniLabel)
             {
                 fontSize = 11
             };
-            EditorGUILayout.LabelField($"Ports: Unity {unityPort}, MCP {mcpPort}", portStyle);
+            EditorGUILayout.LabelField($"Ports: Unity {currentUnityPort}, MCP {mcpPort}", portStyle);
             EditorGUILayout.Space(5);
             EditorGUILayout.EndVertical();
         }
