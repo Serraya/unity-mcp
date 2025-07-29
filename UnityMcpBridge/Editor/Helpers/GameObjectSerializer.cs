@@ -13,7 +13,7 @@ namespace UnityMcpBridge.Editor.Helpers
     /// <summary>
     /// Handles serialization of GameObjects and Components for MCP responses.
     /// Includes reflection helpers and caching for performance.
-    /// </summary> tew
+    /// </summary> 
     public static class GameObjectSerializer
     {
         // --- Data Serialization ---
@@ -422,7 +422,7 @@ namespace UnityMcpBridge.Editor.Helpers
             catch (Exception e)
             {
                 // Catch potential errors during JToken conversion or addition to dictionary
-                 // Debug.LogWarning($"[AddSerializableValue] Error processing value for '{name}' (Type: {type.FullName}): {e.Message}. Skipping.");
+                Debug.LogWarning($"[AddSerializableValue] Error processing value for '{name}' (Type: {type.FullName}): {e.Message}. Skipping.");
             }
         }
 
@@ -505,7 +505,7 @@ namespace UnityMcpBridge.Editor.Helpers
         // Helper to create JToken using the output serializer
         private static JToken CreateTokenFromValue(object value, Type type)
         {
-             if (value == null) return JValue.CreateNull();
+            if (value == null) return JValue.CreateNull();
 
             try
             {
@@ -514,12 +514,12 @@ namespace UnityMcpBridge.Editor.Helpers
             }
             catch (JsonSerializationException e)
             {
-                // Debug.LogWarning($"[GameObjectSerializer] Newtonsoft.Json Error serializing value of type {type.FullName}: {e.Message}. Skipping property/field.");
-                 return null; // Indicate serialization failure
+                Debug.LogWarning($"[GameObjectSerializer] Newtonsoft.Json Error serializing value of type {type.FullName}: {e.Message}. Skipping property/field.");
+                return null; // Indicate serialization failure
             }
             catch (Exception e) // Catch other unexpected errors
             {
-                // Debug.LogWarning($"[GameObjectSerializer] Unexpected error serializing value of type {type.FullName}: {e}. Skipping property/field.");
+                Debug.LogWarning($"[GameObjectSerializer] Unexpected error serializing value of type {type.FullName}: {e}. Skipping property/field.");
                 return null; // Indicate serialization failure
             }
         }

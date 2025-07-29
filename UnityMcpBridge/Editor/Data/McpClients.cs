@@ -29,6 +29,20 @@ namespace UnityMcpBridge.Editor.Data
             },
             new()
             {
+                name = "Claude Code",
+                windowsConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".claude.json"
+                ),
+                linuxConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".claude.json"
+                ),
+                mcpType = McpTypes.ClaudeCode,
+                configStatus = "Not Configured",
+            },
+            new()
+            {
                 name = "Cursor",
                 windowsConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -41,6 +55,26 @@ namespace UnityMcpBridge.Editor.Data
                     "mcp.json"
                 ),
                 mcpType = McpTypes.Cursor,
+                configStatus = "Not Configured",
+            },
+            new()
+            {
+                name = "VSCode GitHub Copilot",
+                windowsConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "Code",
+                    "User",
+                    "settings.json"
+                ),
+                linuxConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "Library",
+                    "Application Support",
+                    "Code",
+                    "User",
+                    "settings.json"
+                ),
+                mcpType = McpTypes.VSCode,
                 configStatus = "Not Configured",
             },
         };

@@ -25,9 +25,40 @@ namespace UnityMcpBridge.Editor
             string,
             (string commandJson, TaskCompletionSource<string> tcs)
         > commandQueue = new();
-        private static readonly int unityPort = 6400; // Hardcoded port
+        private static int currentUnityPort = 6400; // Dynamic port, starts with default
+        private static bool isAutoConnectMode = false;
 
         public static bool IsRunning => isRunning;
+        public static int GetCurrentPort() => currentUnityPort;
+        public static bool IsAutoConnectMode() => isAutoConnectMode;
+
+        /// <summary>
+        /// Start with Auto-Connect mode - discovers new port and saves it
+        /// </summary>
+        public static void StartAutoConnect()
+        {
+            Stop(); // Stop current connection
+            
+            try
+            {
+                // Discover new port and save it
+                currentUnityPort = PortManager.DiscoverNewPort();
+                
+                listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
+                listener.Start();
+                isRunning = true;
+                isAutoConnectMode = true;
+                
+                Debug.Log($"UnityMcpBridge auto-connected on port {currentUnityPort}");
+                Task.Run(ListenerLoop);
+                EditorApplication.update += ProcessCommands;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Auto-connect failed: {ex.Message}");
+                throw;
+            }
+        }
 
         public static bool FolderExists(string path)
         {
@@ -74,10 +105,14 @@ namespace UnityMcpBridge.Editor
 
             try
             {
-                listener = new TcpListener(IPAddress.Loopback, unityPort);
+                // Use PortManager to get available port with automatic fallback
+                currentUnityPort = PortManager.GetPortWithFallback();
+                
+                listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
                 listener.Start();
                 isRunning = true;
-                Debug.Log($"UnityMcpBridge started on port {unityPort}.");
+                isAutoConnectMode = false; // Normal startup mode
+                Debug.Log($"UnityMcpBridge started on port {currentUnityPort}.");
                 // Assuming ListenerLoop and ProcessCommands are defined elsewhere
                 Task.Run(ListenerLoop);
                 EditorApplication.update += ProcessCommands;
@@ -87,7 +122,7 @@ namespace UnityMcpBridge.Editor
                 if (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
                 {
                     Debug.LogError(
-                        $"Port {unityPort} is already in use. Ensure no other instances are running or change the port."
+                        $"Port {currentUnityPort} is already in use. This should not happen with dynamic port allocation."
                     );
                 }
                 else
@@ -379,6 +414,7 @@ namespace UnityMcpBridge.Editor
                     "manage_editor" => ManageEditor.HandleCommand(paramsObject),
                     "manage_gameobject" => ManageGameObject.HandleCommand(paramsObject),
                     "manage_asset" => ManageAsset.HandleCommand(paramsObject),
+                    "manage_shader" => ManageShader.HandleCommand(paramsObject),
                     "read_console" => ReadConsole.HandleCommand(paramsObject),
                     "execute_menu_item" => ExecuteMenuItem.HandleCommand(paramsObject),
                     _ => throw new ArgumentException(

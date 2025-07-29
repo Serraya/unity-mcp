@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Any
 from config import config
+from port_discovery import PortDiscovery
 
 # Configure logging using settings from config
 logging.basicConfig(
@@ -16,8 +17,13 @@ logger = logging.getLogger("unity-mcp-server")
 class UnityConnection:
     """Manages the socket connection to the Unity Editor."""
     host: str = config.unity_host
-    port: int = config.unity_port
+    port: int = None  # Will be set dynamically
     sock: socket.socket = None  # Socket for Unity communication
+    
+    def __post_init__(self):
+        """Set port from discovery if not explicitly provided"""
+        if self.port is None:
+            self.port = PortDiscovery.discover_unity_port()
 
     def connect(self) -> bool:
         """Establish a connection to the Unity Editor."""
