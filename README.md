@@ -1,6 +1,5 @@
 # Unity MCP ✨
 
-
 [![](https://img.shields.io/badge/Unity-000000?style=flat&logo=unity&logoColor=blue 'Unity')](https://unity.com/releases/editor/archive)
 [![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![](https://badge.mcpx.dev?status=on 'MCP Enabled')](https://modelcontextprotocol.io/introduction)
@@ -8,12 +7,16 @@
 ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/justinpbarnett/unity-mcp)
 [![](https://img.shields.io/badge/License-MIT-red.svg 'MIT License')](https://opensource.org/licenses/MIT)
 
-
-
-
 **Create your Unity apps with LLMs!**
 
 Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to interact directly with your Unity Editor via a local **MCP (Model Context Protocol) Client**. Give your LLM tools to manage assets, control scenes, edit scripts, and automate tasks within Unity.
+
+## 💬 Join Our Community
+
+### [Discord](https://discord.gg/vhTUxXaqYr)
+
+**Get help, share ideas, and collaborate with other Unity MCP developers!**  
+
 
 ---
 
@@ -194,9 +197,9 @@ If Auto-Configure fails or you use a different client:
 
 (Replace YOUR_USERNAME)
 
-</details>
 
-**Option C: Claude Code Registration**
+
+**For Claude Code**
 
 If you're using Claude Code, you can register the MCP server using these commands:
 
@@ -209,6 +212,7 @@ claude mcp add UnityMCP -- uv --directory /[PATH_TO]/UnityMCP/UnityMcpServer/src
 ```bash
 claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/Scripts/uv.exe" --directory "C:/Users/USERNAME/AppData/Local/Programs/UnityMCP/UnityMcpServer/src" run server.py
 ```
+</details>
 
 ---
 
@@ -258,7 +262,20 @@ claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/S
 
 ---
 
-## Contributing 🤝
+## For Developers 🛠️
+
+### Development Tools
+
+If you're contributing to Unity MCP or want to test core changes, we have development tools to streamline your workflow:
+
+- **Development Deployment Scripts**: Quickly deploy and test your changes to Unity MCP Bridge and Python Server
+- **Automatic Backup System**: Safe testing with easy rollback capabilities  
+- **Hot Reload Workflow**: Fast iteration cycle for core development
+- **More coming!**
+
+📖 **See [README-DEV.md](README-DEV.md)** for complete development setup and workflow documentation.
+
+### Contributing 🤝
 
 Help make Unity MCP better!
 
