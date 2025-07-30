@@ -360,9 +360,9 @@ namespace UnityMcpBridge.Editor.Helpers
                     Type propType = propInfo.PropertyType;
                     AddSerializableValue(serializablePropertiesOutput, propName, propType, value);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                     // Debug.LogWarning($"Could not read property {propName} on {componentType.Name}: {ex.Message}");
+                     // Debug.LogWarning($"Could not read property {propName} on {componentType.Name}");
                 }
             }
 
@@ -383,9 +383,9 @@ namespace UnityMcpBridge.Editor.Helpers
                     Type fieldType = fieldInfo.FieldType;
                     AddSerializableValue(serializablePropertiesOutput, fieldName, fieldType, value);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                     // Debug.LogWarning($"Could not read field {fieldInfo.Name} on {componentType.Name}: {ex.Message}");
+                     // Debug.LogWarning($"Could not read field {fieldInfo.Name} on {componentType.Name}");
                 }
             }
             // --- End Use cached metadata ---
