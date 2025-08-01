@@ -87,6 +87,13 @@ namespace UnityMcpBridge.Editor.Windows
                     instructionStyle
                 );
             }
+            else if (mcpClient.mcpType == McpTypes.Windsurf)
+            {
+                EditorGUILayout.LabelField(
+                    "    a) Going to File > Preferences > Windsurf Settings > MCP > Manage MCPs -> View raw config",
+                    instructionStyle
+                );
+            }
             EditorGUILayout.LabelField("    OR", instructionStyle);
             EditorGUILayout.LabelField(
                 "    b) Opening the configuration file at:",
