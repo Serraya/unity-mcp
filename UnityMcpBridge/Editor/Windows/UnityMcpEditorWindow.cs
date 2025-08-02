@@ -58,10 +58,10 @@ namespace UnityMcpBridge.Editor.Windows
         
         private void OnFocus()
         {
-            // Refresh configuration status when window gains focus
-            foreach (McpClient mcpClient in mcpClients.clients)
+            if (mcpClients.clients.Count > 0 && selectedClientIndex < mcpClients.clients.Count)
             {
-                CheckMcpConfiguration(mcpClient);
+                McpClient selectedClient = mcpClients.clients[selectedClientIndex];
+                CheckMcpConfiguration(selectedClient);
             }
             Repaint();
         }
