@@ -1,6 +1,8 @@
 # AI-related files
 .cursorrules
 .cursorignore
+.windsurf
+.codeiumignore
 CLAUDE.md
 
 # Code-copy related files
