@@ -3,8 +3,8 @@
 [![](https://img.shields.io/badge/Unity-000000?style=flat&logo=unity&logoColor=blue 'Unity')](https://unity.com/releases/editor/archive)
 [![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![](https://badge.mcpx.dev?status=on 'MCP Enabled')](https://modelcontextprotocol.io/introduction)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/w/justinpbarnett/unity-mcp)
-![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/justinpbarnett/unity-mcp)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/w/coplaydev/unity-mcp)
+![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/coplaydev/unity-mcp)
 [![](https://img.shields.io/badge/License-MIT-red.svg 'MIT License')](https://opensource.org/licenses/MIT)
 
 **Create your Unity apps with LLMs!**
@@ -13,7 +13,7 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
 
 ## 💬 Join Our Community
 
-### [Discord](https://discord.gg/vhTUxXaqYr)
+### [Discord](https://discord.gg/y4p8KfzrN4)
 
 **Get help, share ideas, and collaborate with other Unity MCP developers!**  
 
@@ -106,7 +106,7 @@ Unity MCP connects your tools using two components:
 3.  Click `+` -> `Add package from git URL...`.
 4.  Enter:
     ```
-    https://github.com/justinpbarnett/unity-mcp.git?path=/UnityMcpBridge
+    https://github.com/coplaydev/unity-mcp.git?path=/UnityMcpBridge
     ```
 5.  Click `Add`.
 6. The MCP Server should automatically be installed onto your machine as a result of this process.
@@ -290,7 +290,6 @@ Help make Unity MCP better!
 5. **Push** your branch.
     
 6. **Open a Pull Request** against the master branch.
-    
 
 ---
 
@@ -311,42 +310,40 @@ Help make Unity MCP better!
     
     - **Verify Server Path:** Double-check the --directory path in your MCP Client's JSON config. It must exactly match the location where you cloned the UnityMCP repository in Installation Step 1 (e.g., .../Programs/UnityMCP/UnityMcpServer/src).
         
-    - **Verify uv:** Make sure uv is installed and working (pip show uv).
+    - **Verify uv:** Make sure `uv` is installed and working (pip show uv).
         
     - **Run Manually:** Try running the server directly from the terminal to see errors: `# Navigate to the src directory first! cd /path/to/your/UnityMCP/UnityMcpServer/src uv run server.py`
         
     - **Permissions (macOS/Linux):** If you installed the server in a system location like /usr/local/bin, ensure the user running the MCP client has permission to execute uv and access files there. Installing in ~/bin might be easier.
         
 - **Auto-Configure Failed:**
-    
+
     - Use the Manual Configuration steps. Auto-configure might lack permissions to write to the MCP client's config file.
-        
+
 
 </details>  
 
-Still stuck? [Open an Issue](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fissues) or [Join the Discord](https://discord.gg/vhTUxXaqYr)!
+Still stuck? [Open an Issue](https://github.com/coplaydev/unity-mcp/issues) or [Join the Discord](https://discord.gg/y4p8KfzrN4)!
 
 ---
 
 ## Contact 👋
 
-- **justinpbarnett:** [X/Twitter](https://www.google.com/url?sa=E&q=https%3A%2F%2Fx.com%2Fjustinpbarnett)
+- **justinpbarnett:** [X/Twitter](https://x.com/justinpbarnett)
 - **scriptwonder**: [Email](mailto:swu85@ur.rochester.edu), [LinkedIn](https://www.linkedin.com/in/shutong-wu-214043172/)
-    
 
 ---
 
 ## License 📜
 
-MIT License. See [LICENSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fblob%2Fmaster%2FLICENSE) file.
+MIT License. See [LICENSE](https://github.com/CoplayDev/unity-mcp/blob/master/LICENSE) file.
 
 ---
 
 ## Acknowledgments 🙏
 
-Thanks to the contributors and the Unity team.
-
+Thanks to the contributors and our sponsors [Coplay](https://coplay.dev).
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=justinpbarnett/unity-mcp&type=Date)](https://www.star-history.com/#justinpbarnett/unity-mcp&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=coplaydev/unity-mcp&type=Date)](https://www.star-history.com/#coplaydev/unity-mcp&Date)
