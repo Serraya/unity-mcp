@@ -13,11 +13,11 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
 
 Proudly sponsored by [Coplay](https://www.coplay.dev)
 
-<h2 align="center">
+<p align="center">
   <a href="https://www.coplay.dev">
-    <img src="logo.png" alt="Coplay Logo" width="50%">
+    <img src="logo.png" alt="Coplay Logo" width="100%">
   </a>
-</h2>
+</p>
 
 ## 💬 Join Our Community
 
