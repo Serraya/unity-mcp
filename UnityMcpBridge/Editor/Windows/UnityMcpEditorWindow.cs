@@ -58,6 +58,8 @@ namespace UnityMcpBridge.Editor.Windows
         
         private void OnFocus()
         {
+            // Refresh bridge running state on focus in case initialization completed after domain reload
+            isUnityBridgeRunning = UnityMcpBridge.IsRunning;
             if (mcpClients.clients.Count > 0 && selectedClientIndex < mcpClients.clients.Count)
             {
                 McpClient selectedClient = mcpClients.clients[selectedClientIndex];
@@ -255,6 +257,9 @@ namespace UnityMcpBridge.Editor.Windows
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             
+            // Always reflect the live state each repaint to avoid stale UI after recompiles
+            isUnityBridgeRunning = UnityMcpBridge.IsRunning;
+
             GUIStyle sectionTitleStyle = new GUIStyle(EditorStyles.boldLabel)
             {
                 fontSize = 14
@@ -458,8 +463,9 @@ namespace UnityMcpBridge.Editor.Windows
             {
                 UnityMcpBridge.Start();
             }
-
-            isUnityBridgeRunning = !isUnityBridgeRunning;
+            // Reflect the actual state post-operation (avoid optimistic toggle)
+            isUnityBridgeRunning = UnityMcpBridge.IsRunning;
+            Repaint();
         }
 
         private string WriteToConfig(string pythonDir, string configPath, McpClient mcpClient = null)

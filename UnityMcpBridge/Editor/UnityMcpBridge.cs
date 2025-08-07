@@ -21,6 +21,8 @@ namespace UnityMcpBridge.Editor
         private static TcpListener listener;
         private static bool isRunning = false;
         private static readonly object lockObj = new();
+        private static readonly object startStopLock = new();
+        private static bool initScheduled = false;
         private static Dictionary<
             string,
             (string commandJson, TaskCompletionSource<string> tcs)
@@ -81,75 +83,148 @@ namespace UnityMcpBridge.Editor
 
         static UnityMcpBridge()
         {
-            Start();
+            // Use delayed initialization to avoid repeated restarts during compilation
+            EditorApplication.delayCall += InitializeAfterCompilation;
             EditorApplication.quitting += Stop;
+            AssemblyReloadEvents.beforeAssemblyReload += Stop; // ensure listener releases before domain reload
+
+            // Robust re-init hooks
+            UnityEditor.Compilation.CompilationPipeline.compilationFinished += _ => ScheduleInitRetry();
+            EditorApplication.playModeStateChanged += state =>
+            {
+                if (state == PlayModeStateChange.EnteredEditMode || state == PlayModeStateChange.EnteredPlayMode)
+                {
+                    ScheduleInitRetry();
+                }
+            };
+        }
+
+        /// <summary>
+        /// Initialize the MCP bridge after Unity is fully loaded and compilation is complete.
+        /// This prevents repeated restarts during script compilation that cause port hopping.
+        /// </summary>
+        private static void InitializeAfterCompilation()
+        {
+            initScheduled = false;
+
+            // Play-mode friendly: allow starting in play mode; only defer while compiling
+            if (EditorApplication.isCompiling)
+            {
+                ScheduleInitRetry();
+                return;
+            }
+
+            if (!isRunning)
+            {
+                Start();
+                if (!isRunning)
+                {
+                    // If a race prevented start, retry later
+                    ScheduleInitRetry();
+                }
+            }
+        }
+
+        private static void ScheduleInitRetry()
+        {
+            if (initScheduled)
+            {
+                return;
+            }
+            initScheduled = true;
+            EditorApplication.delayCall += InitializeAfterCompilation;
         }
 
         public static void Start()
         {
-            Stop();
-
-            try
+            lock (startStopLock)
             {
-                ServerInstaller.EnsureServerInstalled();
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"Failed to ensure UnityMcpServer is installed: {ex.Message}");
-            }
-
-            if (isRunning)
-            {
-                return;
-            }
-
-            try
-            {
-                // Use PortManager to get available port with automatic fallback
-                currentUnityPort = PortManager.GetPortWithFallback();
-                
-                listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
-                listener.Start();
-                isRunning = true;
-                isAutoConnectMode = false; // Normal startup mode
-                Debug.Log($"UnityMcpBridge started on port {currentUnityPort}.");
-                // Assuming ListenerLoop and ProcessCommands are defined elsewhere
-                Task.Run(ListenerLoop);
-                EditorApplication.update += ProcessCommands;
-            }
-            catch (SocketException ex)
-            {
-                if (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+                // Don't restart if already running on a working port
+                if (isRunning && listener != null)
                 {
-                    Debug.LogError(
-                        $"Port {currentUnityPort} is already in use. This should not happen with dynamic port allocation."
-                    );
+                    Debug.Log($"UnityMcpBridge already running on port {currentUnityPort}");
+                    return;
                 }
-                else
+
+                Stop();
+
+                // Removed automatic server installer; assume server exists inside the package (UPM).
+
+                try
                 {
-                    Debug.LogError($"Failed to start TCP listener: {ex.Message}");
+                    // Try to reuse the current port if it's still available, otherwise get a new one
+                    if (currentUnityPort > 0 && PortManager.IsPortAvailable(currentUnityPort))
+                    {
+                        Debug.Log($"Reusing current port {currentUnityPort}");
+                    }
+                    else
+                    {
+                        // Use PortManager to get available port with automatic fallback
+                        currentUnityPort = PortManager.GetPortWithFallback();
+                    }
+                    
+                    listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
+                    listener.Start();
+                    isRunning = true;
+                    isAutoConnectMode = false; // Normal startup mode
+                    Debug.Log($"UnityMcpBridge started on port {currentUnityPort}.");
+                    // Assuming ListenerLoop and ProcessCommands are defined elsewhere
+                    Task.Run(ListenerLoop);
+                    EditorApplication.update += ProcessCommands;
+                }
+                catch (SocketException ex)
+                {
+                    if (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+                    {
+                        Debug.LogError(
+                            $"Port {currentUnityPort} is already in use. Trying to find alternative..."
+                        );
+                        
+                        // Try once more with a fresh port discovery
+                        try
+                        {
+                            currentUnityPort = PortManager.DiscoverNewPort();
+                            listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
+                            listener.Start();
+                            isRunning = true;
+                            Debug.Log($"UnityMcpBridge started on fallback port {currentUnityPort}.");
+                            Task.Run(ListenerLoop);
+                            EditorApplication.update += ProcessCommands;
+                        }
+                        catch (Exception fallbackEx)
+                        {
+                            Debug.LogError($"Failed to start on fallback port: {fallbackEx.Message}");
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogError($"Failed to start TCP listener: {ex.Message}");
+                    }
                 }
             }
         }
 
         public static void Stop()
         {
-            if (!isRunning)
+            lock (startStopLock)
             {
-                return;
-            }
+                if (!isRunning)
+                {
+                    return;
+                }
 
-            try
-            {
-                listener?.Stop();
-                listener = null;
-                isRunning = false;
-                EditorApplication.update -= ProcessCommands;
-                Debug.Log("UnityMcpBridge stopped.");
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"Error stopping UnityMcpBridge: {ex.Message}");
+                try
+                {
+                    listener?.Stop();
+                    listener = null;
+                    isRunning = false;
+                    EditorApplication.update -= ProcessCommands;
+                    Debug.Log("UnityMcpBridge stopped.");
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Error stopping UnityMcpBridge: {ex.Message}");
+                }
             }
         }
 

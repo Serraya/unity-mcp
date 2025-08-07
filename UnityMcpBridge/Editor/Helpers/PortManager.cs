@@ -2,6 +2,9 @@ using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -31,15 +34,28 @@ namespace UnityMcpBridge.Editor.Helpers
         /// <returns>Port number to use</returns>
         public static int GetPortWithFallback()
         {
-            // Try to load stored port first
-            int storedPort = LoadStoredPort();
-            if (storedPort > 0 && IsPortAvailable(storedPort))
+            // Try to load stored port first, but only if it's from the current project
+            var storedConfig = GetStoredPortConfig();
+            if (storedConfig != null && 
+                storedConfig.unity_port > 0 && 
+                storedConfig.project_path == Application.dataPath &&
+                IsPortAvailable(storedConfig.unity_port))
             {
-                Debug.Log($"Using stored port {storedPort}");
-                return storedPort;
+                Debug.Log($"Using stored port {storedConfig.unity_port} for current project");
+                return storedConfig.unity_port;
             }
 
-            // If no stored port or stored port is unavailable, find a new one
+            // If stored port exists but is currently busy, wait briefly for release
+            if (storedConfig != null && storedConfig.unity_port > 0)
+            {
+                if (WaitForPortRelease(storedConfig.unity_port, 1500))
+                {
+                    Debug.Log($"Stored port {storedConfig.unity_port} became available after short wait");
+                    return storedConfig.unity_port;
+                }
+            }
+
+            // If no valid stored port, find a new one and save it
             int newPort = FindAvailablePort();
             SavePort(newPort);
             return newPort;
@@ -86,7 +102,7 @@ namespace UnityMcpBridge.Editor.Helpers
         }
 
         /// <summary>
-        /// Check if a specific port is available
+        /// Check if a specific port is available for binding
         /// </summary>
         /// <param name="port">Port to check</param>
         /// <returns>True if port is available</returns>
@@ -103,6 +119,61 @@ namespace UnityMcpBridge.Editor.Helpers
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Check if a port is currently being used by Unity MCP Bridge
+        /// This helps avoid unnecessary port changes when Unity itself is using the port
+        /// </summary>
+        /// <param name="port">Port to check</param>
+        /// <returns>True if port appears to be used by Unity MCP</returns>
+        public static bool IsPortUsedByUnityMcp(int port)
+        {
+            try
+            {
+                // Try to make a quick connection to see if it's a Unity MCP server
+                using var client = new TcpClient();
+                var connectTask = client.ConnectAsync(IPAddress.Loopback, port);
+                if (connectTask.Wait(100)) // 100ms timeout
+                {
+                    // If connection succeeded, it's likely the Unity MCP server
+                    return client.Connected;
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Wait for a port to become available for a limited amount of time.
+        /// Used to bridge the gap during domain reload when the old listener
+        /// hasn't released the socket yet.
+        /// </summary>
+        private static bool WaitForPortRelease(int port, int timeoutMs)
+        {
+            int waited = 0;
+            const int step = 100;
+            while (waited < timeoutMs)
+            {
+                if (IsPortAvailable(port))
+                {
+                    return true;
+                }
+
+                // If the port is in use by an MCP instance, continue waiting briefly
+                if (!IsPortUsedByUnityMcp(port))
+                {
+                    // In use by something else; don't keep waiting
+                    return false;
+                }
+
+                Thread.Sleep(step);
+                waited += step;
+            }
+            return IsPortAvailable(port);
         }
 
         /// <summary>
@@ -123,7 +194,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 string registryDir = GetRegistryDirectory();
                 Directory.CreateDirectory(registryDir);
 
-                string registryFile = Path.Combine(registryDir, RegistryFileName);
+                string registryFile = GetRegistryFilePath();
                 string json = JsonConvert.SerializeObject(portConfig, Formatting.Indented);
                 File.WriteAllText(registryFile, json);
 
@@ -143,11 +214,17 @@ namespace UnityMcpBridge.Editor.Helpers
         {
             try
             {
-                string registryFile = Path.Combine(GetRegistryDirectory(), RegistryFileName);
+                string registryFile = GetRegistryFilePath();
                 
                 if (!File.Exists(registryFile))
                 {
-                    return 0;
+                    // Backwards compatibility: try the legacy file name
+                    string legacy = Path.Combine(GetRegistryDirectory(), RegistryFileName);
+                    if (!File.Exists(legacy))
+                    {
+                        return 0;
+                    }
+                    registryFile = legacy;
                 }
 
                 string json = File.ReadAllText(registryFile);
@@ -170,11 +247,17 @@ namespace UnityMcpBridge.Editor.Helpers
         {
             try
             {
-                string registryFile = Path.Combine(GetRegistryDirectory(), RegistryFileName);
+                string registryFile = GetRegistryFilePath();
                 
                 if (!File.Exists(registryFile))
                 {
-                    return null;
+                    // Backwards compatibility: try the legacy file
+                    string legacy = Path.Combine(GetRegistryDirectory(), RegistryFileName);
+                    if (!File.Exists(legacy))
+                    {
+                        return null;
+                    }
+                    registryFile = legacy;
                 }
 
                 string json = File.ReadAllText(registryFile);
@@ -190,6 +273,34 @@ namespace UnityMcpBridge.Editor.Helpers
         private static string GetRegistryDirectory()
         {
             return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".unity-mcp");
+        }
+
+        private static string GetRegistryFilePath()
+        {
+            string dir = GetRegistryDirectory();
+            string hash = ComputeProjectHash(Application.dataPath);
+            string fileName = $"unity-mcp-port-{hash}.json";
+            return Path.Combine(dir, fileName);
+        }
+
+        private static string ComputeProjectHash(string input)
+        {
+            try
+            {
+                using SHA1 sha1 = SHA1.Create();
+                byte[] bytes = Encoding.UTF8.GetBytes(input ?? string.Empty);
+                byte[] hashBytes = sha1.ComputeHash(bytes);
+                var sb = new StringBuilder();
+                foreach (byte b in hashBytes)
+                {
+                    sb.Append(b.ToString("x2"));
+                }
+                return sb.ToString()[..8]; // short, sufficient for filenames
+            }
+            catch
+            {
+                return "default";
+            }
         }
     }
 }
