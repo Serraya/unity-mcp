@@ -15,7 +15,7 @@ Proudly sponsored by [Coplay](https://www.coplay.dev)
 
 <h2 align="center">
   <a href="https://www.coplay.dev">
-    <img src="logo.png" alt="Coplay Logo" width="100%">
+    <img src="logo.png" alt="Coplay Logo" width="50%">
   </a>
 </h2>
 
