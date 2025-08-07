@@ -344,7 +344,7 @@ Still stuck? [Open an Issue](https://github.com/coplaydev/unity-mcp/issues) or [
 
 ## License 📜
 
-MIT License. See [LICENSE](https://github.com/CoplayDev/unity-mcp/blob/master/LICENSE) file.
+MIT License. See [LICENSE](LICENSE) file.
 
 ---
 
