@@ -75,14 +75,11 @@ namespace UnityMcpBridge.Editor.Helpers
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                string path = "/usr/local/bin";
-                return !Directory.Exists(path) || !IsDirectoryWritable(path)
-                    ? Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                        "Applications",
-                        RootFolder
-                    )
-                    : Path.Combine(path, RootFolder);
+                // Use Application Support for a stable, user-writable location
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "UnityMCP"
+                );
             }
             throw new Exception("Unsupported operating system.");
         }
@@ -212,6 +209,190 @@ namespace UnityMcpBridge.Editor.Helpers
                 string destSubDir = Path.Combine(destinationDir, dirName);
                 CopyDirectoryRecursive(dirPath, destSubDir);
             }
+        }
+
+        public static bool RepairPythonEnvironment()
+        {
+            try
+            {
+                string serverSrc = GetServerPath();
+                bool hasServer = File.Exists(Path.Combine(serverSrc, "server.py"));
+                if (!hasServer)
+                {
+                    // In dev mode or if not installed yet, try the embedded/dev source
+                    if (TryGetEmbeddedServerSource(out string embeddedSrc) && File.Exists(Path.Combine(embeddedSrc, "server.py")))
+                    {
+                        serverSrc = embeddedSrc;
+                        hasServer = true;
+                    }
+                    else
+                    {
+                        // Attempt to install then retry
+                        EnsureServerInstalled();
+                        serverSrc = GetServerPath();
+                        hasServer = File.Exists(Path.Combine(serverSrc, "server.py"));
+                    }
+                }
+
+                if (!hasServer)
+                {
+                    Debug.LogWarning("RepairPythonEnvironment: server.py not found; ensure server is installed first.");
+                    return false;
+                }
+
+                // Remove stale venv and pinned version file if present
+                string venvPath = Path.Combine(serverSrc, ".venv");
+                if (Directory.Exists(venvPath))
+                {
+                    try { Directory.Delete(venvPath, recursive: true); } catch (Exception ex) { Debug.LogWarning($"Failed to delete .venv: {ex.Message}"); }
+                }
+                string pyPin = Path.Combine(serverSrc, ".python-version");
+                if (File.Exists(pyPin))
+                {
+                    try { File.Delete(pyPin); } catch (Exception ex) { Debug.LogWarning($"Failed to delete .python-version: {ex.Message}"); }
+                }
+
+                string uvPath = FindUvPath();
+                if (uvPath == null)
+                {
+                    Debug.LogError("UV not found. Please install uv (https://docs.astral.sh/uv/)." );
+                    return false;
+                }
+
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = uvPath,
+                    Arguments = "sync",
+                    WorkingDirectory = serverSrc,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                using var p = System.Diagnostics.Process.Start(psi);
+                string stdout = p.StandardOutput.ReadToEnd();
+                string stderr = p.StandardError.ReadToEnd();
+                p.WaitForExit(60000);
+
+                if (p.ExitCode != 0)
+                {
+                    Debug.LogError($"uv sync failed: {stderr}\n{stdout}");
+                    return false;
+                }
+
+                Debug.Log("Unity MCP: Python environment repaired successfully.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"RepairPythonEnvironment failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static string FindUvPath()
+        {
+            // Allow user override via EditorPrefs
+            try
+            {
+                string overridePath = EditorPrefs.GetString("UnityMCP.UvPath", string.Empty);
+                if (!string.IsNullOrEmpty(overridePath) && File.Exists(overridePath))
+                {
+                    if (ValidateUvBinary(overridePath)) return overridePath;
+                }
+            }
+            catch { }
+
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
+            string[] candidates =
+            {
+                "/opt/homebrew/bin/uv",
+                "/usr/local/bin/uv",
+                "/usr/bin/uv",
+                "/opt/local/bin/uv",
+                Path.Combine(home, ".local", "bin", "uv"),
+                "/opt/homebrew/opt/uv/bin/uv",
+                // Framework Python installs
+                "/Library/Frameworks/Python.framework/Versions/3.13/bin/uv",
+                "/Library/Frameworks/Python.framework/Versions/3.12/bin/uv",
+                // Fallback to PATH resolution by name
+                "uv"
+            };
+            foreach (string c in candidates)
+            {
+                try
+                {
+                    if (ValidateUvBinary(c)) return c;
+                }
+                catch { /* ignore */ }
+            }
+
+            // Try which uv (explicit path)
+            try
+            {
+                var whichPsi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "/usr/bin/which",
+                    Arguments = "uv",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using var wp = System.Diagnostics.Process.Start(whichPsi);
+                string output = wp.StandardOutput.ReadToEnd().Trim();
+                wp.WaitForExit(3000);
+                if (wp.ExitCode == 0 && !string.IsNullOrEmpty(output) && File.Exists(output))
+                {
+                    if (ValidateUvBinary(output)) return output;
+                }
+            }
+            catch { }
+
+            // Manual PATH scan
+            try
+            {
+                string pathEnv = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+                string[] parts = pathEnv.Split(Path.PathSeparator);
+                foreach (string part in parts)
+                {
+                    try
+                    {
+                        string candidate = Path.Combine(part, "uv");
+                        if (File.Exists(candidate) && ValidateUvBinary(candidate)) return candidate;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static bool ValidateUvBinary(string uvPath)
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = uvPath,
+                    Arguments = "--version",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using var p = System.Diagnostics.Process.Start(psi);
+                if (!p.WaitForExit(5000)) { try { p.Kill(); } catch { } return false; }
+                if (p.ExitCode == 0)
+                {
+                    string output = p.StandardOutput.ReadToEnd().Trim();
+                    return output.StartsWith("uv ");
+                }
+            }
+            catch { }
+            return false;
         }
     }
 }

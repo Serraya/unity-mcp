@@ -102,14 +102,32 @@ namespace UnityMcpBridge.Editor.Windows
 
         private void UpdatePythonServerInstallationStatus()
         {
-            string serverPath = ServerInstaller.GetServerPath();
-
-            if (File.Exists(Path.Combine(serverPath, "server.py")))
+            try
             {
-                pythonServerInstallationStatus = "Installed (Embedded)";
-                pythonServerInstallationStatusColor = Color.green;
+                string installedPath = ServerInstaller.GetServerPath();
+                bool installedOk = !string.IsNullOrEmpty(installedPath) && File.Exists(Path.Combine(installedPath, "server.py"));
+                if (installedOk)
+                {
+                    pythonServerInstallationStatus = "Installed";
+                    pythonServerInstallationStatusColor = Color.green;
+                    return;
+                }
+
+                // Fall back to embedded/dev source via our existing resolution logic
+                string embeddedPath = FindPackagePythonDirectory();
+                bool embeddedOk = !string.IsNullOrEmpty(embeddedPath) && File.Exists(Path.Combine(embeddedPath, "server.py"));
+                if (embeddedOk)
+                {
+                    pythonServerInstallationStatus = "Installed (Embedded)";
+                    pythonServerInstallationStatusColor = Color.green;
+                }
+                else
+                {
+                    pythonServerInstallationStatus = "Not Installed";
+                    pythonServerInstallationStatusColor = Color.red;
+                }
             }
-            else
+            catch
             {
                 pythonServerInstallationStatus = "Not Installed";
                 pythonServerInstallationStatusColor = Color.red;
@@ -215,6 +233,16 @@ namespace UnityMcpBridge.Editor.Windows
                 "Unity MCP Editor",
                 titleStyle
             );
+
+            // Place the Show Debug Logs toggle on the same header row, right-aligned
+            float toggleWidth = 160f;
+            Rect toggleRect = new Rect(titleRect.xMax - toggleWidth - 12f, titleRect.y + 10f, toggleWidth, 20f);
+            bool newDebug = GUI.Toggle(toggleRect, debugLogsEnabled, "Show Debug Logs");
+            if (newDebug != debugLogsEnabled)
+            {
+                debugLogsEnabled = newDebug;
+                EditorPrefs.SetBool("UnityMCP.DebugLogs", debugLogsEnabled);
+            }
             EditorGUILayout.Space(15);
         }
 
@@ -243,7 +271,6 @@ namespace UnityMcpBridge.Editor.Windows
 
             EditorGUILayout.Space(5);
             
-            // Connection mode
             EditorGUILayout.BeginHorizontal();
             bool isAutoMode = UnityMcpBridge.IsAutoConnectMode();
             GUIStyle modeStyle = new GUIStyle(EditorStyles.miniLabel) { fontSize = 11 };
@@ -251,7 +278,6 @@ namespace UnityMcpBridge.Editor.Windows
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
             
-            // Current ports display
             int currentUnityPort = UnityMcpBridge.GetCurrentPort();
             GUIStyle portStyle = new GUIStyle(EditorStyles.miniLabel)
             {
@@ -260,7 +286,7 @@ namespace UnityMcpBridge.Editor.Windows
             EditorGUILayout.LabelField($"Ports: Unity {currentUnityPort}, MCP {mcpPort}", portStyle);
             EditorGUILayout.Space(5);
 
-            // Auto-Setup button below ports
+            /// Auto-Setup button below ports
             string setupButtonText = (lastClientRegisteredOk && lastBridgeVerifiedOk) ? "Connected ✓" : "Auto-Setup";
             if (GUILayout.Button(setupButtonText, GUILayout.Height(24)))
             {
@@ -268,20 +294,47 @@ namespace UnityMcpBridge.Editor.Windows
             }
             EditorGUILayout.Space(4);
 
-            // Debug logs toggle inside Server Status
+            // Repair Python Env button with tooltip tag
             using (new EditorGUILayout.HorizontalScope())
             {
                 GUILayout.FlexibleSpace();
-                bool newDebug = EditorGUILayout.ToggleLeft("Show Debug Logs", debugLogsEnabled, GUILayout.Width(150));
-                if (newDebug != debugLogsEnabled)
+                GUIContent repairLabel = new GUIContent(
+                    "Repair Python Env",
+                    "Deletes the server's .venv and runs 'uv sync' to rebuild a clean environment. Use this if modules are missing or Python upgraded."
+                );
+                if (GUILayout.Button(repairLabel, GUILayout.Width(160), GUILayout.Height(22)))
                 {
-                    debugLogsEnabled = newDebug;
-                    EditorPrefs.SetBool("UnityMCP.DebugLogs", debugLogsEnabled);
+                    bool ok = global::UnityMcpBridge.Editor.Helpers.ServerInstaller.RepairPythonEnvironment();
+                    if (ok)
+                    {
+                        EditorUtility.DisplayDialog("Unity MCP", "Python environment repaired.", "OK");
+                        UpdatePythonServerInstallationStatus();
+                    }
+                    else
+                    {
+                        EditorUtility.DisplayDialog("Unity MCP", "Repair failed. Please check Console for details.", "OK");
+                    }
                 }
             }
+            // (Removed descriptive tool tag under the Repair button)
+
+            // (Show Debug Logs toggle moved to header)
             EditorGUILayout.Space(2);
 
-            // Removed redundant inline badges to streamline UI
+            // Python detection warning with link
+            if (!IsPythonDetected())
+            {
+                GUIStyle warnStyle = new GUIStyle(EditorStyles.label) { richText = true, wordWrap = true };
+                EditorGUILayout.LabelField("<color=#cc3333><b>Warning:</b></color> No Python installation found.", warnStyle);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Open install instructions", GUILayout.Width(200)))
+                    {
+                        Application.OpenURL("https://www.python.org/downloads/");
+                    }
+                }
+                EditorGUILayout.Space(4);
+            }
 
             // Troubleshooting helpers
             if (pythonServerInstallationStatusColor != Color.green)
@@ -369,16 +422,7 @@ namespace UnityMcpBridge.Editor.Windows
             string description = GetValidationLevelDescription(validationLevelIndex);
             EditorGUILayout.HelpBox(description, MessageType.Info);
             EditorGUILayout.Space(4);
-            // Inline debug logs toggle under Script Validation
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
-            bool newDebug = EditorGUILayout.ToggleLeft("Show Debug Logs", debugLogsEnabled, GUILayout.Width(150));
-            if (newDebug != debugLogsEnabled)
-            {
-                debugLogsEnabled = newDebug;
-                EditorPrefs.SetBool("UnityMCP.DebugLogs", debugLogsEnabled);
-            }
-            EditorGUILayout.EndHorizontal();
+            // (Show Debug Logs toggle moved to header)
             EditorGUILayout.Space(2);
             EditorGUILayout.EndVertical();
         }
@@ -845,7 +889,10 @@ namespace UnityMcpBridge.Editor.Windows
             return "Configured successfully";
         }
 
-        private void ShowManualConfigurationInstructions(string configPath, McpClient mcpClient)
+        private void ShowManualConfigurationInstructions(
+            string configPath,
+            McpClient mcpClient
+        )
         {
             mcpClient.SetStatus(McpStatus.Error, "Manual configuration required");
 
@@ -1937,6 +1984,46 @@ namespace UnityMcpBridge.Editor.Windows
                 UnityEngine.Debug.LogWarning($"Error checking Claude Code config: {e.Message}");
                 mcpClient.SetStatus(McpStatus.Error, e.Message);
             }
+        }
+
+        private bool IsPythonDetected()
+        {
+            try
+            {
+                // Common absolute paths
+                string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
+                string[] candidates =
+                {
+                    "/opt/homebrew/bin/python3",
+                    "/usr/local/bin/python3",
+                    "/usr/bin/python3",
+                    "/opt/local/bin/python3",
+                    Path.Combine(home, ".local", "bin", "python3"),
+                    "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+                    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+                };
+                foreach (string c in candidates)
+                {
+                    if (File.Exists(c)) return true;
+                }
+
+                // Try 'which python3'
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "/usr/bin/which",
+                    Arguments = "python3",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using var p = Process.Start(psi);
+                string outp = p.StandardOutput.ReadToEnd().Trim();
+                p.WaitForExit(2000);
+                if (p.ExitCode == 0 && !string.IsNullOrEmpty(outp) && File.Exists(outp)) return true;
+            }
+            catch { }
+            return false;
         }
     }
 }
