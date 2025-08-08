@@ -29,6 +29,7 @@ namespace UnityMcpBridge.Editor.Windows
         private bool lastClientRegisteredOk;
         private bool lastBridgeVerifiedOk;
         private string pythonDirOverride = null;
+        private bool debugLogsEnabled;
         
         // Script validation settings
         private int validationLevelIndex = 1; // Default to Standard
@@ -56,6 +57,7 @@ namespace UnityMcpBridge.Editor.Windows
             // Refresh bridge status
             isUnityBridgeRunning = UnityMcpBridge.IsRunning;
             autoRegisterEnabled = EditorPrefs.GetBool("UnityMCP.AutoRegisterEnabled", true);
+            debugLogsEnabled = EditorPrefs.GetBool("UnityMCP.DebugLogs", false);
             foreach (McpClient mcpClient in mcpClients.clients)
             {
                 CheckMcpConfiguration(mcpClient);
@@ -148,14 +150,50 @@ namespace UnityMcpBridge.Editor.Windows
             // Header
             DrawHeader();
             
-            // Single-column streamlined layout
-            DrawServerStatusSection();
-            EditorGUILayout.Space(6);
-            DrawBridgeSection();
+            // Compute equal column widths for uniform layout
+            float horizontalSpacing = 2f;
+            float outerPadding = 20f; // approximate padding
+            // Make columns a bit less wide for a tighter layout
+            float computed = (position.width - outerPadding - horizontalSpacing) / 2f;
+            float colWidth = Mathf.Clamp(computed, 220f, 340f);
+            // Use fixed heights per row so paired panels match exactly
+            float topPanelHeight = 190f;
+            float bottomPanelHeight = 230f;
+
+            // Top row: Server Status (left) and Unity Bridge (right)
+            EditorGUILayout.BeginHorizontal();
+            {
+                EditorGUILayout.BeginVertical(GUILayout.Width(colWidth), GUILayout.Height(topPanelHeight));
+                DrawServerStatusSection();
+                EditorGUILayout.EndVertical();
+
+                EditorGUILayout.Space(horizontalSpacing);
+
+                EditorGUILayout.BeginVertical(GUILayout.Width(colWidth), GUILayout.Height(topPanelHeight));
+                DrawBridgeSection();
+                EditorGUILayout.EndVertical();
+            }
+            EditorGUILayout.EndHorizontal();
+
             EditorGUILayout.Space(10);
-            DrawUnifiedClientConfiguration();
-            EditorGUILayout.Space(10);
-            DrawValidationSection();
+
+            // Second row: MCP Client Configuration (left) and Script Validation (right)
+            EditorGUILayout.BeginHorizontal();
+            {
+                EditorGUILayout.BeginVertical(GUILayout.Width(colWidth), GUILayout.Height(bottomPanelHeight));
+                DrawUnifiedClientConfiguration();
+                EditorGUILayout.EndVertical();
+
+                EditorGUILayout.Space(horizontalSpacing);
+
+                EditorGUILayout.BeginVertical(GUILayout.Width(colWidth), GUILayout.Height(bottomPanelHeight));
+                DrawValidationSection();
+                EditorGUILayout.EndVertical();
+            }
+            EditorGUILayout.EndHorizontal();
+
+            // Minimal bottom padding
+            EditorGUILayout.Space(2);
 
             EditorGUILayout.EndScrollView();
         }
@@ -205,21 +243,12 @@ namespace UnityMcpBridge.Editor.Windows
 
             EditorGUILayout.Space(5);
             
-            // Connection mode and Setup controls
+            // Connection mode
             EditorGUILayout.BeginHorizontal();
-
             bool isAutoMode = UnityMcpBridge.IsAutoConnectMode();
             GUIStyle modeStyle = new GUIStyle(EditorStyles.miniLabel) { fontSize = 11 };
             EditorGUILayout.LabelField($"Mode: {(isAutoMode ? "Auto" : "Standard")}", modeStyle);
-
             GUILayout.FlexibleSpace();
-
-            // Bind to Clients button
-            if (GUILayout.Button("Bind to Clients", GUILayout.Width(140), GUILayout.Height(24)))
-            {
-                RunSetupNow();
-            }
-
             EditorGUILayout.EndHorizontal();
             
             // Current ports display
@@ -230,6 +259,27 @@ namespace UnityMcpBridge.Editor.Windows
             };
             EditorGUILayout.LabelField($"Ports: Unity {currentUnityPort}, MCP {mcpPort}", portStyle);
             EditorGUILayout.Space(5);
+
+            // Auto-Setup button below ports
+            string setupButtonText = (lastClientRegisteredOk && lastBridgeVerifiedOk) ? "Connected ✓" : "Auto-Setup";
+            if (GUILayout.Button(setupButtonText, GUILayout.Height(24)))
+            {
+                RunSetupNow();
+            }
+            EditorGUILayout.Space(4);
+
+            // Debug logs toggle inside Server Status
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.FlexibleSpace();
+                bool newDebug = EditorGUILayout.ToggleLeft("Show Debug Logs", debugLogsEnabled, GUILayout.Width(150));
+                if (newDebug != debugLogsEnabled)
+                {
+                    debugLogsEnabled = newDebug;
+                    EditorPrefs.SetBool("UnityMCP.DebugLogs", debugLogsEnabled);
+                }
+            }
+            EditorGUILayout.Space(2);
 
             // Removed redundant inline badges to streamline UI
 
@@ -318,7 +368,18 @@ namespace UnityMcpBridge.Editor.Windows
             EditorGUILayout.Space(8);
             string description = GetValidationLevelDescription(validationLevelIndex);
             EditorGUILayout.HelpBox(description, MessageType.Info);
-            EditorGUILayout.Space(5);
+            EditorGUILayout.Space(4);
+            // Inline debug logs toggle under Script Validation
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            bool newDebug = EditorGUILayout.ToggleLeft("Show Debug Logs", debugLogsEnabled, GUILayout.Width(150));
+            if (newDebug != debugLogsEnabled)
+            {
+                debugLogsEnabled = newDebug;
+                EditorPrefs.SetBool("UnityMCP.DebugLogs", debugLogsEnabled);
+            }
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(2);
             EditorGUILayout.EndVertical();
         }
 
@@ -870,7 +931,10 @@ namespace UnityMcpBridge.Editor.Windows
                     {
                         if (Directory.Exists(devPath) && File.Exists(Path.Combine(devPath, "server.py")))
                         {
-                            UnityEngine.Debug.Log($"Currently in development mode. Package: {devPath}");
+                            if (debugLogsEnabled)
+                            {
+                                UnityEngine.Debug.Log($"Currently in development mode. Package: {devPath}");
+                            }
                             return devPath;
                         }
                     }
@@ -931,7 +995,10 @@ namespace UnityMcpBridge.Editor.Windows
                 }
 
                 // If still not found, return the placeholder path
-                UnityEngine.Debug.LogWarning("Could not find Python directory, using placeholder path");
+                if (debugLogsEnabled)
+                {
+                    UnityEngine.Debug.LogWarning("Could not find Python directory, using placeholder path");
+                }
             }
             catch (Exception e)
             {
@@ -1319,7 +1386,10 @@ namespace UnityMcpBridge.Editor.Windows
                 }
                 else if (!string.IsNullOrEmpty(errors))
                 {
-                    UnityEngine.Debug.LogWarning($"Claude MCP errors: {errors}");
+                    if (debugLogsEnabled)
+                    {
+                        UnityEngine.Debug.LogWarning($"Claude MCP errors: {errors}");
+                    }
                 }
             }
             catch (Exception e)
@@ -1806,7 +1876,10 @@ namespace UnityMcpBridge.Editor.Windows
                     ? mcpClient.windowsConfigPath 
                     : mcpClient.linuxConfigPath;
                 
-                UnityEngine.Debug.Log($"Checking Claude config at: {configPath}");
+                if (debugLogsEnabled)
+                {
+                    UnityEngine.Debug.Log($"Checking Claude config at: {configPath}");
+                }
                 
                 if (!File.Exists(configPath))
                 {

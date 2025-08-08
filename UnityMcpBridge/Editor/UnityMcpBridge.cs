@@ -45,17 +45,10 @@ namespace UnityMcpBridge.Editor
             
             try
             {
-                // Reuse stored project port when available to avoid port changes during setup
+                // Prefer stored project port and start using the robust Start() path (with retries/options)
                 currentUnityPort = PortManager.GetPortWithFallback();
-                
-                listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
-                listener.Start();
-                isRunning = true;
+                Start();
                 isAutoConnectMode = true;
-                
-                Debug.Log($"UnityMcpBridge auto-connected on port {currentUnityPort}");
-                Task.Run(ListenerLoop);
-                EditorApplication.update += ProcessCommands;
             }
             catch (Exception ex)
             {
@@ -226,11 +219,12 @@ namespace UnityMcpBridge.Editor
 
                 try
                 {
+                    // Mark as stopping early to avoid accept logging during disposal
+                    isRunning = false;
                     // Mark heartbeat one last time before stopping
                     WriteHeartbeat(false);
                     listener?.Stop();
                     listener = null;
-                    isRunning = false;
                     EditorApplication.update -= ProcessCommands;
                     Debug.Log("UnityMcpBridge stopped.");
                 }
@@ -260,6 +254,14 @@ namespace UnityMcpBridge.Editor
 
                     // Fire and forget each client connection
                     _ = HandleClientAsync(client);
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Listener was disposed during stop/reload; exit quietly
+                    if (!isRunning)
+                    {
+                        break;
+                    }
                 }
                 catch (Exception ex)
                 {
