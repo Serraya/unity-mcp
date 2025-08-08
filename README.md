@@ -38,7 +38,7 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
 
   *   `read_console`: Gets messages from or clears the console.
   *   `manage_script`: Manages C# scripts (create, read, update, delete).
-  *   `manage_editor`: Controls and queries the editor's state and settings.
+  *   `manage_editor`: Controls and queries the editor\'s state and settings.
   *   `manage_scene`: Manages scenes (load, save, create, get hierarchy, etc.).
   *   `manage_asset`: Performs asset operations (import, create, modify, delete, etc.).
   *   `manage_shader`: Performs shader CRUD operations (create, read, modify, delete).
@@ -124,13 +124,13 @@ Connect your MCP Client (Claude, Cursor, etc.) to the Python server you installe
 
 1.  In Unity, go to `Window > Unity MCP`.
 2.  Click `Auto Configure` on the IDE you uses.
-3.  Look for a green status indicator 🟢 and "Connected". *(This attempts to modify the MCP Client's config file automatically)*.
+3.  Look for a green status indicator 🟢 and "Connected". *(This attempts to modify the MCP Client\'s config file automatically)*.
 
 **Option B: Manual Configuration**
 
 If Auto-Configure fails or you use a different client:
 
-1.  **Find your MCP Client's configuration file.** (Check client documentation).
+1.  **Find your MCP Client\'s configuration file.** (Check client documentation).
     *   *Claude Example (macOS):* `~/Library/Application Support/Claude/claude_desktop_config.json`
     *   *Claude Example (Windows):* `%APPDATA%\Claude\claude_desktop_config.json`
 2.  **Edit the file** to add/update the `mcpServers` section, using the *exact* paths from Step 1.
@@ -204,7 +204,7 @@ If Auto-Configure fails or you use a different client:
 
 **For Claude Code**
 
-If you're using Claude Code, you can register the MCP server using these commands:
+If you\'re using Claude Code, you can register the MCP server using these commands:
 
 **macOS:**
 ```bash
@@ -269,7 +269,7 @@ claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/S
 
 ### Development Tools
 
-If you're contributing to Unity MCP or want to test core changes, we have development tools to streamline your workflow:
+If you\'re contributing to Unity MCP or want to test core changes, we have development tools to streamline your workflow:
 
 - **Development Deployment Scripts**: Quickly deploy and test your changes to Unity MCP Bridge and Python Server
 - **Automatic Backup System**: Safe testing with easy rollback capabilities  
@@ -311,7 +311,7 @@ Help make Unity MCP better!
         
 - **MCP Client Not Connecting / Server Not Starting:**
     
-    - **Verify Server Path:** Double-check the --directory path in your MCP Client's JSON config. It must exactly match the location where you cloned the UnityMCP repository in Installation Step 1 (e.g., .../Programs/UnityMCP/UnityMcpServer/src).
+    - **Verify Server Path:** Double-check the --directory path in your MCP Client\'s JSON config. It must exactly match the location where you cloned the UnityMCP repository in Installation Step 1 (e.g., .../Programs/UnityMCP/UnityMcpServer/src).
         
     - **Verify uv:** Make sure `uv` is installed and working (pip show uv).
         
@@ -321,7 +321,7 @@ Help make Unity MCP better!
         
 - **Auto-Configure Failed:**
 
-    - Use the Manual Configuration steps. Auto-configure might lack permissions to write to the MCP client's config file.
+    - Use the Manual Configuration steps. Auto-configure might lack permissions to write to the MCP client\'s config file.
 
 
 </details>  
