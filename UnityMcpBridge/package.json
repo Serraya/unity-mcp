@@ -4,7 +4,23 @@
   "displayName": "Unity MCP Bridge",
   "description": "A bridge that manages and communicates with the sister application, Unity MCP Server, which allows for communications with MCP Clients like Claude Desktop or Cursor.",
   "unity": "2020.3",
+  "documentationUrl": "https://github.com/CoplayDev/unity-mcp",
+  "licensesUrl": "https://github.com/CoplayDev/unity-mcp/blob/main/LICENSE",
   "dependencies": {
     "com.unity.nuget.newtonsoft-json": "3.0.2"
+  },
+  "keywords": [
+    "unity",
+    "ai",
+    "llm",
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "mcp-client"
+  ],
+  "author": {
+    "name": "CoplayDev",
+    "email": "support@coplay.dev",
+    "url": "https://coplay.dev"
   }
 }
