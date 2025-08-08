@@ -1990,37 +1990,91 @@ namespace UnityMcpBridge.Editor.Windows
         {
             try
             {
-                // Common absolute paths
-                string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
-                string[] candidates =
+                // Windows-specific Python detection
+                if (Application.platform == RuntimePlatform.WindowsEditor)
                 {
-                    "/opt/homebrew/bin/python3",
-                    "/usr/local/bin/python3",
-                    "/usr/bin/python3",
-                    "/opt/local/bin/python3",
-                    Path.Combine(home, ".local", "bin", "python3"),
-                    "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
-                    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
-                };
-                foreach (string c in candidates)
-                {
-                    if (File.Exists(c)) return true;
-                }
+                    // Common Windows Python installation paths
+                    string[] windowsCandidates =
+                    {
+                        @"C:\Python313\python.exe",
+                        @"C:\Python312\python.exe",
+                        @"C:\Python311\python.exe",
+                        @"C:\Python310\python.exe",
+                        @"C:\Python39\python.exe",
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Python\Python313\python.exe"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Python\Python312\python.exe"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Python\Python311\python.exe"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Python\Python310\python.exe"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Python\Python39\python.exe"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"Python313\python.exe"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"Python312\python.exe"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"Python311\python.exe"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"Python310\python.exe"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"Python39\python.exe"),
+                    };
+                    
+                    foreach (string c in windowsCandidates)
+                    {
+                        if (File.Exists(c)) return true;
+                    }
 
-                // Try 'which python3'
-                var psi = new ProcessStartInfo
+                    // Try 'where python' command (Windows equivalent of 'which')
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "where",
+                        Arguments = "python",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
+                    using var p = Process.Start(psi);
+                    string outp = p.StandardOutput.ReadToEnd().Trim();
+                    p.WaitForExit(2000);
+                    if (p.ExitCode == 0 && !string.IsNullOrEmpty(outp))
+                    {
+                        string[] lines = outp.Split('\n');
+                        foreach (string line in lines)
+                        {
+                            string trimmed = line.Trim();
+                            if (File.Exists(trimmed)) return true;
+                        }
+                    }
+                }
+                else
                 {
-                    FileName = "/usr/bin/which",
-                    Arguments = "python3",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-                using var p = Process.Start(psi);
-                string outp = p.StandardOutput.ReadToEnd().Trim();
-                p.WaitForExit(2000);
-                if (p.ExitCode == 0 && !string.IsNullOrEmpty(outp) && File.Exists(outp)) return true;
+                    // macOS/Linux detection (existing code)
+                    string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
+                    string[] candidates =
+                    {
+                        "/opt/homebrew/bin/python3",
+                        "/usr/local/bin/python3",
+                        "/usr/bin/python3",
+                        "/opt/local/bin/python3",
+                        Path.Combine(home, ".local", "bin", "python3"),
+                        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+                        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+                    };
+                    foreach (string c in candidates)
+                    {
+                        if (File.Exists(c)) return true;
+                    }
+
+                    // Try 'which python3'
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "/usr/bin/which",
+                        Arguments = "python3",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
+                    using var p = Process.Start(psi);
+                    string outp = p.StandardOutput.ReadToEnd().Trim();
+                    p.WaitForExit(2000);
+                    if (p.ExitCode == 0 && !string.IsNullOrEmpty(outp) && File.Exists(outp)) return true;
+                }
             }
             catch { }
             return false;
