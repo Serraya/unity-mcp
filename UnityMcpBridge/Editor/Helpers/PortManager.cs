@@ -53,6 +53,8 @@ namespace UnityMcpBridge.Editor.Helpers
                     Debug.Log($"Stored port {storedConfig.unity_port} became available after short wait");
                     return storedConfig.unity_port;
                 }
+                // Prefer sticking to the same port; let the caller handle bind retries/fallbacks
+                return storedConfig.unity_port;
             }
 
             // If no valid stored port, find a new one and save it
