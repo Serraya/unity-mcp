@@ -104,19 +104,8 @@ namespace UnityMcpBridge.Editor.Windows
 
             if (File.Exists(Path.Combine(serverPath, "server.py")))
             {
-                string installedVersion = ServerInstaller.GetInstalledVersion();
-                string latestVersion = ServerInstaller.GetLatestVersion();
-
-                if (ServerInstaller.IsNewerVersion(latestVersion, installedVersion))
-                {
-                    pythonServerInstallationStatus = "Newer Version Available";
-                    pythonServerInstallationStatusColor = Color.yellow;
-                }
-                else
-                {
-                    pythonServerInstallationStatus = "Up to Date";
-                    pythonServerInstallationStatusColor = Color.green;
-                }
+                pythonServerInstallationStatus = "Installed (Embedded)";
+                pythonServerInstallationStatusColor = Color.green;
             }
             else
             {

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -23,6 +24,7 @@ namespace UnityMcpBridge.Editor
         private static readonly object lockObj = new();
         private static readonly object startStopLock = new();
         private static bool initScheduled = false;
+        private static double nextHeartbeatAt = 0.0f;
         private static Dictionary<
             string,
             (string commandJson, TaskCompletionSource<string> tcs)
@@ -83,20 +85,11 @@ namespace UnityMcpBridge.Editor
 
         static UnityMcpBridge()
         {
-            // Use delayed initialization to avoid repeated restarts during compilation
-            EditorApplication.delayCall += InitializeAfterCompilation;
+            // Immediate start for minimal downtime, plus quit hook
+            Start();
             EditorApplication.quitting += Stop;
-            AssemblyReloadEvents.beforeAssemblyReload += Stop; // ensure listener releases before domain reload
-
-            // Robust re-init hooks
-            UnityEditor.Compilation.CompilationPipeline.compilationFinished += _ => ScheduleInitRetry();
-            EditorApplication.playModeStateChanged += state =>
-            {
-                if (state == PlayModeStateChange.EnteredEditMode || state == PlayModeStateChange.EnteredPlayMode)
-                {
-                    ScheduleInitRetry();
-                }
-            };
+            AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+            AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
         }
 
         /// <summary>
@@ -148,58 +141,77 @@ namespace UnityMcpBridge.Editor
 
                 Stop();
 
-                // Removed automatic server installer; assume server exists inside the package (UPM).
-
+                // Attempt fast bind with same-port preference
                 try
                 {
-                    // Try to reuse the current port if it's still available, otherwise get a new one
-                    if (currentUnityPort > 0 && PortManager.IsPortAvailable(currentUnityPort))
+                    currentUnityPort = currentUnityPort > 0 && PortManager.IsPortAvailable(currentUnityPort)
+                        ? currentUnityPort
+                        : PortManager.GetPortWithFallback();
+
+                    const int maxImmediateRetries = 3;
+                    const int retrySleepMs = 75;
+                    int attempt = 0;
+                    for (;;)
                     {
-                        Debug.Log($"Reusing current port {currentUnityPort}");
+                        try
+                        {
+                            listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
+                            listener.Server.SetSocketOption(
+                                SocketOptionLevel.Socket,
+                                SocketOptionName.ReuseAddress,
+                                true
+                            );
+                            // Minimize TIME_WAIT by sending RST on close
+                            try
+                            {
+                                listener.Server.LingerState = new LingerOption(true, 0);
+                            }
+                            catch (Exception)
+                            {
+                                // Ignore if not supported on platform
+                            }
+                            listener.Start();
+                            break;
+                        }
+                        catch (SocketException se) when (se.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt < maxImmediateRetries)
+                        {
+                            attempt++;
+                            Thread.Sleep(retrySleepMs);
+                            continue;
+                        }
+                        catch (SocketException se) when (se.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt >= maxImmediateRetries)
+                        {
+                            currentUnityPort = PortManager.GetPortWithFallback();
+                            listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
+                            listener.Server.SetSocketOption(
+                                SocketOptionLevel.Socket,
+                                SocketOptionName.ReuseAddress,
+                                true
+                            );
+                            try
+                            {
+                                listener.Server.LingerState = new LingerOption(true, 0);
+                            }
+                            catch (Exception)
+                            {
+                            }
+                            listener.Start();
+                            break;
+                        }
                     }
-                    else
-                    {
-                        // Use PortManager to get available port with automatic fallback
-                        currentUnityPort = PortManager.GetPortWithFallback();
-                    }
-                    
-                    listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
-                    listener.Start();
+
                     isRunning = true;
-                    isAutoConnectMode = false; // Normal startup mode
+                    isAutoConnectMode = false;
                     Debug.Log($"UnityMcpBridge started on port {currentUnityPort}.");
-                    // Assuming ListenerLoop and ProcessCommands are defined elsewhere
                     Task.Run(ListenerLoop);
                     EditorApplication.update += ProcessCommands;
+                    // Write initial heartbeat immediately
+                    WriteHeartbeat(false);
+                    nextHeartbeatAt = EditorApplication.timeSinceStartup + 0.5f;
                 }
                 catch (SocketException ex)
                 {
-                    if (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
-                    {
-                        Debug.LogError(
-                            $"Port {currentUnityPort} is already in use. Trying to find alternative..."
-                        );
-                        
-                        // Try once more with a fresh port discovery
-                        try
-                        {
-                            currentUnityPort = PortManager.DiscoverNewPort();
-                            listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
-                            listener.Start();
-                            isRunning = true;
-                            Debug.Log($"UnityMcpBridge started on fallback port {currentUnityPort}.");
-                            Task.Run(ListenerLoop);
-                            EditorApplication.update += ProcessCommands;
-                        }
-                        catch (Exception fallbackEx)
-                        {
-                            Debug.LogError($"Failed to start on fallback port: {fallbackEx.Message}");
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogError($"Failed to start TCP listener: {ex.Message}");
-                    }
+                    Debug.LogError($"Failed to start TCP listener: {ex.Message}");
                 }
             }
         }
@@ -215,6 +227,8 @@ namespace UnityMcpBridge.Editor
 
                 try
                 {
+                    // Mark heartbeat one last time before stopping
+                    WriteHeartbeat(false);
                     listener?.Stop();
                     listener = null;
                     isRunning = false;
@@ -317,6 +331,14 @@ namespace UnityMcpBridge.Editor
             List<string> processedIds = new();
             lock (lockObj)
             {
+                // Periodic heartbeat while editor is idle/processing
+                double now = EditorApplication.timeSinceStartup;
+                if (now >= nextHeartbeatAt)
+                {
+                    WriteHeartbeat(false);
+                    nextHeartbeatAt = now + 0.5f;
+                }
+
                 foreach (
                     KeyValuePair<
                         string,
@@ -542,6 +564,60 @@ namespace UnityMcpBridge.Editor
             catch
             {
                 return "Could not summarize parameters";
+            }
+        }
+
+        // Heartbeat/status helpers
+        private static void OnBeforeAssemblyReload()
+        {
+            WriteHeartbeat(true);
+        }
+
+        private static void OnAfterAssemblyReload()
+        {
+            // Will be overwritten by Start(), but mark as alive quickly
+            WriteHeartbeat(false);
+        }
+
+        private static void WriteHeartbeat(bool reloading)
+        {
+            try
+            {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".unity-mcp");
+                Directory.CreateDirectory(dir);
+                string filePath = Path.Combine(dir, $"unity-mcp-status-{ComputeProjectHash(Application.dataPath)}.json");
+                var payload = new
+                {
+                    unity_port = currentUnityPort,
+                    reloading,
+                    project_path = Application.dataPath,
+                    last_heartbeat = DateTime.UtcNow.ToString("O")
+                };
+                File.WriteAllText(filePath, JsonConvert.SerializeObject(payload));
+            }
+            catch (Exception)
+            {
+                // Best-effort only
+            }
+        }
+
+        private static string ComputeProjectHash(string input)
+        {
+            try
+            {
+                using var sha1 = System.Security.Cryptography.SHA1.Create();
+                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(input ?? string.Empty);
+                byte[] hashBytes = sha1.ComputeHash(bytes);
+                var sb = new System.Text.StringBuilder();
+                foreach (byte b in hashBytes)
+                {
+                    sb.Append(b.ToString("x2"));
+                }
+                return sb.ToString()[..8];
+            }
+            catch
+            {
+                return "default";
             }
         }
     }

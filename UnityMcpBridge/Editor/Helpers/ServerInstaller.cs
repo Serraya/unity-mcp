@@ -1,8 +1,7 @@
 using System;
 using System.IO;
-using System.Linq;
-using System.Net;
 using System.Runtime.InteropServices;
+using UnityEditor;
 using UnityEngine;
 
 namespace UnityMcpBridge.Editor.Helpers
@@ -11,37 +10,34 @@ namespace UnityMcpBridge.Editor.Helpers
     {
         private const string RootFolder = "UnityMCP";
         private const string ServerFolder = "UnityMcpServer";
-        private const string BranchName = "master";
-        private const string GitUrl = "https://github.com/justinpbarnett/unity-mcp.git";
-        private const string PyprojectUrl =
-            "https://raw.githubusercontent.com/justinpbarnett/unity-mcp/refs/heads/"
-            + BranchName
-            + "/UnityMcpServer/src/pyproject.toml";
-
         /// <summary>
-        /// Ensures the unity-mcp-server is installed and up to date.
+        /// Ensures the unity-mcp-server is installed locally by copying from the embedded package source.
+        /// No network calls or Git operations are performed.
         /// </summary>
         public static void EnsureServerInstalled()
         {
             try
             {
                 string saveLocation = GetSaveLocation();
+                string destRoot = Path.Combine(saveLocation, ServerFolder);
+                string destSrc = Path.Combine(destRoot, "src");
 
-                if (!IsServerInstalled(saveLocation))
+                if (File.Exists(Path.Combine(destSrc, "server.py")))
                 {
-                    InstallServer(saveLocation);
+                    return; // Already installed
                 }
-                else
-                {
-                    string installedVersion = GetInstalledVersion();
-                    string latestVersion = GetLatestVersion();
 
-                    if (IsNewerVersion(latestVersion, installedVersion))
-                    {
-                        UpdateServer(saveLocation);
-                    }
-                    else { }
+                if (!TryGetEmbeddedServerSource(out string embeddedSrc))
+                {
+                    throw new Exception("Could not find embedded UnityMcpServer/src in the package.");
                 }
+
+                // Ensure destination exists
+                Directory.CreateDirectory(destRoot);
+
+                // Copy the entire UnityMcpServer folder (parent of src)
+                string embeddedRoot = Path.GetDirectoryName(embeddedSrc) ?? embeddedSrc; // go up from src to UnityMcpServer
+                CopyDirectoryRecursive(embeddedRoot, destRoot);
             }
             catch (Exception ex)
             {
@@ -111,139 +107,110 @@ namespace UnityMcpBridge.Editor.Helpers
         private static bool IsServerInstalled(string location)
         {
             return Directory.Exists(location)
-                && File.Exists(Path.Combine(location, ServerFolder, "src", "pyproject.toml"));
+                && File.Exists(Path.Combine(location, ServerFolder, "src", "server.py"));
         }
 
         /// <summary>
-        /// Installs the server by cloning only the UnityMcpServer folder from the repository and setting up dependencies.
+        /// Attempts to locate the embedded UnityMcpServer/src directory inside the installed package
+        /// or common development locations.
         /// </summary>
-        private static void InstallServer(string location)
+        private static bool TryGetEmbeddedServerSource(out string srcPath)
         {
-            // Create the src directory where the server code will reside
-            Directory.CreateDirectory(location);
-
-            // Initialize git repo in the src directory
-            RunCommand("git", $"init", workingDirectory: location);
-
-            // Add remote
-            RunCommand("git", $"remote add origin {GitUrl}", workingDirectory: location);
-
-            // Configure sparse checkout
-            RunCommand("git", "config core.sparseCheckout true", workingDirectory: location);
-
-            // Set sparse checkout path to only include UnityMcpServer folder
-            string sparseCheckoutPath = Path.Combine(location, ".git", "info", "sparse-checkout");
-            File.WriteAllText(sparseCheckoutPath, $"{ServerFolder}/");
-
-            // Fetch and checkout the branch
-            RunCommand("git", $"fetch --depth=1 origin {BranchName}", workingDirectory: location);
-            RunCommand("git", $"checkout {BranchName}", workingDirectory: location);
-        }
-
-        /// <summary>
-        /// Fetches the currently installed version from the local pyproject.toml file.
-        /// </summary>
-        public static string GetInstalledVersion()
-        {
-            string pyprojectPath = Path.Combine(
-                GetSaveLocation(),
-                ServerFolder,
-                "src",
-                "pyproject.toml"
-            );
-            return ParseVersionFromPyproject(File.ReadAllText(pyprojectPath));
-        }
-
-        /// <summary>
-        /// Fetches the latest version from the GitHub pyproject.toml file.
-        /// </summary>
-        public static string GetLatestVersion()
-        {
-            using WebClient webClient = new();
-            string pyprojectContent = webClient.DownloadString(PyprojectUrl);
-            return ParseVersionFromPyproject(pyprojectContent);
-        }
-
-        /// <summary>
-        /// Updates the server by pulling the latest changes for the UnityMcpServer folder only.
-        /// </summary>
-        private static void UpdateServer(string location)
-        {
-            RunCommand("git", $"pull origin {BranchName}", workingDirectory: location);
-        }
-
-        /// <summary>
-        /// Parses the version number from pyproject.toml content.
-        /// </summary>
-        private static string ParseVersionFromPyproject(string content)
-        {
-            foreach (string line in content.Split('\n'))
+            // 1) Development mode: common repo layouts
+            try
             {
-                if (line.Trim().StartsWith("version ="))
+                string projectRoot = Path.GetDirectoryName(Application.dataPath);
+                string[] devCandidates =
                 {
-                    string[] parts = line.Split('=');
-                    if (parts.Length == 2)
+                    Path.Combine(projectRoot ?? string.Empty, "unity-mcp", "UnityMcpServer", "src"),
+                    Path.Combine(projectRoot ?? string.Empty, "..", "unity-mcp", "UnityMcpServer", "src"),
+                };
+                foreach (string candidate in devCandidates)
+                {
+                    string full = Path.GetFullPath(candidate);
+                    if (Directory.Exists(full) && File.Exists(Path.Combine(full, "server.py")))
                     {
-                        return parts[1].Trim().Trim('"');
+                        srcPath = full;
+                        return true;
                     }
                 }
             }
-            throw new Exception("Version not found in pyproject.toml");
-        }
+            catch { /* ignore */ }
 
-        /// <summary>
-        /// Compares two version strings to determine if the latest is newer.
-        /// </summary>
-        public static bool IsNewerVersion(string latest, string installed)
-        {
-            int[] latestParts = latest.Split('.').Select(int.Parse).ToArray();
-            int[] installedParts = installed.Split('.').Select(int.Parse).ToArray();
-            for (int i = 0; i < Math.Min(latestParts.Length, installedParts.Length); i++)
+            // 2) Installed package: resolve via Package Manager
+            try
             {
-                if (latestParts[i] > installedParts[i])
+                var list = UnityEditor.PackageManager.Client.List();
+                while (!list.IsCompleted) { }
+                if (list.Status == UnityEditor.PackageManager.StatusCode.Success)
                 {
-                    return true;
-                }
+                    foreach (var pkg in list.Result)
+                    {
+                        if (pkg.name == "com.justinpbarnett.unity-mcp")
+                        {
+                            string packagePath = pkg.resolvedPath; // e.g., Library/PackageCache/... or local path
 
-                if (latestParts[i] < installedParts[i])
-                {
-                    return false;
+                            // Preferred: UnityMcpServer embedded alongside Editor/Runtime within the package
+                            string embedded = Path.Combine(packagePath, "UnityMcpServer", "src");
+                            if (Directory.Exists(embedded) && File.Exists(Path.Combine(embedded, "server.py")))
+                            {
+                                srcPath = embedded;
+                                return true;
+                            }
+
+                            // Legacy: sibling of the package folder (dev-linked). Only valid when present on disk.
+                            string sibling = Path.Combine(Path.GetDirectoryName(packagePath) ?? string.Empty, "UnityMcpServer", "src");
+                            if (Directory.Exists(sibling) && File.Exists(Path.Combine(sibling, "server.py")))
+                            {
+                                srcPath = sibling;
+                                return true;
+                            }
+                        }
+                    }
                 }
             }
-            return latestParts.Length > installedParts.Length;
+            catch { /* ignore */ }
+
+            // 3) Fallback to previous common install locations
+            try
+            {
+                string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                string[] candidates =
+                {
+                    Path.Combine(home, "unity-mcp", "UnityMcpServer", "src"),
+                    Path.Combine(home, "Applications", "UnityMCP", "UnityMcpServer", "src"),
+                };
+                foreach (string candidate in candidates)
+                {
+                    if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "server.py")))
+                    {
+                        srcPath = candidate;
+                        return true;
+                    }
+                }
+            }
+            catch { /* ignore */ }
+
+            srcPath = null;
+            return false;
         }
 
-        /// <summary>
-        /// Runs a command-line process and handles output/errors.
-        /// </summary>
-        private static void RunCommand(
-            string command,
-            string arguments,
-            string workingDirectory = null
-        )
+        private static void CopyDirectoryRecursive(string sourceDir, string destinationDir)
         {
-            System.Diagnostics.Process process = new()
+            Directory.CreateDirectory(destinationDir);
+
+            foreach (string filePath in Directory.GetFiles(sourceDir))
             {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = command,
-                    Arguments = arguments,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WorkingDirectory = workingDirectory ?? string.Empty,
-                },
-            };
-            process.Start();
-            string output = process.StandardOutput.ReadToEnd();
-            string error = process.StandardError.ReadToEnd();
-            process.WaitForExit();
-            if (process.ExitCode != 0)
+                string fileName = Path.GetFileName(filePath);
+                string destFile = Path.Combine(destinationDir, fileName);
+                File.Copy(filePath, destFile, overwrite: true);
+            }
+
+            foreach (string dirPath in Directory.GetDirectories(sourceDir))
             {
-                throw new Exception(
-                    $"Command failed: {command} {arguments}\nOutput: {output}\nError: {error}"
-                );
+                string dirName = Path.GetFileName(dirPath);
+                string destSubDir = Path.Combine(destinationDir, dirName);
+                CopyDirectoryRecursive(dirPath, destSubDir);
             }
         }
     }
