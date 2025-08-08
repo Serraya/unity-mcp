@@ -214,8 +214,8 @@ namespace UnityMcpBridge.Editor.Windows
 
             GUILayout.FlexibleSpace();
 
-            // Run Client Setup button
-            if (GUILayout.Button("Re-Run Client Setup", GUILayout.Width(140), GUILayout.Height(24)))
+            // Bind to Clients button
+            if (GUILayout.Button("Bind to Clients", GUILayout.Width(140), GUILayout.Height(24)))
             {
                 RunSetupNow();
             }
