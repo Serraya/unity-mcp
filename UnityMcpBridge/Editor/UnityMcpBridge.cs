@@ -45,8 +45,8 @@ namespace UnityMcpBridge.Editor
             
             try
             {
-                // Discover new port and save it
-                currentUnityPort = PortManager.DiscoverNewPort();
+                // Reuse stored project port when available to avoid port changes during setup
+                currentUnityPort = PortManager.GetPortWithFallback();
                 
                 listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
                 listener.Start();
