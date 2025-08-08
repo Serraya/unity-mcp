@@ -77,6 +77,7 @@ Unity MCP connects your tools using two components:
       *   [Claude Code](https://github.com/anthropics/claude-code)
       *   [Cursor](https://www.cursor.com/en/downloads)
       *   [Visual Studio Code Copilot](https://code.visualstudio.com/docs/copilot/overview)
+      *   [Windsurf](https://windsurf.com)
       *   *(Others may work with manual config)*
  *    <details> <summary><strong>[Optional] Roslyn for Advanced Script Validation</strong></summary>
 
