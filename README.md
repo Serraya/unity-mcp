@@ -1,4 +1,5 @@
 # Unity MCP ✨
+
 #### Proudly sponsored and maintained by [Coplay](https://www.coplay.dev/?ref=unity-mcp), the AI assistant for Unity.
 
 [![Discord](https://img.shields.io/badge/discord-join-red.svg?logo=discord&logoColor=white)](https://discord.gg/y4p8KfzrN4)
@@ -20,9 +21,7 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
 
 **Get help, share ideas, and collaborate with other Unity MCP developers!**  
 
-
 ---
-
 
 ## Key Features 🚀
 
@@ -65,7 +64,6 @@ Unity MCP connects your tools using two components:
 
 ### Prerequisites
 
-
   *   **Git CLI:** For cloning the server code. [Download Git](https://git-scm.com/downloads)
   *   **Python:** Version 3.12 or newer. [Download Python](https://www.python.org/downloads/)
   *   **Unity Hub & Editor:** Version 2020.3 LTS or newer. [Download Unity](https://unity.com/download)
@@ -98,9 +96,8 @@ Unity MCP connects your tools using two components:
         3. Ensure .NET compatibility settings are correct
         4. Add `USE_ROSLYN` to Scripting Define Symbols
         5. Restart Unity
-        
-        **Note:** Without Roslyn, script validation falls back to basic structural checks. Roslyn enables full C# compiler diagnostics with precise error reporting.</details>
 
+        **Note:** Without Roslyn, script validation falls back to basic structural checks. Roslyn enables full C# compiler diagnostics with precise error reporting.</details>
 
 ### Step 1: Install the Unity Package (Bridge)
 
@@ -113,6 +110,8 @@ Unity MCP connects your tools using two components:
     ```
 5.  Click `Add`.
 6. The MCP Server should automatically be installed onto your machine as a result of this process.
+
+**Note:** If you installed the MCP Server before Coplay's maintenance, you will need to uninstall the old package before re-installing the new one.
 
 ### Step 2: Configure Your MCP Client
 
@@ -177,6 +176,7 @@ If Auto-Configure fails or you use a different client:
   }
 }
 ```
+
 (Replace YOUR_USERNAME if using ~/bin)
 
 **Linux:**
@@ -200,18 +200,18 @@ If Auto-Configure fails or you use a different client:
 
 (Replace YOUR_USERNAME)
 
-
-
 **For Claude Code**
 
 If you\'re using Claude Code, you can register the MCP server using these commands:
 
 **macOS:**
+
 ```bash
 claude mcp add UnityMCP -- uv --directory /[PATH_TO]/UnityMCP/UnityMcpServer/src run server.py
 ```
 
 **Windows:**
+
 ```bash
 claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/Scripts/uv.exe" --directory "C:/Users/USERNAME/AppData/Local/Programs/UnityMCP/UnityMcpServer/src" run server.py
 ```
@@ -228,12 +228,13 @@ claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/S
 3. **Interact!** Unity tools should now be available in your MCP Client.
     
     Example Prompt: `Create a 3D player controller`, `Create a yellow and bridge sun`, `Create a cool shader and apply it on a cube`.
-    
+
 ---
 
 ## Future Dev Plans (Besides PR) 📝
 
 ### 🔴 High Priority
+
 - [ ] **Asset Generation Improvements** - Enhanced server request handling and asset pipeline optimization
 - [ ] **Code Generation Enhancements** - Improved generated code quality and error handling
 - [ ] **Robust Error Handling** - Comprehensive error messages, recovery mechanisms, and graceful degradation
@@ -241,10 +242,12 @@ claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/S
 - [ ] **Documentation Expansion** - Complete tutorials for custom tool creation and API reference
 
 ### 🟡 Medium Priority
+
 - [ ] **Custom Tool Creation GUI** - Visual interface for users to create and configure their own MCP tools
 - [ ] **Advanced Logging System** - Logging with filtering, export, and debugging capabilities
 
 ### 🟢 Low Priority
+
 - [ ] **Mobile Platform Support** - Extended toolset for mobile development workflows and platform-specific features
 - [ ] **Easier Tool Setup**
 - [ ] **Plugin Marketplace** - Community-driven tool sharing and distribution platform
@@ -257,6 +260,7 @@ claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/S
 </details>
 
 ### 🔬 Research & Exploration
+
 - [ ] **AI-Powered Asset Generation** - Integration with AI tools for automatic 3D models, textures, and animations
 - [ ] **Real-time Collaboration** - Live editing sessions between multiple developers *(Currently in progress)*
 - [ ] **Analytics Dashboard** - Usage analytics, project insights, and performance metrics
@@ -302,27 +306,16 @@ Help make Unity MCP better!
 <summary><strong>Click to view common issues and fixes...</strong></summary>  
 
 - **Unity Bridge Not Running/Connecting:**
-    
     - Ensure Unity Editor is open.
-        
     - Check the status window: Window > Unity MCP.
-        
     - Restart Unity.
-        
 - **MCP Client Not Connecting / Server Not Starting:**
-    
     - **Verify Server Path:** Double-check the --directory path in your MCP Client\'s JSON config. It must exactly match the location where you cloned the UnityMCP repository in Installation Step 1 (e.g., .../Programs/UnityMCP/UnityMcpServer/src).
-        
     - **Verify uv:** Make sure `uv` is installed and working (pip show uv).
-        
     - **Run Manually:** Try running the server directly from the terminal to see errors: `# Navigate to the src directory first! cd /path/to/your/UnityMCP/UnityMcpServer/src uv run server.py`
-        
     - **Permissions (macOS/Linux):** If you installed the server in a system location like /usr/local/bin, ensure the user running the MCP client has permission to execute uv and access files there. Installing in ~/bin might be easier.
-        
 - **Auto-Configure Failed:**
-
     - Use the Manual Configuration steps. Auto-configure might lack permissions to write to the MCP client\'s config file.
-
 
 </details>  
 
@@ -336,14 +329,9 @@ MIT License. See [LICENSE](LICENSE) file.
 
 ---
 
-## Acknowledgments 🙏
-
-Thanks to the contributors and our sponsors [Coplay](https://coplay.dev/?ref=unity-mcp).
-
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=CoplayDev/unity-mcp&type=Date)](https://www.star-history.com/#CoplayDev/unity-mcp&Date)
-
 
 ## Sponsor
 
