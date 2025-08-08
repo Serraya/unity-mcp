@@ -1,23 +1,18 @@
 # Unity MCP ✨
+#### Proudly sponsored and maintained by [Coplay](https://www.coplay.dev/?ref=unity-mcp), the AI assistant for Unity.
 
+[![Discord](https://img.shields.io/badge/discord-join-red.svg?logo=discord&logoColor=white)](https://discord.gg/y4p8KfzrN4)
 [![](https://img.shields.io/badge/Unity-000000?style=flat&logo=unity&logoColor=blue 'Unity')](https://unity.com/releases/editor/archive)
 [![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![](https://badge.mcpx.dev?status=on 'MCP Enabled')](https://modelcontextprotocol.io/introduction)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/coplaydev/unity-mcp)
 ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/coplaydev/unity-mcp)
 [![](https://img.shields.io/badge/License-MIT-red.svg 'MIT License')](https://opensource.org/licenses/MIT)
+[![](https://img.shields.io/badge/Sponsor-Coplay-red.svg 'Coplay')](https://www.coplay.dev/?ref=unity-mcp)
 
 **Create your Unity apps with LLMs!**
 
 Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to interact directly with your Unity Editor via a local **MCP (Model Context Protocol) Client**. Give your LLM tools to manage assets, control scenes, edit scripts, and automate tasks within Unity.
-
-Proudly sponsored by [Coplay](https://www.coplay.dev)
-
-<p align="center">
-  <a href="https://www.coplay.dev">
-    <img src="logo.png" alt="Coplay Logo" width="100%">
-  </a>
-</p>
 
 ## 💬 Join Our Community
 
@@ -335,13 +330,6 @@ Still stuck? [Open an Issue](https://github.com/coplaydev/unity-mcp/issues) or [
 
 ---
 
-## Contact 👋
-
-- **justinpbarnett:** [X/Twitter](https://x.com/justinpbarnett)
-- **scriptwonder**: [Email](mailto:swu85@ur.rochester.edu), [LinkedIn](https://www.linkedin.com/in/shutong-wu-214043172/)
-
----
-
 ## License 📜
 
 MIT License. See [LICENSE](LICENSE) file.
@@ -350,8 +338,17 @@ MIT License. See [LICENSE](LICENSE) file.
 
 ## Acknowledgments 🙏
 
-Thanks to the contributors and our sponsors [Coplay](https://coplay.dev).
+Thanks to the contributors and our sponsors [Coplay](https://coplay.dev/?ref=unity-mcp).
 
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=coplaydev/unity-mcp&type=Date)](https://www.star-history.com/#coplaydev/unity-mcp&Date)
+
+
+## Sponsor
+
+<p align="center">
+  <a href="https://www.coplay.dev/?ref=unity-mcp" target="_blank" rel="noopener noreferrer">
+    <img src="logo.png" alt="Coplay Logo" width="100%">
+  </a>
+</p>
