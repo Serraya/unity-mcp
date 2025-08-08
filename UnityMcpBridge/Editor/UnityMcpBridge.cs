@@ -141,12 +141,11 @@ namespace UnityMcpBridge.Editor
 
                 Stop();
 
-                // Attempt fast bind with same-port preference
+                // Attempt fast bind with stored-port preference (sticky per-project)
                 try
                 {
-                    currentUnityPort = currentUnityPort > 0 && PortManager.IsPortAvailable(currentUnityPort)
-                        ? currentUnityPort
-                        : PortManager.GetPortWithFallback();
+                    // Always consult PortManager first so we prefer the persisted project port
+                    currentUnityPort = PortManager.GetPortWithFallback();
 
                     const int maxImmediateRetries = 3;
                     const int retrySleepMs = 75;
