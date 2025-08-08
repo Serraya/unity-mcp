@@ -38,7 +38,7 @@ namespace UnityMcpBridge.Editor.Helpers
             var storedConfig = GetStoredPortConfig();
             if (storedConfig != null && 
                 storedConfig.unity_port > 0 && 
-                storedConfig.project_path == Application.dataPath &&
+                string.Equals(storedConfig.project_path ?? string.Empty, Application.dataPath ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
                 IsPortAvailable(storedConfig.unity_port))
             {
                 Debug.Log($"Using stored port {storedConfig.unity_port} for current project");
@@ -196,7 +196,11 @@ namespace UnityMcpBridge.Editor.Helpers
 
                 string registryFile = GetRegistryFilePath();
                 string json = JsonConvert.SerializeObject(portConfig, Formatting.Indented);
+                // Write to hashed, project-scoped file
                 File.WriteAllText(registryFile, json);
+                // Also write to legacy stable filename to avoid hash/case drift across reloads
+                string legacy = Path.Combine(GetRegistryDirectory(), RegistryFileName);
+                File.WriteAllText(legacy, json);
 
                 Debug.Log($"Saved port {port} to storage");
             }
