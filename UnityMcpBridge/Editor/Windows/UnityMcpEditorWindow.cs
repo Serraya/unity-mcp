@@ -945,32 +945,23 @@ namespace UnityMcpBridge.Editor.Windows
         {
             try
             {
-                // Check if we're using a file-based package by looking at the manifest
+                // Only treat as development if manifest explicitly references a local file path for the package
                 string manifestPath = Path.Combine(Application.dataPath, "..", "Packages", "manifest.json");
-                if (File.Exists(manifestPath))
+                if (!File.Exists(manifestPath)) return false;
+
+                string manifestContent = File.ReadAllText(manifestPath);
+                // Look specifically for our package dependency set to a file: URL
+                // This avoids auto-enabling dev mode just because a repo exists elsewhere on disk
+                if (manifestContent.IndexOf("\"com.justinpbarnett.unity-mcp\"", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    string manifestContent = File.ReadAllText(manifestPath);
-                    // Look for file-based package reference
-                    if (manifestContent.Contains("file:/") && manifestContent.Contains("unity-mcp"))
+                    int idx = manifestContent.IndexOf("com.justinpbarnett.unity-mcp", StringComparison.OrdinalIgnoreCase);
+                    // Crude but effective: check for "file:" in the same line/value
+                    if (manifestContent.IndexOf("file:", idx, StringComparison.OrdinalIgnoreCase) >= 0
+                        && manifestContent.IndexOf("\n", idx, StringComparison.OrdinalIgnoreCase) > manifestContent.IndexOf("file:", idx, StringComparison.OrdinalIgnoreCase))
                     {
                         return true;
                     }
                 }
-                
-                // Also check if we're in a development environment by looking for common dev paths
-                string[] devIndicators = {
-                    Path.Combine(Application.dataPath, "..", "unity-mcp"),
-                    Path.Combine(Application.dataPath, "..", "..", "unity-mcp"),
-                };
-                
-                foreach (string indicator in devIndicators)
-                {
-                    if (Directory.Exists(indicator) && File.Exists(Path.Combine(indicator, "UnityMcpServer", "src", "server.py")))
-                    {
-                        return true;
-                    }
-                }
-                
                 return false;
             }
             catch
