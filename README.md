@@ -5,8 +5,8 @@
 [![](https://img.shields.io/badge/Unity-000000?style=flat&logo=unity&logoColor=blue 'Unity')](https://unity.com/releases/editor/archive)
 [![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![](https://badge.mcpx.dev?status=on 'MCP Enabled')](https://modelcontextprotocol.io/introduction)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/w/coplaydev/unity-mcp)
-![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/coplaydev/unity-mcp)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/w/CoplayDev/unity-mcp)
+![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/CoplayDev/unity-mcp)
 [![](https://img.shields.io/badge/License-MIT-red.svg 'MIT License')](https://opensource.org/licenses/MIT)
 [![](https://img.shields.io/badge/Sponsor-Coplay-red.svg 'Coplay')](https://www.coplay.dev/?ref=unity-mcp)
 
@@ -109,7 +109,7 @@ Unity MCP connects your tools using two components:
 3.  Click `+` -> `Add package from git URL...`.
 4.  Enter:
     ```
-    https://github.com/coplaydev/unity-mcp.git?path=/UnityMcpBridge
+    https://github.com/CoplayDev/unity-mcp.git?path=/UnityMcpBridge
     ```
 5.  Click `Add`.
 6. The MCP Server should automatically be installed onto your machine as a result of this process.
@@ -292,7 +292,7 @@ Help make Unity MCP better!
     
 5. **Push** your branch.
     
-6. **Open a Pull Request** against the master branch.
+6. **Open a Pull Request** against the main branch.
 
 ---
 
@@ -326,7 +326,7 @@ Help make Unity MCP better!
 
 </details>  
 
-Still stuck? [Open an Issue](https://github.com/coplaydev/unity-mcp/issues) or [Join the Discord](https://discord.gg/y4p8KfzrN4)!
+Still stuck? [Open an Issue](https://github.com/CoplayDev/unity-mcp/issues) or [Join the Discord](https://discord.gg/y4p8KfzrN4)!
 
 ---
 
@@ -342,7 +342,7 @@ Thanks to the contributors and our sponsors [Coplay](https://coplay.dev/?ref=uni
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=coplaydev/unity-mcp&type=Date)](https://www.star-history.com/#coplaydev/unity-mcp&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=CoplayDev/unity-mcp&type=Date)](https://www.star-history.com/#CoplayDev/unity-mcp&Date)
 
 
 ## Sponsor
