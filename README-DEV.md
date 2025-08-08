@@ -48,7 +48,7 @@ Restores original files from backup.
 
 Unity package cache is typically located at:
 ```
-X:\UnityProject\Library\PackageCache\com.CoplayDev.unity-mcp@1.0.0
+X:\UnityProject\Library\PackageCache\com.coplaydev.unity-mcp@1.0.0
 ```
 
 To find it:

@@ -626,7 +626,7 @@ namespace UnityMcpBridge.Editor.Windows
                 {
                     foreach (UnityEditor.PackageManager.PackageInfo package in request.Result)
                     {
-                        if (package.name == "com.CoplayDev.unity-mcp")
+                        if (package.name == "com.coplaydev.unity-mcp")
                         {
                             string packagePath = package.resolvedPath;
                             
