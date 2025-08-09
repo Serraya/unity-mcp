@@ -1000,7 +1000,14 @@ namespace UnityMcpBridge.Editor.Windows
                         {
                             string packagePath = package.resolvedPath;
                             
-                            // Check for local package structure (UnityMcpServer/src)
+                            // Preferred: check for tilde folder inside package
+                            string packagedTildeDir = Path.Combine(packagePath, "UnityMcpServer~", "src");
+                            if (Directory.Exists(packagedTildeDir) && File.Exists(Path.Combine(packagedTildeDir, "server.py")))
+                            {
+                                return packagedTildeDir;
+                            }
+                            
+                            // Fallback: legacy local package structure (UnityMcpServer/src)
                             string localPythonDir = Path.Combine(Path.GetDirectoryName(packagePath), "UnityMcpServer", "src");
                             if (Directory.Exists(localPythonDir) && File.Exists(Path.Combine(localPythonDir, "server.py")))
                             {

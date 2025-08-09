@@ -147,7 +147,15 @@ namespace UnityMcpBridge.Editor.Helpers
                         {
                             string packagePath = pkg.resolvedPath; // e.g., Library/PackageCache/... or local path
 
-                            // Preferred: UnityMcpServer embedded alongside Editor/Runtime within the package
+                            // Preferred: UnityMcpServer~ embedded alongside Editor/Runtime within the package (ignored by Unity import)
+                            string embeddedTilde = Path.Combine(packagePath, "UnityMcpServer~", "src");
+                            if (Directory.Exists(embeddedTilde) && File.Exists(Path.Combine(embeddedTilde, "server.py")))
+                            {
+                                srcPath = embeddedTilde;
+                                return true;
+                            }
+
+                            // Fallback: legacy non-tilde folder name inside the package
                             string embedded = Path.Combine(packagePath, "UnityMcpServer", "src");
                             if (Directory.Exists(embedded) && File.Exists(Path.Combine(embedded, "server.py")))
                             {

@@ -5,6 +5,9 @@ echo ===============================================
 echo Unity MCP Development Restore Script
 echo ===============================================
 echo.
+echo Note: The Python server is bundled under UnityMcpBridge\UnityMcpServer~ in the package.
+echo       This script restores your installed server path from backups, not the repo copy.
+echo.
 
 :: Configuration
 set "DEFAULT_BACKUP_DIR=%USERPROFILE%\Desktop\unity-mcp-backup"
