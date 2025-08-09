@@ -1311,14 +1311,38 @@ namespace UnityMcpBridge.Editor.Windows
                 // Common logic for checking configuration status
                 if (configExists)
                 {
-                    if (pythonDir != null && 
-                        Array.Exists(args, arg => arg.Contains(pythonDir, StringComparison.Ordinal)))
+                    bool matches = pythonDir != null && Array.Exists(args, arg => arg.Contains(pythonDir, StringComparison.Ordinal));
+                    if (matches)
                     {
                         mcpClient.SetStatus(McpStatus.Configured);
                     }
                     else
                     {
-                        mcpClient.SetStatus(McpStatus.IncorrectPath);
+                        // Attempt auto-rewrite once if the package path changed
+                        try
+                        {
+                            string rewriteResult = WriteToConfig(pythonDir, configPath, mcpClient);
+                            if (rewriteResult == "Configured successfully")
+                            {
+                                if (debugLogsEnabled)
+                                {
+                                    UnityEngine.Debug.Log($"UnityMCP: Auto-updated MCP config for '{mcpClient.name}' to new path: {pythonDir}");
+                                }
+                                mcpClient.SetStatus(McpStatus.Configured);
+                            }
+                            else
+                            {
+                                mcpClient.SetStatus(McpStatus.IncorrectPath);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            mcpClient.SetStatus(McpStatus.IncorrectPath);
+                            if (debugLogsEnabled)
+                            {
+                                UnityEngine.Debug.LogWarning($"UnityMCP: Auto-config rewrite failed for '{mcpClient.name}': {ex.Message}");
+                            }
+                        }
                     }
                 }
                 else

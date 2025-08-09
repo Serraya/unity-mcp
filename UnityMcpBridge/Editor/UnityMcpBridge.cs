@@ -24,13 +24,31 @@ namespace UnityMcpBridge.Editor
         private static readonly object lockObj = new();
         private static readonly object startStopLock = new();
         private static bool initScheduled = false;
+        private static bool ensureUpdateHooked = false;
+        private static bool isStarting = false;
+        private static double nextStartAt = 0.0f;
         private static double nextHeartbeatAt = 0.0f;
+        private static int heartbeatSeq = 0;
         private static Dictionary<
             string,
             (string commandJson, TaskCompletionSource<string> tcs)
         > commandQueue = new();
         private static int currentUnityPort = 6400; // Dynamic port, starts with default
         private static bool isAutoConnectMode = false;
+        
+        // Debug helpers
+        private static bool IsDebugEnabled()
+        {
+            try { return EditorPrefs.GetBool("UnityMCP.DebugLogs", false); } catch { return false; }
+        }
+        
+        private static void LogBreadcrumb(string stage)
+        {
+            if (IsDebugEnabled())
+            {
+                Debug.Log($"<b><color=#2EA3FF>UNITY-MCP</color></b>: [{stage}]");
+            }
+        }
 
         public static bool IsRunning => isRunning;
         public static int GetCurrentPort() => currentUnityPort;
@@ -78,11 +96,24 @@ namespace UnityMcpBridge.Editor
 
         static UnityMcpBridge()
         {
-            // Immediate start for minimal downtime, plus quit hook
-            Start();
+            // Skip bridge in headless/batch environments (CI/builds)
+            if (Application.isBatchMode)
+            {
+                return;
+            }
+            // Defer start until the editor is idle and not compiling
+            ScheduleInitRetry();
+            // Add a safety net update hook in case delayCall is missed during reload churn
+            if (!ensureUpdateHooked)
+            {
+                ensureUpdateHooked = true;
+                EditorApplication.update += EnsureStartedOnEditorIdle;
+            }
             EditorApplication.quitting += Stop;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
+            // Also coalesce play mode transitions into a deferred init
+            EditorApplication.playModeStateChanged += _ => ScheduleInitRetry();
         }
 
         /// <summary>
@@ -94,7 +125,7 @@ namespace UnityMcpBridge.Editor
             initScheduled = false;
 
             // Play-mode friendly: allow starting in play mode; only defer while compiling
-            if (EditorApplication.isCompiling)
+            if (IsCompiling())
             {
                 ScheduleInitRetry();
                 return;
@@ -118,7 +149,75 @@ namespace UnityMcpBridge.Editor
                 return;
             }
             initScheduled = true;
+            // Debounce: start ~200ms after the last trigger
+            nextStartAt = EditorApplication.timeSinceStartup + 0.20f;
+            // Ensure the update pump is active
+            if (!ensureUpdateHooked)
+            {
+                ensureUpdateHooked = true;
+                EditorApplication.update += EnsureStartedOnEditorIdle;
+            }
+            // Keep the original delayCall as a secondary path
             EditorApplication.delayCall += InitializeAfterCompilation;
+        }
+
+        // Safety net: ensure the bridge starts shortly after domain reload when editor is idle
+        private static void EnsureStartedOnEditorIdle()
+        {
+            // Do nothing while compiling
+            if (IsCompiling())
+            {
+                return;
+            }
+
+            // If already running, remove the hook
+            if (isRunning)
+            {
+                EditorApplication.update -= EnsureStartedOnEditorIdle;
+                ensureUpdateHooked = false;
+                return;
+            }
+
+            // Debounced start: wait until the scheduled time
+            if (nextStartAt > 0 && EditorApplication.timeSinceStartup < nextStartAt)
+            {
+                return;
+            }
+
+            if (isStarting)
+            {
+                return;
+            }
+
+            isStarting = true;
+            // Attempt start; if it succeeds, remove the hook to avoid overhead
+            Start();
+            isStarting = false;
+            if (isRunning)
+            {
+                EditorApplication.update -= EnsureStartedOnEditorIdle;
+                ensureUpdateHooked = false;
+            }
+        }
+
+        // Helper to check compilation status across Unity versions
+        private static bool IsCompiling()
+        {
+            if (EditorApplication.isCompiling)
+            {
+                return true;
+            }
+            try
+            {
+                System.Type pipeline = System.Type.GetType("UnityEditor.Compilation.CompilationPipeline, UnityEditor");
+                var prop = pipeline?.GetProperty("isCompiling", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                if (prop != null)
+                {
+                    return (bool)prop.GetValue(null);
+                }
+            }
+            catch { }
+            return false;
         }
 
         public static void Start()
@@ -140,6 +239,9 @@ namespace UnityMcpBridge.Editor
                     // Always consult PortManager first so we prefer the persisted project port
                     currentUnityPort = PortManager.GetPortWithFallback();
 
+                    // Breadcrumb: Start
+                    LogBreadcrumb("Start");
+
                     const int maxImmediateRetries = 3;
                     const int retrySleepMs = 75;
                     int attempt = 0;
@@ -153,6 +255,13 @@ namespace UnityMcpBridge.Editor
                                 SocketOptionName.ReuseAddress,
                                 true
                             );
+#if UNITY_EDITOR_WIN
+                            try
+                            {
+                                listener.ExclusiveAddressUse = false;
+                            }
+                            catch { }
+#endif
                             // Minimize TIME_WAIT by sending RST on close
                             try
                             {
@@ -180,6 +289,13 @@ namespace UnityMcpBridge.Editor
                                 SocketOptionName.ReuseAddress,
                                 true
                             );
+#if UNITY_EDITOR_WIN
+                            try
+                            {
+                                listener.ExclusiveAddressUse = false;
+                            }
+                            catch { }
+#endif
                             try
                             {
                                 listener.Server.LingerState = new LingerOption(true, 0);
@@ -198,7 +314,8 @@ namespace UnityMcpBridge.Editor
                     Task.Run(ListenerLoop);
                     EditorApplication.update += ProcessCommands;
                     // Write initial heartbeat immediately
-                    WriteHeartbeat(false);
+                    heartbeatSeq++;
+                    WriteHeartbeat(false, "ready");
                     nextHeartbeatAt = EditorApplication.timeSinceStartup + 0.5f;
                 }
                 catch (SocketException ex)
@@ -571,16 +688,22 @@ namespace UnityMcpBridge.Editor
         // Heartbeat/status helpers
         private static void OnBeforeAssemblyReload()
         {
-            WriteHeartbeat(true);
+            // Stop cleanly before reload so sockets close and clients see 'reloading'
+            try { Stop(); } catch { }
+            WriteHeartbeat(true, "reloading");
+            LogBreadcrumb("Reload");
         }
 
         private static void OnAfterAssemblyReload()
         {
             // Will be overwritten by Start(), but mark as alive quickly
-            WriteHeartbeat(false);
+            WriteHeartbeat(false, "idle");
+            LogBreadcrumb("Idle");
+            // Schedule a safe restart after reload to avoid races during compilation
+            ScheduleInitRetry();
         }
 
-        private static void WriteHeartbeat(bool reloading)
+        private static void WriteHeartbeat(bool reloading, string reason = null)
         {
             try
             {
@@ -591,6 +714,8 @@ namespace UnityMcpBridge.Editor
                 {
                     unity_port = currentUnityPort,
                     reloading,
+                    reason = reason ?? (reloading ? "reloading" : "ready"),
+                    seq = heartbeatSeq,
                     project_path = Application.dataPath,
                     last_heartbeat = DateTime.UtcNow.ToString("O")
                 };
