@@ -281,7 +281,7 @@ namespace UnityMcpBridge.Editor.Helpers
                     return false;
                 }
 
-                Debug.Log("Unity MCP: Python environment repaired successfully.");
+                Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: Python environment repaired successfully.");
                 return true;
             }
             catch (Exception ex)
@@ -305,47 +305,100 @@ namespace UnityMcpBridge.Editor.Helpers
             catch { }
 
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
-            string[] candidates =
+
+            // Platform-specific candidate lists
+            string[] candidates;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                "/opt/homebrew/bin/uv",
-                "/usr/local/bin/uv",
-                "/usr/bin/uv",
-                "/opt/local/bin/uv",
-                Path.Combine(home, ".local", "bin", "uv"),
-                "/opt/homebrew/opt/uv/bin/uv",
-                // Framework Python installs
-                "/Library/Frameworks/Python.framework/Versions/3.13/bin/uv",
-                "/Library/Frameworks/Python.framework/Versions/3.12/bin/uv",
-                // Fallback to PATH resolution by name
-                "uv"
-            };
+                candidates = new[]
+                {
+                    // Common per-user installs
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python313\Scripts\uv.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python312\Scripts\uv.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python311\Scripts\uv.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python310\Scripts\uv.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python313\Scripts\uv.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python312\Scripts\uv.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python311\Scripts\uv.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python310\Scripts\uv.exe"),
+                    // Program Files style installs (if a native installer was used)
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) ?? string.Empty, @"uv\uv.exe"),
+                    // Try simple name resolution later via PATH
+                    "uv.exe",
+                    "uv"
+                };
+            }
+            else
+            {
+                candidates = new[]
+                {
+                    "/opt/homebrew/bin/uv",
+                    "/usr/local/bin/uv",
+                    "/usr/bin/uv",
+                    "/opt/local/bin/uv",
+                    Path.Combine(home, ".local", "bin", "uv"),
+                    "/opt/homebrew/opt/uv/bin/uv",
+                    // Framework Python installs
+                    "/Library/Frameworks/Python.framework/Versions/3.13/bin/uv",
+                    "/Library/Frameworks/Python.framework/Versions/3.12/bin/uv",
+                    // Fallback to PATH resolution by name
+                    "uv"
+                };
+            }
+
             foreach (string c in candidates)
             {
                 try
                 {
-                    if (ValidateUvBinary(c)) return c;
+                    if (File.Exists(c) && ValidateUvBinary(c)) return c;
                 }
                 catch { /* ignore */ }
             }
 
-            // Try which uv (explicit path)
+            // Use platform-appropriate which/where to resolve from PATH
             try
             {
-                var whichPsi = new System.Diagnostics.ProcessStartInfo
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
-                    FileName = "/usr/bin/which",
-                    Arguments = "uv",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-                using var wp = System.Diagnostics.Process.Start(whichPsi);
-                string output = wp.StandardOutput.ReadToEnd().Trim();
-                wp.WaitForExit(3000);
-                if (wp.ExitCode == 0 && !string.IsNullOrEmpty(output) && File.Exists(output))
+                    var wherePsi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "where",
+                        Arguments = "uv.exe",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
+                    using var wp = System.Diagnostics.Process.Start(wherePsi);
+                    string output = wp.StandardOutput.ReadToEnd().Trim();
+                    wp.WaitForExit(3000);
+                    if (wp.ExitCode == 0 && !string.IsNullOrEmpty(output))
+                    {
+                        foreach (var line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            string path = line.Trim();
+                            if (File.Exists(path) && ValidateUvBinary(path)) return path;
+                        }
+                    }
+                }
+                else
                 {
-                    if (ValidateUvBinary(output)) return output;
+                    var whichPsi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "/usr/bin/which",
+                        Arguments = "uv",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
+                    using var wp = System.Diagnostics.Process.Start(whichPsi);
+                    string output = wp.StandardOutput.ReadToEnd().Trim();
+                    wp.WaitForExit(3000);
+                    if (wp.ExitCode == 0 && !string.IsNullOrEmpty(output) && File.Exists(output))
+                    {
+                        if (ValidateUvBinary(output)) return output;
+                    }
                 }
             }
             catch { }
@@ -359,8 +412,11 @@ namespace UnityMcpBridge.Editor.Helpers
                 {
                     try
                     {
-                        string candidate = Path.Combine(part, "uv");
-                        if (File.Exists(candidate) && ValidateUvBinary(candidate)) return candidate;
+                        // Check both uv and uv.exe
+                        string candidateUv = Path.Combine(part, "uv");
+                        string candidateUvExe = Path.Combine(part, "uv.exe");
+                        if (File.Exists(candidateUv) && ValidateUvBinary(candidateUv)) return candidateUv;
+                        if (File.Exists(candidateUvExe) && ValidateUvBinary(candidateUvExe)) return candidateUvExe;
                     }
                     catch { }
                 }

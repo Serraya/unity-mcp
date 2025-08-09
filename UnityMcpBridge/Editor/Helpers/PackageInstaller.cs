@@ -25,18 +25,18 @@ namespace UnityMcpBridge.Editor.Helpers
         {
             try
             {
-                Debug.Log("Unity MCP: Installing Python server...");
+                Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: Installing Python server...");
                 ServerInstaller.EnsureServerInstalled();
                 
                 // Mark as installed
                 EditorPrefs.SetBool(InstallationFlagKey, true);
                 
-                Debug.Log("Unity MCP: Python server installation completed successfully.");
+                Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: Python server installation completed successfully.");
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"Unity MCP: Failed to install Python server: {ex.Message}");
-                Debug.LogWarning("Unity MCP: You may need to manually install the Python server. Check the Unity MCP Editor Window for instructions.");
+                Debug.LogError($"<b><color=#2EA3FF>UNITY-MCP</color></b>: Failed to install Python server: {ex.Message}");
+                Debug.LogWarning("<b><color=#2EA3FF>UNITY-MCP</color></b>: You may need to manually install the Python server. Check the Unity MCP Editor Window for instructions.");
             }
         }
     }
