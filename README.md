@@ -126,6 +126,7 @@ Connect your MCP Client (Claude, Cursor, etc.) to the Python server you installe
 2.  Click `Auto-Setup`.
 3.  Look for a green status indicator 🟢 and "Connected ✓". *(This attempts to modify the MCP Client\'s config file automatically)*.
 
+
 **Option B: Manual Configuration**
 
 If Auto-Setup fails or you use a different client:

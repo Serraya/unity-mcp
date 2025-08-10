@@ -53,6 +53,7 @@ X:\UnityProject\Library\PackageCache\com.coplaydev.unity-mcp@<version-or-hash>
 Example (hash):
 ```
 X:\UnityProject\Library\PackageCache\com.coplaydev.unity-mcp@272123cfd97e
+
 ```
 
 To find it reliably:

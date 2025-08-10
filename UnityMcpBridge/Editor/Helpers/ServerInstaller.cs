@@ -10,6 +10,7 @@ namespace UnityMcpBridge.Editor.Helpers
     {
         private const string RootFolder = "UnityMCP";
         private const string ServerFolder = "UnityMcpServer";
+
         /// <summary>
         /// Ensures the unity-mcp-server is installed locally by copying from the embedded package source.
         /// No network calls or Git operations are performed.
@@ -135,45 +136,58 @@ namespace UnityMcpBridge.Editor.Helpers
             catch { /* ignore */ }
 
             // 2) Installed package: resolve via Package Manager
-            try
+            // 2) Installed package: resolve via Package Manager (support new + legacy IDs, warn on legacy)
+try
+{
+    var list = UnityEditor.PackageManager.Client.List();
+    while (!list.IsCompleted) { }
+    if (list.Status == UnityEditor.PackageManager.StatusCode.Success)
+    {
+        const string CurrentId = "com.coplaydev.unity-mcp";
+        const string LegacyId  = "com.justinpbarnett.unity-mcp";
+
+        foreach (var pkg in list.Result)
+        {
+            if (pkg.name == CurrentId || pkg.name == LegacyId)
             {
-                var list = UnityEditor.PackageManager.Client.List();
-                while (!list.IsCompleted) { }
-                if (list.Status == UnityEditor.PackageManager.StatusCode.Success)
+                if (pkg.name == LegacyId)
                 {
-                    foreach (var pkg in list.Result)
-                    {
-                        if (pkg.name == "com.justinpbarnett.unity-mcp")
-                        {
-                            string packagePath = pkg.resolvedPath; // e.g., Library/PackageCache/... or local path
+                    Debug.LogWarning(
+                        "UnityMCP: Detected legacy package id 'com.justinpbarnett.unity-mcp'. " +
+                        "Please update Packages/manifest.json to 'com.coplaydev.unity-mcp' to avoid future breakage."
+                    );
+                }
 
-                            // Preferred: UnityMcpServer~ embedded alongside Editor/Runtime within the package (ignored by Unity import)
-                            string embeddedTilde = Path.Combine(packagePath, "UnityMcpServer~", "src");
-                            if (Directory.Exists(embeddedTilde) && File.Exists(Path.Combine(embeddedTilde, "server.py")))
-                            {
-                                srcPath = embeddedTilde;
-                                return true;
-                            }
+                string packagePath = pkg.resolvedPath; // e.g., Library/PackageCache/... or local path
 
-                            // Fallback: legacy non-tilde folder name inside the package
-                            string embedded = Path.Combine(packagePath, "UnityMcpServer", "src");
-                            if (Directory.Exists(embedded) && File.Exists(Path.Combine(embedded, "server.py")))
-                            {
-                                srcPath = embedded;
-                                return true;
-                            }
+                // Preferred: tilde folder embedded alongside Editor/Runtime within the package
+                string embeddedTilde = Path.Combine(packagePath, "UnityMcpServer~", "src");
+                if (Directory.Exists(embeddedTilde) && File.Exists(Path.Combine(embeddedTilde, "server.py")))
+                {
+                    srcPath = embeddedTilde;
+                    return true;
+                }
 
-                            // Legacy: sibling of the package folder (dev-linked). Only valid when present on disk.
-                            string sibling = Path.Combine(Path.GetDirectoryName(packagePath) ?? string.Empty, "UnityMcpServer", "src");
-                            if (Directory.Exists(sibling) && File.Exists(Path.Combine(sibling, "server.py")))
-                            {
-                                srcPath = sibling;
-                                return true;
-                            }
-                        }
-                    }
+                // Fallback: legacy non-tilde folder name inside the package
+                string embedded = Path.Combine(packagePath, "UnityMcpServer", "src");
+                if (Directory.Exists(embedded) && File.Exists(Path.Combine(embedded, "server.py")))
+                {
+                    srcPath = embedded;
+                    return true;
+                }
+
+                // Legacy: sibling of the package folder (dev-linked). Only valid when present on disk.
+                string sibling = Path.Combine(Path.GetDirectoryName(packagePath) ?? string.Empty, "UnityMcpServer", "src");
+                if (Directory.Exists(sibling) && File.Exists(Path.Combine(sibling, "server.py")))
+                {
+                    srcPath = sibling;
+                    return true;
                 }
             }
+        }
+    }
+}
+
             catch { /* ignore */ }
 
             // 3) Fallback to previous common install locations
