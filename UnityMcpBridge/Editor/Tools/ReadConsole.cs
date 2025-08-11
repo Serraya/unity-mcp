@@ -267,8 +267,8 @@ namespace UnityMcpBridge.Editor.Tools
                     // --- Filtering ---
                     // Prefer classifying severity from message/stacktrace; fallback to mode bits if needed
                     LogType unityType = InferTypeFromMessage(message);
-                    bool isExplicitDebugLog = IsExplicitDebugLog(message);
-                    if (!isExplicitDebugLog && unityType == LogType.Log)
+                    bool isExplicitDebug = IsExplicitDebugLog(message);
+                    if (!isExplicitDebug && unityType == LogType.Log)
                     {
                         unityType = GetLogTypeFromMode(mode);
                     }
@@ -423,10 +423,16 @@ namespace UnityMcpBridge.Editor.Tools
                 return LogType.Error;
             if (fullMessage.IndexOf("LogWarning", StringComparison.OrdinalIgnoreCase) >= 0)
                 return LogType.Warning;
-            if (IsExplicitDebugLog(fullMessage))
-                return LogType.Log;
 
-            // Exceptions often include the word "Exception" in the first lines
+            // Compiler diagnostics (C#): "warning CSxxxx" / "error CSxxxx"
+            if (fullMessage.IndexOf(" warning CS", StringComparison.OrdinalIgnoreCase) >= 0
+                || fullMessage.IndexOf(": warning CS", StringComparison.OrdinalIgnoreCase) >= 0)
+                return LogType.Warning;
+            if (fullMessage.IndexOf(" error CS", StringComparison.OrdinalIgnoreCase) >= 0
+                || fullMessage.IndexOf(": error CS", StringComparison.OrdinalIgnoreCase) >= 0)
+                return LogType.Error;
+
+            // Exceptions (avoid misclassifying compiler diagnostics)
             if (fullMessage.IndexOf("Exception", StringComparison.OrdinalIgnoreCase) >= 0)
                 return LogType.Exception;
 
@@ -439,7 +445,6 @@ namespace UnityMcpBridge.Editor.Tools
 
         private static bool IsExplicitDebugLog(string fullMessage)
         {
-            // Detect explicit Debug.Log in the stacktrace/message to lock type to Log
             if (string.IsNullOrEmpty(fullMessage)) return false;
             if (fullMessage.IndexOf("Debug:Log (", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (fullMessage.IndexOf("UnityEngine.Debug:Log (", StringComparison.OrdinalIgnoreCase) >= 0) return true;
