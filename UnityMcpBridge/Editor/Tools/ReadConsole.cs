@@ -16,6 +16,8 @@ namespace UnityMcpBridge.Editor.Tools
     /// </summary>
     public static class ReadConsole
     {
+        // (Calibration removed)
+
         // Reflection members for accessing internal LogEntry data
         // private static MethodInfo _getEntriesMethod; // Removed as it's unused and fails reflection
         private static MethodInfo _startGettingEntriesMethod;
@@ -41,6 +43,8 @@ namespace UnityMcpBridge.Editor.Tools
                 );
                 if (logEntriesType == null)
                     throw new Exception("Could not find internal type UnityEditor.LogEntries");
+                
+                
 
                 // Include NonPublic binding flags as internal APIs might change accessibility
                 BindingFlags staticFlags =
@@ -100,6 +104,9 @@ namespace UnityMcpBridge.Editor.Tools
                 _instanceIdField = logEntryType.GetField("instanceID", instanceFlags);
                 if (_instanceIdField == null)
                     throw new Exception("Failed to reflect LogEntry.instanceID");
+                
+                // (Calibration removed)
+                
             }
             catch (Exception e)
             {
@@ -251,15 +258,43 @@ namespace UnityMcpBridge.Editor.Tools
                     // int instanceId = (int)_instanceIdField.GetValue(logEntryInstance);
 
                     if (string.IsNullOrEmpty(message))
+                    {
                         continue; // Skip empty messages
+                    }
+
+                    // (Calibration removed)
 
                     // --- Filtering ---
-                    // Filter by type
-                    LogType currentType = GetLogTypeFromMode(mode);
-                    if (!types.Contains(currentType.ToString().ToLowerInvariant()))
+                    // Prefer classifying severity from message/stacktrace; fallback to mode bits if needed
+                    LogType unityType = InferTypeFromMessage(message);
+                    if (unityType == LogType.Log)
                     {
-                        continue;
+                        unityType = GetLogTypeFromMode(mode);
                     }
+
+                    bool want;
+                    if (types.Contains("all"))
+                    {
+                        want = true;
+                    }
+                    else
+                    {
+                        // Treat Exception/Assert as errors for filtering convenience
+                        if (unityType == LogType.Exception)
+                        {
+                            want = types.Contains("error") || types.Contains("exception");
+                        }
+                        else if (unityType == LogType.Assert)
+                        {
+                            want = types.Contains("error") || types.Contains("assert");
+                        }
+                        else
+                        {
+                            want = types.Contains(unityType.ToString().ToLowerInvariant());
+                        }
+                    }
+
+                    if (!want) continue;
 
                     // Filter by text (case-insensitive)
                     if (
@@ -294,7 +329,7 @@ namespace UnityMcpBridge.Editor.Tools
                         default:
                             formattedEntry = new
                             {
-                                type = currentType.ToString(),
+                                type = unityType.ToString(),
                                 message = messageOnly,
                                 file = file,
                                 line = line,
@@ -350,15 +385,12 @@ namespace UnityMcpBridge.Editor.Tools
 
         // --- Internal Helpers ---
 
-        // Mapping from LogEntry.mode bits to LogType enum
-        // Based on decompiled UnityEditor code or common patterns. Precise bits might change between Unity versions.
-        // See comments below for LogEntry mode bits exploration.
-        // Note: This mapping is simplified and might not cover all edge cases or future Unity versions perfectly.
+        // Mapping bits from LogEntry.mode. These may vary by Unity version.
         private const int ModeBitError = 1 << 0;
         private const int ModeBitAssert = 1 << 1;
         private const int ModeBitWarning = 1 << 2;
         private const int ModeBitLog = 1 << 3;
-        private const int ModeBitException = 1 << 4; // Often combined with Error bits
+        private const int ModeBitException = 1 << 4; // often combined with Error bits
         private const int ModeBitScriptingError = 1 << 9;
         private const int ModeBitScriptingWarning = 1 << 10;
         private const int ModeBitScriptingLog = 1 << 11;
@@ -367,46 +399,59 @@ namespace UnityMcpBridge.Editor.Tools
 
         private static LogType GetLogTypeFromMode(int mode)
         {
-            // First, determine the type based on the original logic (most severe first)
-            LogType initialType;
-            if (
-                (
-                    mode
-                    & (
-                        ModeBitError
-                        | ModeBitScriptingError
-                        | ModeBitException
-                        | ModeBitScriptingException
-                    )
-                ) != 0
-            )
-            {
-                initialType = LogType.Error;
-            }
-            else if ((mode & (ModeBitAssert | ModeBitScriptingAssertion)) != 0)
-            {
-                initialType = LogType.Assert;
-            }
-            else if ((mode & (ModeBitWarning | ModeBitScriptingWarning)) != 0)
-            {
-                initialType = LogType.Warning;
-            }
-            else
-            {
-                initialType = LogType.Log;
-            }
+            // Preserve Unity's real type (no remapping); bits may vary by version
+            if ((mode & (ModeBitException | ModeBitScriptingException)) != 0) return LogType.Exception;
+            if ((mode & (ModeBitError | ModeBitScriptingError)) != 0) return LogType.Error;
+            if ((mode & (ModeBitAssert | ModeBitScriptingAssertion)) != 0) return LogType.Assert;
+            if ((mode & (ModeBitWarning | ModeBitScriptingWarning)) != 0) return LogType.Warning;
+            return LogType.Log;
+        }
 
-            // Apply the observed "one level lower" correction
-            switch (initialType)
+        // (Calibration helpers removed)
+
+        /// <summary>
+        /// Classifies severity using message/stacktrace content. Works across Unity versions.
+        /// </summary>
+        private static LogType InferTypeFromMessage(string fullMessage)
+        {
+            if (string.IsNullOrEmpty(fullMessage)) return LogType.Log;
+
+            // Fast path: look for explicit Debug API names in the appended stack trace
+            // e.g., "UnityEngine.Debug:LogError (object)" or "LogWarning"
+            if (fullMessage.IndexOf("LogError", StringComparison.OrdinalIgnoreCase) >= 0)
+                return LogType.Error;
+            if (fullMessage.IndexOf("LogWarning", StringComparison.OrdinalIgnoreCase) >= 0)
+                return LogType.Warning;
+
+            // Exceptions often include the word "Exception" in the first lines
+            if (fullMessage.IndexOf("Exception", StringComparison.OrdinalIgnoreCase) >= 0)
+                return LogType.Exception;
+
+            // Unity assertions
+            if (fullMessage.IndexOf("Assertion", StringComparison.OrdinalIgnoreCase) >= 0)
+                return LogType.Assert;
+
+            return LogType.Log;
+        }
+
+        /// <summary>
+        /// Applies the "one level lower" remapping for filtering, like the old version.
+        /// This ensures compatibility with the filtering logic that expects remapped types.
+        /// </summary>
+        private static LogType GetRemappedTypeForFiltering(LogType unityType)
+        {
+            switch (unityType)
             {
                 case LogType.Error:
                     return LogType.Warning; // Error becomes Warning
                 case LogType.Warning:
                     return LogType.Log; // Warning becomes Log
                 case LogType.Assert:
-                    return LogType.Assert; // Assert remains Assert (no lower level defined)
+                    return LogType.Assert; // Assert remains Assert
                 case LogType.Log:
                     return LogType.Log; // Log remains Log
+                case LogType.Exception:
+                    return LogType.Warning; // Exception becomes Warning
                 default:
                     return LogType.Log; // Default fallback
             }
