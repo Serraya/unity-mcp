@@ -25,6 +25,11 @@ class ServerConfig:
     # Server settings
     max_retries: int = 10
     retry_delay: float = 0.25
+    # Backoff hint returned to clients when Unity is reloading (milliseconds)
+    reload_retry_ms: int = 250
+    # Number of polite retries when Unity reports reloading
+    # 40 × 250ms ≈ 10s default window
+    reload_max_retries: int = 40
 
 # Create a global config instance
 config = ServerConfig() 

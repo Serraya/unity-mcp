@@ -139,7 +139,7 @@ class UnityConnection:
                 return {
                     "success": False,
                     "state": "reloading",
-                    "retry_after_ms": int(250),
+                    "retry_after_ms": int(config.reload_retry_ms),
                     "error": "Unity domain reload in progress",
                     "message": "Unity is reloading scripts; please retry shortly"
                 }
@@ -278,3 +278,54 @@ def get_unity_connection() -> UnityConnection:
             pass
         _unity_connection = None
         raise ConnectionError(f"Could not establish valid Unity connection: {str(e)}") 
+
+
+# -----------------------------
+# Centralized retry helpers
+# -----------------------------
+
+def _is_reloading_response(resp: dict) -> bool:
+    """Return True if the Unity response indicates the editor is reloading."""
+    if not isinstance(resp, dict):
+        return False
+    if resp.get("state") == "reloading":
+        return True
+    message_text = (resp.get("message") or resp.get("error") or "").lower()
+    return "reload" in message_text
+
+
+def send_command_with_retry(command_type: str, params: Dict[str, Any], *, max_retries: int | None = None, retry_ms: int | None = None) -> Dict[str, Any]:
+    """Send a command via the shared connection, waiting politely through Unity reloads.
+
+    Uses config.reload_retry_ms and config.reload_max_retries by default. Preserves the
+    structured failure if retries are exhausted.
+    """
+    conn = get_unity_connection()
+    if max_retries is None:
+        max_retries = getattr(config, "reload_max_retries", 40)
+    if retry_ms is None:
+        retry_ms = getattr(config, "reload_retry_ms", 250)
+
+    response = conn.send_command(command_type, params)
+    retries = 0
+    while _is_reloading_response(response) and retries < max_retries:
+        delay_ms = int(response.get("retry_after_ms", retry_ms)) if isinstance(response, dict) else retry_ms
+        time.sleep(max(0.0, delay_ms / 1000.0))
+        retries += 1
+        response = conn.send_command(command_type, params)
+    return response
+
+
+async def async_send_command_with_retry(command_type: str, params: Dict[str, Any], *, loop=None, max_retries: int | None = None, retry_ms: int | None = None) -> Dict[str, Any]:
+    """Async wrapper that runs the blocking retry helper in a thread pool."""
+    try:
+        import asyncio  # local import to avoid mandatory asyncio dependency for sync callers
+        if loop is None:
+            loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: send_command_with_retry(command_type, params, max_retries=max_retries, retry_ms=retry_ms),
+        )
+    except Exception as e:
+        # Return a structured error dict for consistency with other responses
+        return {"success": False, "error": f"Python async retry helper failed: {str(e)}"}
