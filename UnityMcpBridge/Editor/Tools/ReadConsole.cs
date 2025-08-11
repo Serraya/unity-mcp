@@ -267,7 +267,8 @@ namespace UnityMcpBridge.Editor.Tools
                     // --- Filtering ---
                     // Prefer classifying severity from message/stacktrace; fallback to mode bits if needed
                     LogType unityType = InferTypeFromMessage(message);
-                    if (unityType == LogType.Log)
+                    bool isExplicitDebugLog = IsExplicitDebugLog(message);
+                    if (!isExplicitDebugLog && unityType == LogType.Log)
                     {
                         unityType = GetLogTypeFromMode(mode);
                     }
@@ -422,6 +423,8 @@ namespace UnityMcpBridge.Editor.Tools
                 return LogType.Error;
             if (fullMessage.IndexOf("LogWarning", StringComparison.OrdinalIgnoreCase) >= 0)
                 return LogType.Warning;
+            if (IsExplicitDebugLog(fullMessage))
+                return LogType.Log;
 
             // Exceptions often include the word "Exception" in the first lines
             if (fullMessage.IndexOf("Exception", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -432,6 +435,15 @@ namespace UnityMcpBridge.Editor.Tools
                 return LogType.Assert;
 
             return LogType.Log;
+        }
+
+        private static bool IsExplicitDebugLog(string fullMessage)
+        {
+            // Detect explicit Debug.Log in the stacktrace/message to lock type to Log
+            if (string.IsNullOrEmpty(fullMessage)) return false;
+            if (fullMessage.IndexOf("Debug:Log (", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fullMessage.IndexOf("UnityEngine.Debug:Log (", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
         }
 
         /// <summary>
