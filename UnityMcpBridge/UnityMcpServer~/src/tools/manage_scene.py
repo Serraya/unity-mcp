@@ -1,6 +1,7 @@
 from mcp.server.fastmcp import FastMCP, Context
 from typing import Dict, Any
-from unity_connection import get_unity_connection
+from unity_connection import get_unity_connection, send_command_with_retry
+from config import config
 import time
 
 def register_manage_scene_tools(mcp: FastMCP):
@@ -35,18 +36,13 @@ def register_manage_scene_tools(mcp: FastMCP):
             }
             params = {k: v for k, v in params.items() if v is not None}
             
-            # Send command to Unity (with a single polite retry if reloading)
-            response = get_unity_connection().send_command("manage_scene", params)
-            if isinstance(response, dict) and not response.get("success", True) and response.get("state") == "reloading":
-                delay_ms = int(response.get("retry_after_ms", 250))
-                time.sleep(max(0.0, delay_ms / 1000.0))
-                response = get_unity_connection().send_command("manage_scene", params)
+            # Use centralized retry helper
+            response = send_command_with_retry("manage_scene", params)
 
-            # Process response
-            if response.get("success"):
+            # Preserve structured failure data; unwrap success into a friendlier shape
+            if isinstance(response, dict) and response.get("success"):
                 return {"success": True, "message": response.get("message", "Scene operation successful."), "data": response.get("data")}
-            else:
-                return {"success": False, "message": response.get("error", "An unknown error occurred during scene management.")}
+            return response if isinstance(response, dict) else {"success": False, "message": str(response)}
 
         except Exception as e:
             return {"success": False, "message": f"Python error managing scene: {str(e)}"}

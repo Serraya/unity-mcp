@@ -1,6 +1,7 @@
 from mcp.server.fastmcp import FastMCP, Context
 from typing import Dict, Any, List
-from unity_connection import get_unity_connection
+from unity_connection import get_unity_connection, send_command_with_retry
+from config import config
 import time
 
 def register_manage_gameobject_tools(mcp: FastMCP):
@@ -123,21 +124,14 @@ def register_manage_gameobject_tools(mcp: FastMCP):
             params.pop("prefab_folder", None) 
             # --------------------------------
             
-            # Send the command to Unity via the established connection
-            # Use the get_unity_connection function to retrieve the active connection instance
-            # Changed "MANAGE_GAMEOBJECT" to "manage_gameobject" to potentially match Unity expectation
-            response = get_unity_connection().send_command("manage_gameobject", params)
-            if isinstance(response, dict) and not response.get("success", True) and response.get("state") == "reloading":
-                delay_ms = int(response.get("retry_after_ms", 250))
-                time.sleep(max(0.0, delay_ms / 1000.0))
-                response = get_unity_connection().send_command("manage_gameobject", params)
+            # Use centralized retry helper
+            response = send_command_with_retry("manage_gameobject", params)
 
             # Check if the response indicates success
             # If the response is not successful, raise an exception with the error message
-            if response.get("success"):
+            if isinstance(response, dict) and response.get("success"):
                 return {"success": True, "message": response.get("message", "GameObject operation successful."), "data": response.get("data")}
-            else:
-                return {"success": False, "message": response.get("error", "An unknown error occurred during GameObject management.")}
+            return response if isinstance(response, dict) else {"success": False, "message": str(response)}
 
         except Exception as e:
             return {"success": False, "message": f"Python error managing GameObject: {str(e)}"} 

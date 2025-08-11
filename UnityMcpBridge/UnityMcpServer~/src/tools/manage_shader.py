@@ -1,6 +1,7 @@
 from mcp.server.fastmcp import FastMCP, Context
 from typing import Dict, Any
-from unity_connection import get_unity_connection
+from unity_connection import get_unity_connection, send_command_with_retry
+from config import config
 import time
 import os
 import base64
@@ -47,15 +48,11 @@ def register_manage_shader_tools(mcp: FastMCP):
             # Remove None values so they don't get sent as null
             params = {k: v for k, v in params.items() if v is not None}
 
-            # Send command to Unity
-            response = get_unity_connection().send_command("manage_shader", params)
-            if isinstance(response, dict) and not response.get("success", True) and response.get("state") == "reloading":
-                delay_ms = int(response.get("retry_after_ms", 250))
-                time.sleep(max(0.0, delay_ms / 1000.0))
-                response = get_unity_connection().send_command("manage_shader", params)
+            # Send command via centralized retry helper
+            response = send_command_with_retry("manage_shader", params)
             
             # Process response from Unity
-            if response.get("success"):
+            if isinstance(response, dict) and response.get("success"):
                 # If the response contains base64 encoded content, decode it
                 if response.get("data", {}).get("contentsEncoded"):
                     decoded_contents = base64.b64decode(response["data"]["encodedContents"]).decode('utf-8')
@@ -64,8 +61,7 @@ def register_manage_shader_tools(mcp: FastMCP):
                     del response["data"]["contentsEncoded"]
                 
                 return {"success": True, "message": response.get("message", "Operation successful."), "data": response.get("data")}
-            else:
-                return {"success": False, "message": response.get("error", "An unknown error occurred.")}
+            return response if isinstance(response, dict) else {"success": False, "message": str(response)}
 
         except Exception as e:
             # Handle Python-side errors (e.g., connection issues)
