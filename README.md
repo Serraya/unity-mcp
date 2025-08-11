@@ -118,17 +118,18 @@ Unity MCP connects your tools using two components:
 
 Connect your MCP Client (Claude, Cursor, etc.) to the Python server you installed in Step 1.
 
-<img width="609" alt="image" src="https://github.com/user-attachments/assets/cef3a639-4677-4fd8-84e7-2d82a04d55bb" />
+<img width="648" height="599" alt="UnityMCP-Readme-Image" src="https://github.com/user-attachments/assets/b4a725da-5c43-4bd6-80d6-ee2e3cca9596" />
 
-**Option A: Auto-Configure (Recommended for Claude/Cursor/VSC Copilot)**
+**Option A: Auto-Setup (Recommended for Claude/Cursor/VSC Copilot)**
 
 1.  In Unity, go to `Window > Unity MCP`.
-2.  Click `Auto Configure` on the IDE you uses.
-3.  Look for a green status indicator 🟢 and "Connected". *(This attempts to modify the MCP Client\'s config file automatically)*.
+2.  Click `Auto-Setup`.
+3.  Look for a green status indicator 🟢 and "Connected ✓". *(This attempts to modify the MCP Client\'s config file automatically)*.
+
 
 **Option B: Manual Configuration**
 
-If Auto-Configure fails or you use a different client:
+If Auto-Setup fails or you use a different client:
 
 1.  **Find your MCP Client\'s configuration file.** (Check client documentation).
     *   *Claude Example (macOS):* `~/Library/Application Support/Claude/claude_desktop_config.json`

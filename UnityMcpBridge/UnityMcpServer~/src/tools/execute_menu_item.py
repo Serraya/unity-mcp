@@ -3,7 +3,9 @@ Defines the execute_menu_item tool for running Unity Editor menu commands.
 """
 from typing import Dict, Any
 from mcp.server.fastmcp import FastMCP, Context
-from unity_connection import get_unity_connection  # Import unity_connection module
+from unity_connection import get_unity_connection, send_command_with_retry  # Import retry helper
+from config import config
+import time
 
 def register_execute_menu_item_tools(mcp: FastMCP):
     """Registers the execute_menu_item tool with the MCP server."""
@@ -42,10 +44,6 @@ def register_execute_menu_item_tools(mcp: FastMCP):
         if "parameters" not in params_dict:
             params_dict["parameters"] = {} # Ensure parameters dict exists
 
-        # Get Unity connection and send the command
-        # We use the unity_connection module to communicate with Unity
-        unity_conn = get_unity_connection()
-        
-        # Send command to the ExecuteMenuItem C# handler
-        # The command type should match what the Unity side expects
-        return unity_conn.send_command("execute_menu_item", params_dict) 
+        # Use centralized retry helper
+        resp = send_command_with_retry("execute_menu_item", params_dict)
+        return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}

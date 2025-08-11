@@ -2,8 +2,10 @@
 Defines the read_console tool for accessing Unity Editor console messages.
 """
 from typing import List, Dict, Any
+import time
 from mcp.server.fastmcp import FastMCP, Context
-from unity_connection import get_unity_connection
+from unity_connection import get_unity_connection, send_command_with_retry
+from config import config
 
 def register_read_console_tools(mcp: FastMCP):
     """Registers the read_console tool with the MCP server."""
@@ -66,5 +68,6 @@ def register_read_console_tools(mcp: FastMCP):
         if 'count' not in params_dict:
              params_dict['count'] = None 
 
-        # Forward the command using the bridge's send_command method
-        return bridge.send_command("read_console", params_dict) 
+        # Use centralized retry helper
+        resp = send_command_with_retry("read_console", params_dict)
+        return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)} 

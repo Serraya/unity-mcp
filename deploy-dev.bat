@@ -9,7 +9,7 @@ echo.
 :: Configuration
 set "SCRIPT_DIR=%~dp0"
 set "BRIDGE_SOURCE=%SCRIPT_DIR%UnityMcpBridge"
-set "SERVER_SOURCE=%SCRIPT_DIR%UnityMcpServer\src"
+set "SERVER_SOURCE=%SCRIPT_DIR%UnityMcpBridge\UnityMcpServer~\src"
 set "DEFAULT_BACKUP_DIR=%USERPROFILE%\Desktop\unity-mcp-backup"
 set "DEFAULT_SERVER_PATH=%LOCALAPPDATA%\Programs\UnityMCP\UnityMcpServer\src"
 

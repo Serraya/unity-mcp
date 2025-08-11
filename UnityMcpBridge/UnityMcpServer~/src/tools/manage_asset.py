@@ -5,7 +5,9 @@ import asyncio  # Added: Import asyncio for running sync code in async
 from typing import Dict, Any
 from mcp.server.fastmcp import FastMCP, Context
 # from ..unity_connection import get_unity_connection  # Original line that caused error
-from unity_connection import get_unity_connection  # Use absolute import relative to Python dir
+from unity_connection import get_unity_connection, async_send_command_with_retry  # Use centralized retry helper
+from config import config
+import time
 
 def register_manage_asset_tools(mcp: FastMCP):
     """Registers the manage_asset tool with the MCP server."""
@@ -71,13 +73,7 @@ def register_manage_asset_tools(mcp: FastMCP):
         # Get the Unity connection instance
         connection = get_unity_connection()
         
-        # Run the synchronous send_command in the default executor (thread pool)
-        # This prevents blocking the main async event loop.
-        result = await loop.run_in_executor(
-            None,  # Use default executor
-            connection.send_command, # The function to call
-            "manage_asset", # First argument for send_command
-            params_dict # Second argument for send_command
-        )
+        # Use centralized async retry helper to avoid blocking the event loop
+        result = await async_send_command_with_retry("manage_asset", params_dict, loop=loop)
         # Return the result obtained from Unity
-        return result 
+        return result if isinstance(result, dict) else {"success": False, "message": str(result)}
