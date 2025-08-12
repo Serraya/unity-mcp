@@ -274,25 +274,18 @@ namespace UnityMcpBridge.Editor.Tools
                     }
 
                     bool want;
-                    if (types.Contains("all"))
+                    // Treat Exception/Assert as errors for filtering convenience
+                    if (unityType == LogType.Exception)
                     {
-                        want = true;
+                        want = types.Contains("error") || types.Contains("exception");
+                    }
+                    else if (unityType == LogType.Assert)
+                    {
+                        want = types.Contains("error") || types.Contains("assert");
                     }
                     else
                     {
-                        // Treat Exception/Assert as errors for filtering convenience
-                        if (unityType == LogType.Exception)
-                        {
-                            want = types.Contains("error") || types.Contains("exception");
-                        }
-                        else if (unityType == LogType.Assert)
-                        {
-                            want = types.Contains("error") || types.Contains("assert");
-                        }
-                        else
-                        {
-                            want = types.Contains(unityType.ToString().ToLowerInvariant());
-                        }
+                        want = types.Contains(unityType.ToString().ToLowerInvariant());
                     }
 
                     if (!want) continue;
