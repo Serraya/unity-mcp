@@ -654,13 +654,23 @@ namespace UnityMcpBridge.Editor.Windows
         {
             try
             {
-                string command = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "claude" : "/usr/local/bin/claude";
-                var psi = new ProcessStartInfo { FileName = command, Arguments = "mcp list", UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
-                using var p = Process.Start(psi);
-                string output = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(3000);
-                if (p.ExitCode != 0) return false;
-                return output.IndexOf("UnityMCP", StringComparison.OrdinalIgnoreCase) >= 0;
+                string claudePath = ExecPath.ResolveClaude();
+                if (string.IsNullOrEmpty(claudePath)) return false;
+
+                // Only prepend PATH on Unix
+                string pathPrepend = null;
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                {
+                    pathPrepend = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                        ? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+                        : "/usr/local/bin:/usr/bin:/bin";
+                }
+
+                if (!ExecPath.TryRun(claudePath, "mcp list", workingDir: null, out var stdout, out var stderr, 5000, pathPrepend))
+                {
+                    return false;
+                }
+                return (stdout ?? string.Empty).IndexOf("UnityMCP", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             catch { return false; }
         }
@@ -1330,7 +1340,19 @@ namespace UnityMcpBridge.Editor.Windows
             }
             if (!ExecPath.TryRun(claudePath, args, projectDir, out var stdout, out var stderr, 15000, pathPrepend))
             {
-                UnityEngine.Debug.LogError($"UnityMCP: Failed to start Claude CLI.\n{stderr}\n{stdout}");
+                string combined = ($"{stdout}\n{stderr}") ?? string.Empty;
+                if (combined.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    // Treat as success if Claude reports existing registration
+                    var existingClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
+                    if (existingClient != null) CheckClaudeCodeConfiguration(existingClient);
+                    Repaint();
+                    UnityEngine.Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: UnityMCP already registered with Claude Code.");
+                }
+                else
+                {
+                    UnityEngine.Debug.LogError($"UnityMCP: Failed to start Claude CLI.\n{stderr}\n{stdout}");
+                }
                 return;
             }
 
