@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Runtime.InteropServices;
 using UnityEditor;
 
@@ -43,7 +44,7 @@ namespace UnityMcpBridge.Editor.Helpers
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-#if UNITY_EDITOR_WINDOWS
+#if UNITY_EDITOR_WIN
                 // Common npm global locations
                 string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty;
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty;
@@ -109,16 +110,35 @@ namespace UnityMcpBridge.Editor.Helpers
                 if (!string.IsNullOrEmpty(extraPathPrepend))
                 {
                     string currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-                    psi.Environment["PATH"] = string.IsNullOrEmpty(currentPath)
+                    psi.EnvironmentVariables["PATH"] = string.IsNullOrEmpty(currentPath)
                         ? extraPathPrepend
                         : (extraPathPrepend + System.IO.Path.PathSeparator + currentPath);
                 }
-                using var p = Process.Start(psi);
-                if (p == null) return false;
-                stdout = p.StandardOutput.ReadToEnd();
-                stderr = p.StandardError.ReadToEnd();
-                if (!p.WaitForExit(timeoutMs)) { try { p.Kill(); } catch { } return false; }
-                return p.ExitCode == 0;
+
+                using var process = new Process { StartInfo = psi, EnableRaisingEvents = false };
+
+                var so = new StringBuilder();
+                var se = new StringBuilder();
+                process.OutputDataReceived += (_, e) => { if (e.Data != null) so.AppendLine(e.Data); };
+                process.ErrorDataReceived  += (_, e) => { if (e.Data != null) se.AppendLine(e.Data); };
+
+                if (!process.Start()) return false;
+
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                if (!process.WaitForExit(timeoutMs))
+                {
+                    try { process.Kill(); } catch { }
+                    return false;
+                }
+
+                // Ensure async buffers are flushed
+                process.WaitForExit();
+
+                stdout = so.ToString();
+                stderr = se.ToString();
+                return process.ExitCode == 0;
             }
             catch
             {
@@ -138,7 +158,7 @@ namespace UnityMcpBridge.Editor.Helpers
                     CreateNoWindow = true,
                 };
                 string path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-                psi.Environment["PATH"] = string.IsNullOrEmpty(path) ? prependPath : (prependPath + Path.PathSeparator + path);
+                psi.EnvironmentVariables["PATH"] = string.IsNullOrEmpty(path) ? prependPath : (prependPath + Path.PathSeparator + path);
                 using var p = Process.Start(psi);
                 string output = p?.StandardOutput.ReadToEnd().Trim();
                 p?.WaitForExit(1500);
@@ -148,7 +168,7 @@ namespace UnityMcpBridge.Editor.Helpers
         }
 #endif
 
-#if UNITY_EDITOR_WINDOWS
+#if UNITY_EDITOR_WIN
         private static string Where(string exe)
         {
             try

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -206,12 +207,35 @@ namespace UnityMcpBridge.Editor.Helpers
                     CreateNoWindow = true
                 };
 
-                using var p = System.Diagnostics.Process.Start(psi);
-                string stdout = p.StandardOutput.ReadToEnd();
-                string stderr = p.StandardError.ReadToEnd();
-                p.WaitForExit(60000);
+                using var proc = new System.Diagnostics.Process { StartInfo = psi };
+                var sbOut = new StringBuilder();
+                var sbErr = new StringBuilder();
+                proc.OutputDataReceived += (_, e) => { if (e.Data != null) sbOut.AppendLine(e.Data); };
+                proc.ErrorDataReceived  += (_, e) => { if (e.Data != null) sbErr.AppendLine(e.Data); };
 
-                if (p.ExitCode != 0)
+                if (!proc.Start())
+                {
+                    Debug.LogError("Failed to start uv process.");
+                    return false;
+                }
+
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+
+                if (!proc.WaitForExit(60000))
+                {
+                    try { proc.Kill(); } catch { }
+                    Debug.LogError("uv sync timed out.");
+                    return false;
+                }
+
+                // Ensure async buffers flushed
+                proc.WaitForExit();
+
+                string stdout = sbOut.ToString();
+                string stderr = sbErr.ToString();
+
+                if (proc.ExitCode != 0)
                 {
                     Debug.LogError($"uv sync failed: {stderr}\n{stdout}");
                     return false;
@@ -341,7 +365,7 @@ namespace UnityMcpBridge.Editor.Helpers
                             "/bin"
                         });
                         string currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-                        whichPsi.Environment["PATH"] = string.IsNullOrEmpty(currentPath) ? prepend : (prepend + ":" + currentPath);
+                        whichPsi.EnvironmentVariables["PATH"] = string.IsNullOrEmpty(currentPath) ? prepend : (prepend + ":" + currentPath);
                     }
                     catch { }
                     using var wp = System.Diagnostics.Process.Start(whichPsi);

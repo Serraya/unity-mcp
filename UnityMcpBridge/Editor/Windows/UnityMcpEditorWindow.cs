@@ -1320,10 +1320,14 @@ namespace UnityMcpBridge.Editor.Windows
             string args = $"mcp add UnityMCP -- \"{uvPath}\" run --directory \"{srcDir}\" server.py";
 
             string projectDir = Path.GetDirectoryName(Application.dataPath);
-            // Ensure PATH includes common Node/npm locations so claude can spawn node internally if needed
-            string pathPrepend = Application.platform == RuntimePlatform.OSXEditor
-                ? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-                : "/usr/local/bin:/usr/bin:/bin";
+            // Ensure PATH includes common locations on Unix; on Windows leave PATH as-is
+            string pathPrepend = null;
+            if (Application.platform == RuntimePlatform.OSXEditor || Application.platform == RuntimePlatform.LinuxEditor)
+            {
+                pathPrepend = Application.platform == RuntimePlatform.OSXEditor
+                    ? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+                    : "/usr/local/bin:/usr/bin:/bin";
+            }
             if (!ExecPath.TryRun(claudePath, args, projectDir, out var stdout, out var stderr, 15000, pathPrepend))
             {
                 UnityEngine.Debug.LogError($"UnityMCP: Failed to start Claude CLI.\n{stderr}\n{stdout}");
