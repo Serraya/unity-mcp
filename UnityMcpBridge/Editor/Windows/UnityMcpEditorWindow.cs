@@ -66,8 +66,8 @@ namespace UnityMcpBridge.Editor.Windows
             // Load validation level setting
             LoadValidationLevelSetting();
 
-            // First-run auto-setup (register client(s) and ensure bridge is listening)
-            if (autoRegisterEnabled)
+            // First-run auto-setup only if Claude CLI is available
+            if (autoRegisterEnabled && !string.IsNullOrEmpty(ExecPath.ResolveClaude()))
             {
                 AutoFirstRunSetup();
             }
@@ -492,7 +492,8 @@ namespace UnityMcpBridge.Editor.Windows
                         {
                             if (client.mcpType == McpTypes.ClaudeCode)
                             {
-                                if (!IsClaudeConfigured())
+                                // Only attempt if Claude CLI is present
+                                if (!IsClaudeConfigured() && !string.IsNullOrEmpty(ExecPath.ResolveClaude()))
                                 {
                                     RegisterWithClaudeCode(pythonDir);
                                     anyRegistered = true;
@@ -987,65 +988,10 @@ namespace UnityMcpBridge.Editor.Windows
                     }
                 }
 
-                // Try to find the package using Package Manager API
-                UnityEditor.PackageManager.Requests.ListRequest request =
-                    UnityEditor.PackageManager.Client.List();
-                while (!request.IsCompleted) { } // Wait for the request to complete
-
-                if (request.Status == UnityEditor.PackageManager.StatusCode.Success)
+                // Resolve via shared helper (handles local registry and older fallback)
+                if (ServerPathResolver.TryFindEmbeddedServerSource(out string embedded))
                 {
-                    foreach (UnityEditor.PackageManager.PackageInfo package in request.Result)
-                    {
-                        if (package.name == "com.coplaydev.unity-mcp")
-                        {
-                            string packagePath = package.resolvedPath;
-                            
-                            // Preferred: check for tilde folder inside package
-                            string packagedTildeDir = Path.Combine(packagePath, "UnityMcpServer~", "src");
-                            if (Directory.Exists(packagedTildeDir) && File.Exists(Path.Combine(packagedTildeDir, "server.py")))
-                            {
-                                return packagedTildeDir;
-                            }
-                            
-                            // Fallback: legacy local package structure (UnityMcpServer/src)
-                            string localPythonDir = Path.Combine(Path.GetDirectoryName(packagePath), "UnityMcpServer", "src");
-                            if (Directory.Exists(localPythonDir) && File.Exists(Path.Combine(localPythonDir, "server.py")))
-                            {
-                                return localPythonDir;
-                            }
-                            
-                            // Check for old structure (Python subdirectory)
-                            string potentialPythonDir = Path.Combine(packagePath, "Python");
-                            if (Directory.Exists(potentialPythonDir) && File.Exists(Path.Combine(potentialPythonDir, "server.py")))
-                            {
-                                return potentialPythonDir;
-                            }
-                        }
-                    }
-                }
-                else if (request.Error != null)
-                {
-                    UnityEngine.Debug.LogError("Failed to list packages: " + request.Error.message);
-                }
-
-                // If not found via Package Manager, try manual approaches
-                // Check for local development structure
-                string[] possibleDirs =
-                {
-                    // Check in user's home directory (common installation location)
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "unity-mcp", "UnityMcpServer", "src"),
-                    // Check in Applications folder (macOS/Linux common location)
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Applications", "UnityMCP", "UnityMcpServer", "src"),
-                    // Legacy Python folder structure
-                    Path.GetFullPath(Path.Combine(Application.dataPath, "unity-mcp", "Python")),
-                };
-
-                foreach (string dir in possibleDirs)
-                {
-                    if (Directory.Exists(dir) && File.Exists(Path.Combine(dir, "server.py")))
-                    {
-                        return dir;
-                    }
+                    return embedded;
                 }
 
                 // If still not found, return the placeholder path
@@ -1358,218 +1304,66 @@ namespace UnityMcpBridge.Editor.Windows
 
         private void RegisterWithClaudeCode(string pythonDir)
         {
-            string command;
-            string args;
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            // Resolve claude and uv; then run register command
+            string claudePath = ExecPath.ResolveClaude();
+            if (string.IsNullOrEmpty(claudePath))
             {
-                command = FindClaudeCommand();
-                
-                if (string.IsNullOrEmpty(command))
-                {
-                    UnityEngine.Debug.LogError("Claude CLI not found. Please ensure Claude Code is installed and accessible.");
-                    return;
-                }
-                
-                // Try to find uv.exe in common locations
-                string uvPath = FindUvPath();
-                
-                if (string.IsNullOrEmpty(uvPath))
-                {
-                    // Fallback to expecting uv in PATH
-                    args = $"mcp add UnityMCP -- uv --directory \"{pythonDir}\" run server.py";
-                }
-                else
-                {
-                    args = $"mcp add UnityMCP -- \"{uvPath}\" --directory \"{pythonDir}\" run server.py";
-                }
+                UnityEngine.Debug.LogError("UnityMCP: Claude CLI not found. Set a path in this window or install the CLI, then try again.");
+                return;
             }
-            else
+            string uvPath = ExecPath.ResolveUv() ?? "uv";
+
+            // Prefer embedded/dev path when available
+            string srcDir = !string.IsNullOrEmpty(pythonDirOverride) ? pythonDirOverride : FindPackagePythonDirectory();
+            if (string.IsNullOrEmpty(srcDir)) srcDir = pythonDir;
+
+            string args = $"mcp add UnityMCP -- \"{uvPath}\" run --directory \"{srcDir}\" server.py";
+
+            string projectDir = Path.GetDirectoryName(Application.dataPath);
+            // Ensure PATH includes common Node/npm locations so claude can spawn node internally if needed
+            string pathPrepend = Application.platform == RuntimePlatform.OSXEditor
+                ? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+                : "/usr/local/bin:/usr/bin:/bin";
+            if (!ExecPath.TryRun(claudePath, args, projectDir, out var stdout, out var stderr, 15000, pathPrepend))
             {
-                // Use full path to claude command
-                command = "/usr/local/bin/claude";
-                args = $"mcp add UnityMCP -- uv --directory \"{pythonDir}\" run server.py";
+                UnityEngine.Debug.LogError($"UnityMCP: Failed to start Claude CLI.\n{stderr}\n{stdout}");
+                return;
             }
 
-            try
-            {
-                // Get the Unity project directory (where the Assets folder is)
-                string unityProjectDir = Application.dataPath;
-                string projectDir = Path.GetDirectoryName(unityProjectDir);
-
-                var psi = new ProcessStartInfo();
-                
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    // On Windows, run through PowerShell with explicit PATH setting
-                    psi.FileName = "powershell.exe";
-                    string nodePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs");
-                    psi.Arguments = $"-Command \"$env:PATH += ';{nodePath}'; & '{command}' {args}\"";
-                    UnityEngine.Debug.Log($"Executing: powershell.exe {psi.Arguments}");
-                }
-                else
-                {
-                    psi.FileName = command;
-                    psi.Arguments = args;
-                    UnityEngine.Debug.Log($"Executing: {command} {args}");
-                }
-                
-                psi.UseShellExecute = false;
-                psi.RedirectStandardOutput = true;
-                psi.RedirectStandardError = true;
-                psi.CreateNoWindow = true;
-                psi.WorkingDirectory = projectDir;
-
-                // Set PATH to include common binary locations (OS-specific)
-                string currentPath = Environment.GetEnvironmentVariable("PATH") ?? "";
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    // Windows: Add common Node.js and npm locations
-                    string[] windowsPaths = {
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs"),
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "nodejs"),
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm"),
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "npm")
-                    };
-                    string additionalPaths = string.Join(";", windowsPaths);
-                    psi.EnvironmentVariables["PATH"] = $"{currentPath};{additionalPaths}";
-                }
-                else
-                {
-                    // macOS/Linux: Add common binary locations
-                    string additionalPaths = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin";
-                    psi.EnvironmentVariables["PATH"] = $"{additionalPaths}:{currentPath}";
-                }
-
-                using var process = Process.Start(psi);
-                string output = process.StandardOutput.ReadToEnd();
-                string errors = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-
-
-
-                // Check for success or already exists
-                if (output.Contains("Added stdio MCP server") || errors.Contains("already exists"))
-                {
-                    // Force refresh the configuration status
-                    var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
-                    if (claudeClient != null)
-                    {
-                        CheckClaudeCodeConfiguration(claudeClient);
-                    }
-                    Repaint();
-                    UnityEngine.Debug.Log("UnityMCP server successfully registered from Claude Code.");
-                    
-
-                }
-                else if (!string.IsNullOrEmpty(errors))
-                {
-                    if (debugLogsEnabled)
-                    {
-                        UnityEngine.Debug.LogWarning($"Claude MCP errors: {errors}");
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                UnityEngine.Debug.LogError($"Claude CLI registration failed: {e.Message}");
-            }
+            // Update status
+            var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
+            if (claudeClient != null) CheckClaudeCodeConfiguration(claudeClient);
+            Repaint();
+            UnityEngine.Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: Registered with Claude Code.");
         }
 
         private void UnregisterWithClaudeCode()
         {
-            string command;
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            string claudePath = ExecPath.ResolveClaude();
+            if (string.IsNullOrEmpty(claudePath))
             {
-                command = FindClaudeCommand();
-                
-                if (string.IsNullOrEmpty(command))
+                UnityEngine.Debug.LogError("UnityMCP: Claude CLI not found. Set a path in this window or install the CLI, then try again.");
+                return;
+            }
+
+            string projectDir = Path.GetDirectoryName(Application.dataPath);
+            string pathPrepend = Application.platform == RuntimePlatform.OSXEditor
+                ? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+                : "/usr/local/bin:/usr/bin:/bin";
+
+            if (ExecPath.TryRun(claudePath, "mcp remove UnityMCP", projectDir, out var stdout, out var stderr, 10000, pathPrepend))
+            {
+                var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
+                if (claudeClient != null)
                 {
-                    UnityEngine.Debug.LogError("Claude CLI not found. Please ensure Claude Code is installed and accessible.");
-                    return;
+                    CheckClaudeCodeConfiguration(claudeClient);
                 }
+                Repaint();
+                UnityEngine.Debug.Log("UnityMCP server successfully unregistered from Claude Code.");
             }
             else
             {
-                // Use full path to claude command
-                command = "/usr/local/bin/claude";
-            }
-
-            try
-            {
-                // Get the Unity project directory (where the Assets folder is)
-                string unityProjectDir = Application.dataPath;
-                string projectDir = Path.GetDirectoryName(unityProjectDir);
-
-                var psi = new ProcessStartInfo();
-                
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    // On Windows, run through PowerShell with explicit PATH setting
-                    psi.FileName = "powershell.exe";
-                    string nodePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs");
-                    psi.Arguments = $"-Command \"$env:PATH += ';{nodePath}'; & '{command}' mcp remove UnityMCP\"";
-                }
-                else
-                {
-                    psi.FileName = command;
-                    psi.Arguments = "mcp remove UnityMCP";
-                }
-                
-                psi.UseShellExecute = false;
-                psi.RedirectStandardOutput = true;
-                psi.RedirectStandardError = true;
-                psi.CreateNoWindow = true;
-                psi.WorkingDirectory = projectDir;
-
-                // Set PATH to include common binary locations (OS-specific)
-                string currentPath = Environment.GetEnvironmentVariable("PATH") ?? "";
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    // Windows: Add common Node.js and npm locations
-                    string[] windowsPaths = {
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs"),
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "nodejs"),
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm"),
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "npm")
-                    };
-                    string additionalPaths = string.Join(";", windowsPaths);
-                    psi.EnvironmentVariables["PATH"] = $"{currentPath};{additionalPaths}";
-                }
-                else
-                {
-                    // macOS/Linux: Add common binary locations
-                    string additionalPaths = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin";
-                    psi.EnvironmentVariables["PATH"] = $"{additionalPaths}:{currentPath}";
-                }
-
-                using var process = Process.Start(psi);
-                string output = process.StandardOutput.ReadToEnd();
-                string errors = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-
-                // Check for success
-                if (output.Contains("Removed MCP server") || process.ExitCode == 0)
-                {
-                    // Force refresh the configuration status
-                    var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
-                    if (claudeClient != null)
-                    {
-                        CheckClaudeCodeConfiguration(claudeClient);
-                    }
-                    Repaint();
-                    
-                    UnityEngine.Debug.Log("UnityMCP server successfully unregistered from Claude Code.");
-                }
-                else if (!string.IsNullOrEmpty(errors))
-                {
-                    UnityEngine.Debug.LogWarning($"Claude MCP removal errors: {errors}");
-                }
-            }
-            catch (Exception e)
-            {
-                UnityEngine.Debug.LogError($"Claude CLI unregistration failed: {e.Message}");
+                UnityEngine.Debug.LogWarning($"Claude MCP removal failed: {stderr}\n{stdout}");
             }
         }
 

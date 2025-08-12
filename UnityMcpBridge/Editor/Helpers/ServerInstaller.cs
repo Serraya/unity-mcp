@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -42,6 +43,16 @@ namespace UnityMcpBridge.Editor.Helpers
             }
             catch (Exception ex)
             {
+                // If a usable server is already present (installed or embedded), don't fail hard—just warn.
+                bool hasInstalled = false;
+                try { hasInstalled = File.Exists(Path.Combine(GetServerPath(), "server.py")); } catch { }
+
+                if (hasInstalled || TryGetEmbeddedServerSource(out _))
+                {
+                    Debug.LogWarning($"UnityMCP: Using existing server; skipped install. Details: {ex.Message}");
+                    return;
+                }
+
                 Debug.LogError($"Failed to ensure server installation: {ex.Message}");
             }
         }
@@ -114,104 +125,7 @@ namespace UnityMcpBridge.Editor.Helpers
         /// </summary>
         private static bool TryGetEmbeddedServerSource(out string srcPath)
         {
-            // 1) Development mode: common repo layouts
-            try
-            {
-                string projectRoot = Path.GetDirectoryName(Application.dataPath);
-                string[] devCandidates =
-                {
-                    Path.Combine(projectRoot ?? string.Empty, "unity-mcp", "UnityMcpServer", "src"),
-                    Path.Combine(projectRoot ?? string.Empty, "..", "unity-mcp", "UnityMcpServer", "src"),
-                };
-                foreach (string candidate in devCandidates)
-                {
-                    string full = Path.GetFullPath(candidate);
-                    if (Directory.Exists(full) && File.Exists(Path.Combine(full, "server.py")))
-                    {
-                        srcPath = full;
-                        return true;
-                    }
-                }
-            }
-            catch { /* ignore */ }
-
-            // 2) Installed package: resolve via Package Manager
-            // 2) Installed package: resolve via Package Manager (support new + legacy IDs, warn on legacy)
-try
-{
-    var list = UnityEditor.PackageManager.Client.List();
-    while (!list.IsCompleted) { }
-    if (list.Status == UnityEditor.PackageManager.StatusCode.Success)
-    {
-        const string CurrentId = "com.coplaydev.unity-mcp";
-        const string LegacyId  = "com.justinpbarnett.unity-mcp";
-
-        foreach (var pkg in list.Result)
-        {
-            if (pkg.name == CurrentId || pkg.name == LegacyId)
-            {
-                if (pkg.name == LegacyId)
-                {
-                    Debug.LogWarning(
-                        "UnityMCP: Detected legacy package id 'com.justinpbarnett.unity-mcp'. " +
-                        "Please update Packages/manifest.json to 'com.coplaydev.unity-mcp' to avoid future breakage."
-                    );
-                }
-
-                string packagePath = pkg.resolvedPath; // e.g., Library/PackageCache/... or local path
-
-                // Preferred: tilde folder embedded alongside Editor/Runtime within the package
-                string embeddedTilde = Path.Combine(packagePath, "UnityMcpServer~", "src");
-                if (Directory.Exists(embeddedTilde) && File.Exists(Path.Combine(embeddedTilde, "server.py")))
-                {
-                    srcPath = embeddedTilde;
-                    return true;
-                }
-
-                // Fallback: legacy non-tilde folder name inside the package
-                string embedded = Path.Combine(packagePath, "UnityMcpServer", "src");
-                if (Directory.Exists(embedded) && File.Exists(Path.Combine(embedded, "server.py")))
-                {
-                    srcPath = embedded;
-                    return true;
-                }
-
-                // Legacy: sibling of the package folder (dev-linked). Only valid when present on disk.
-                string sibling = Path.Combine(Path.GetDirectoryName(packagePath) ?? string.Empty, "UnityMcpServer", "src");
-                if (Directory.Exists(sibling) && File.Exists(Path.Combine(sibling, "server.py")))
-                {
-                    srcPath = sibling;
-                    return true;
-                }
-            }
-        }
-    }
-}
-
-            catch { /* ignore */ }
-
-            // 3) Fallback to previous common install locations
-            try
-            {
-                string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                string[] candidates =
-                {
-                    Path.Combine(home, "unity-mcp", "UnityMcpServer", "src"),
-                    Path.Combine(home, "Applications", "UnityMCP", "UnityMcpServer", "src"),
-                };
-                foreach (string candidate in candidates)
-                {
-                    if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "server.py")))
-                    {
-                        srcPath = candidate;
-                        return true;
-                    }
-                }
-            }
-            catch { /* ignore */ }
-
-            srcPath = null;
-            return false;
+            return ServerPathResolver.TryFindEmbeddedServerSource(out srcPath);
         }
 
         private static void CopyDirectoryRecursive(string sourceDir, string destinationDir)
@@ -313,7 +227,7 @@ try
             }
         }
 
-        private static string FindUvPath()
+        internal static string FindUvPath()
         {
             // Allow user override via EditorPrefs
             try
