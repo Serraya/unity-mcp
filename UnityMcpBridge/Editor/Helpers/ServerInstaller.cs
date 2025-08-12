@@ -328,6 +328,22 @@ namespace UnityMcpBridge.Editor.Helpers
                         RedirectStandardError = true,
                         CreateNoWindow = true
                     };
+                    try
+                    {
+                        // Prepend common user-local and package manager locations so 'which' can see them in Unity's GUI env
+                        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
+                        string prepend = string.Join(":", new[]
+                        {
+                            System.IO.Path.Combine(homeDir, ".local", "bin"),
+                            "/opt/homebrew/bin",
+                            "/usr/local/bin",
+                            "/usr/bin",
+                            "/bin"
+                        });
+                        string currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+                        whichPsi.Environment["PATH"] = string.IsNullOrEmpty(currentPath) ? prepend : (prepend + ":" + currentPath);
+                    }
+                    catch { }
                     using var wp = System.Diagnostics.Process.Start(whichPsi);
                     string output = wp.StandardOutput.ReadToEnd().Trim();
                     wp.WaitForExit(3000);
