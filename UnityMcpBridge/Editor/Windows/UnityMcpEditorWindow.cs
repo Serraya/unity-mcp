@@ -1578,9 +1578,54 @@ namespace UnityMcpBridge.Editor.Windows
             string projectDir = Path.GetDirectoryName(Application.dataPath);
             string pathPrepend = Application.platform == RuntimePlatform.OSXEditor
                 ? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-                : "/usr/local/bin:/usr/bin:/bin";
+                : null; // On Windows, don't modify PATH - use system PATH as-is
 
-            if (ExecPath.TryRun(claudePath, "mcp remove UnityMCP", projectDir, out var stdout, out var stderr, 10000, pathPrepend))
+			// Determine if Claude has a UnityMCP server registered by using exit codes from `claude mcp get <name>`
+			string[] candidateNamesForGet = { "UnityMCP", "unityMCP", "unity-mcp", "UnityMcpServer" };
+			List<string> existingNames = new List<string>();
+			foreach (var candidate in candidateNamesForGet)
+			{
+				if (ExecPath.TryRun(claudePath, $"mcp get {candidate}", projectDir, out var getStdout, out var getStderr, 7000, pathPrepend))
+				{
+					// Success exit code indicates the server exists
+					existingNames.Add(candidate);
+				}
+			}
+			
+			if (existingNames.Count == 0)
+			{
+				// Nothing to unregister – set status and bail early
+				var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
+				if (claudeClient != null)
+				{
+					claudeClient.SetStatus(McpStatus.NotConfigured);
+					UnityEngine.Debug.Log("Claude CLI reports no UnityMCP server via 'mcp get' – setting status to NotConfigured and aborting unregister.");
+					Repaint();
+				}
+				return;
+			}
+            
+            // Try different possible server names
+            string[] possibleNames = { "UnityMCP", "unityMCP", "unity-mcp", "UnityMcpServer" };
+            bool success = false;
+            
+            foreach (string serverName in possibleNames)
+            {
+                if (ExecPath.TryRun(claudePath, $"mcp remove {serverName}", projectDir, out var stdout, out var stderr, 10000, pathPrepend))
+                {
+                    success = true;
+                    UnityEngine.Debug.Log($"Successfully removed MCP server: {serverName}");
+                    break;
+                }
+                else if (!stderr.Contains("No MCP server found"))
+                {
+                    // If it's not a "not found" error, log it and stop trying
+                    UnityEngine.Debug.LogWarning($"Error removing {serverName}: {stderr}");
+                    break;
+                }
+            }
+
+            if (success)
             {
                 var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
                 if (claudeClient != null)
@@ -1594,14 +1639,43 @@ namespace UnityMcpBridge.Editor.Windows
             }
             else
             {
-                UnityEngine.Debug.LogWarning($"Claude MCP removal failed: {stderr}\n{stdout}");
+                // If no servers were found to remove, they're already unregistered
+                // Force status to NotConfigured and update the UI
+                UnityEngine.Debug.Log("No MCP servers found to unregister - already unregistered.");
                 var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
                 if (claudeClient != null)
                 {
+                    claudeClient.SetStatus(McpStatus.NotConfigured);
                     CheckClaudeCodeConfiguration(claudeClient);
                 }
                 Repaint();
             }
+        }
+
+        private bool ParseTextOutput(string claudePath, string projectDir, string pathPrepend)
+        {
+            if (ExecPath.TryRun(claudePath, "mcp list", projectDir, out var listStdout, out var listStderr, 10000, pathPrepend))
+            {
+                UnityEngine.Debug.Log($"Claude MCP servers (text): {listStdout}");
+                
+                // Check if output indicates no servers or contains UnityMCP variants
+                if (listStdout.Contains("No MCP servers configured") || 
+                    listStdout.Contains("no servers") ||
+                    listStdout.Contains("No servers") ||
+                    string.IsNullOrWhiteSpace(listStdout) ||
+                    listStdout.Trim().Length == 0)
+                {
+                    return false;
+                }
+                
+                // Look for UnityMCP variants in the output
+                return listStdout.Contains("UnityMCP") || 
+                       listStdout.Contains("unityMCP") || 
+                       listStdout.Contains("unity-mcp");
+            }
+            
+            // If command failed, assume no servers
+            return false;
         }
 
         private string FindUvPath()

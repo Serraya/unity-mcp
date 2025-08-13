@@ -53,11 +53,15 @@ namespace UnityMcpBridge.Editor.Helpers
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty;
                 string[] candidates =
                 {
+                    // Prefer .cmd (most reliable from non-interactive processes)
                     Path.Combine(appData, "npm", "claude.cmd"),
                     Path.Combine(localAppData, "npm", "claude.cmd"),
+                    // Fall back to PowerShell shim if only .ps1 is present
+                    Path.Combine(appData, "npm", "claude.ps1"),
+                    Path.Combine(localAppData, "npm", "claude.ps1"),
                 };
                 foreach (string c in candidates) { if (File.Exists(c)) return c; }
-                string fromWhere = Where("claude.exe") ?? Where("claude.cmd") ?? Where("claude");
+                string fromWhere = Where("claude.exe") ?? Where("claude.cmd") ?? Where("claude.ps1") ?? Where("claude");
                 if (!string.IsNullOrEmpty(fromWhere)) return fromWhere;
 #endif
                 return null;
