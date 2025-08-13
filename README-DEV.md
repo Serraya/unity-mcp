@@ -36,6 +36,8 @@ Deploys your development code to the actual installation locations for testing.
 3. Enter server path (or use default: `%LOCALAPPDATA%\Programs\UnityMCP\UnityMcpServer\src`)
 4. Enter backup location (or use default: `%USERPROFILE%\Desktop\unity-mcp-backup`)
 
+**Note:** Dev deploy skips `.venv`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.git`; reduces churn and avoids copying virtualenvs.
+
 ### `restore-dev.bat`
 Restores original files from backup.
 
@@ -73,6 +75,23 @@ Note: In recent builds, the Python server sources are also bundled inside the pa
 5. **Restore** original files when done using `restore-dev.bat`
 
 
+## Switching MCP package sources quickly
+
+Use `mcp_source.py` to quickly switch between different Unity MCP package sources:
+
+**Usage:**
+```bash
+python mcp_source.py [--manifest /path/to/manifest.json] [--repo /path/to/unity-mcp] [--choice 1|2|3]
+```
+
+**Options:**
+- **1** Upstream main (CoplayDev/unity-mcp)
+- **2** Remote current branch (origin + branch)
+- **3** Local workspace (file: UnityMcpBridge)
+
+After switching, open Package Manager and Refresh to re-resolve packages.
+
+
 ## Troubleshooting
 
 ### "Path not found" errors running the .bat file
@@ -89,3 +108,6 @@ Note: In recent builds, the Python server sources are also bundled inside the pa
 - Run `deploy-dev.bat` first to create initial backup
 - Check backup directory permissions
 - Verify backup directory path is correct
+
+### Windows uv path issues
+- On Windows, when testing GUI clients, prefer the WinGet Links `uv.exe`; if multiple `uv.exe` exist, use "Choose UV Install Location" to pin the Links shim.

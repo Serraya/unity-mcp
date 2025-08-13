@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -70,21 +69,19 @@ namespace UnityMcpBridge.Editor.Helpers
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    "AppData",
-                    "Local",
-                    "Programs",
-                    RootFolder
-                );
+                var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+                                   ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, "AppData", "Local");
+                return Path.Combine(localAppData, "Programs", RootFolder);
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    "bin",
-                    RootFolder
-                );
+                var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+                if (string.IsNullOrEmpty(xdg))
+                {
+                    xdg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty,
+                                       ".local", "share");
+                }
+                return Path.Combine(xdg, RootFolder);
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
@@ -270,19 +267,58 @@ namespace UnityMcpBridge.Editor.Helpers
             string[] candidates;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty;
+                string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) ?? string.Empty;
+                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty;
+                string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) ?? string.Empty; // optional fallback
+
+                // Fast path: resolve from PATH first
+                try
+                {
+                    var wherePsi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "where",
+                        Arguments = "uv.exe",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
+                    using var wp = System.Diagnostics.Process.Start(wherePsi);
+                    string output = wp.StandardOutput.ReadToEnd().Trim();
+                    wp.WaitForExit(1500);
+                    if (wp.ExitCode == 0 && !string.IsNullOrEmpty(output))
+                    {
+                        foreach (var line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            string path = line.Trim();
+                            if (File.Exists(path) && ValidateUvBinary(path)) return path;
+                        }
+                    }
+                }
+                catch { }
+
                 candidates = new[]
                 {
+                    // Preferred: WinGet Links shims (stable entrypoints)
+                    Path.Combine(localAppData, "Microsoft", "WinGet", "Links", "uv.exe"),
+                    Path.Combine(programFiles, "WinGet", "Links", "uv.exe"),
+                    // Optional low-priority fallback for atypical images
+                    Path.Combine(programData, "Microsoft", "WinGet", "Links", "uv.exe"),
+
                     // Common per-user installs
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python313\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python312\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python311\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python310\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python313\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python312\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python311\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python310\Scripts\uv.exe"),
+                    Path.Combine(localAppData, @"Programs\Python\Python313\Scripts\uv.exe"),
+                    Path.Combine(localAppData, @"Programs\Python\Python312\Scripts\uv.exe"),
+                    Path.Combine(localAppData, @"Programs\Python\Python311\Scripts\uv.exe"),
+                    Path.Combine(localAppData, @"Programs\Python\Python310\Scripts\uv.exe"),
+                    Path.Combine(appData, @"Python\Python313\Scripts\uv.exe"),
+                    Path.Combine(appData, @"Python\Python312\Scripts\uv.exe"),
+                    Path.Combine(appData, @"Python\Python311\Scripts\uv.exe"),
+                    Path.Combine(appData, @"Python\Python310\Scripts\uv.exe"),
+
                     // Program Files style installs (if a native installer was used)
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) ?? string.Empty, @"uv\uv.exe"),
+                    Path.Combine(programFiles, @"uv\uv.exe"),
+
                     // Try simple name resolution later via PATH
                     "uv.exe",
                     "uv"
@@ -315,33 +351,10 @@ namespace UnityMcpBridge.Editor.Helpers
                 catch { /* ignore */ }
             }
 
-            // Use platform-appropriate which/where to resolve from PATH
+            // Use platform-appropriate which/where to resolve from PATH (non-Windows handled here; Windows tried earlier)
             try
             {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    var wherePsi = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "where",
-                        Arguments = "uv.exe",
-                        UseShellExecute = false,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true
-                    };
-                    using var wp = System.Diagnostics.Process.Start(wherePsi);
-                    string output = wp.StandardOutput.ReadToEnd().Trim();
-                    wp.WaitForExit(3000);
-                    if (wp.ExitCode == 0 && !string.IsNullOrEmpty(output))
-                    {
-                        foreach (var line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-                        {
-                            string path = line.Trim();
-                            if (File.Exists(path) && ValidateUvBinary(path)) return path;
-                        }
-                    }
-                }
-                else
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
                     var whichPsi = new System.Diagnostics.ProcessStartInfo
                     {
