@@ -35,6 +35,9 @@ namespace UnityMcpBridge.Editor.Helpers
                     Path.Combine(home, ".local", "bin", "claude"),
                 };
                 foreach (string c in candidates) { if (File.Exists(c)) return c; }
+                // Try NVM-installed claude under ~/.nvm/versions/node/*/bin/claude
+                string nvmClaude = ResolveClaudeFromNvm(home);
+                if (!string.IsNullOrEmpty(nvmClaude)) return nvmClaude;
 #if UNITY_EDITOR_OSX || UNITY_EDITOR_LINUX
                 return Which("claude", "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin");
 #else
@@ -70,12 +73,77 @@ namespace UnityMcpBridge.Editor.Helpers
                     Path.Combine(home, ".local", "bin", "claude"),
                 };
                 foreach (string c in candidates) { if (File.Exists(c)) return c; }
+                // Try NVM-installed claude under ~/.nvm/versions/node/*/bin/claude
+                string nvmClaude = ResolveClaudeFromNvm(home);
+                if (!string.IsNullOrEmpty(nvmClaude)) return nvmClaude;
 #if UNITY_EDITOR_OSX || UNITY_EDITOR_LINUX
                 return Which("claude", "/usr/local/bin:/usr/bin:/bin");
 #else
                 return null;
 #endif
             }
+        }
+
+        // Attempt to resolve claude from NVM-managed Node installations, choosing the newest version
+        private static string ResolveClaudeFromNvm(string home)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(home)) return null;
+                string nvmNodeDir = Path.Combine(home, ".nvm", "versions", "node");
+                if (!Directory.Exists(nvmNodeDir)) return null;
+
+                string bestPath = null;
+                Version bestVersion = null;
+                foreach (string versionDir in Directory.EnumerateDirectories(nvmNodeDir))
+                {
+                    string name = Path.GetFileName(versionDir);
+                    if (string.IsNullOrEmpty(name)) continue;
+                    if (name.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (Version.TryParse(name.Substring(1), out Version parsed))
+                        {
+                            string candidate = Path.Combine(versionDir, "bin", "claude");
+                            if (File.Exists(candidate))
+                            {
+                                if (bestVersion == null || parsed > bestVersion)
+                                {
+                                    bestVersion = parsed;
+                                    bestPath = candidate;
+                                }
+                            }
+                        }
+                    }
+                }
+                return bestPath;
+            }
+            catch { return null; }
+        }
+
+        // Explicitly set the Claude CLI absolute path override in EditorPrefs
+        internal static void SetClaudeCliPath(string absolutePath)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(absolutePath) && File.Exists(absolutePath))
+                {
+                    EditorPrefs.SetString(PrefClaude, absolutePath);
+                }
+            }
+            catch { }
+        }
+
+        // Clear any previously set Claude CLI override path
+        internal static void ClearClaudeCliPath()
+        {
+            try
+            {
+                if (EditorPrefs.HasKey(PrefClaude))
+                {
+                    EditorPrefs.DeleteKey(PrefClaude);
+                }
+            }
+            catch { }
         }
 
         // Use existing UV resolver; returns absolute path or null.

@@ -438,14 +438,7 @@ namespace UnityMcpBridge.Editor.Windows
             EditorGUILayout.LabelField("MCP Client Configuration", sectionTitleStyle);
             EditorGUILayout.Space(10);
             
-            // Auto-connect toggle (moved from Server Status)
-            bool newAuto = EditorGUILayout.ToggleLeft("Auto-connect to MCP Clients", autoRegisterEnabled);
-            if (newAuto != autoRegisterEnabled)
-            {
-                autoRegisterEnabled = newAuto;
-                EditorPrefs.SetBool("UnityMCP.AutoRegisterEnabled", autoRegisterEnabled);
-            }
-            EditorGUILayout.Space(6);
+			// (Auto-connect toggle removed per design)
 
             // Client selector
             string[] clientNames = mcpClients.clients.Select(c => c.name).ToArray();
@@ -697,6 +690,17 @@ namespace UnityMcpBridge.Editor.Windows
 
         private void DrawClientConfigurationCompact(McpClient mcpClient)
         {
+			// Special pre-check for Claude Code: if CLI missing, reflect in status UI
+			if (mcpClient.mcpType == McpTypes.ClaudeCode)
+			{
+				string claudeCheck = ExecPath.ResolveClaude();
+				if (string.IsNullOrEmpty(claudeCheck))
+				{
+					mcpClient.configStatus = "Claude Not Found";
+					mcpClient.status = McpStatus.NotConfigured;
+				}
+			}
+
             // Status display
             EditorGUILayout.BeginHorizontal();
             Rect statusRect = GUILayoutUtility.GetRect(0, 28, GUILayout.Width(24));
@@ -710,7 +714,24 @@ namespace UnityMcpBridge.Editor.Windows
             };
             EditorGUILayout.LabelField(mcpClient.configStatus, clientStatusStyle, GUILayout.Height(28));
             EditorGUILayout.EndHorizontal();
-            
+			// When Claude CLI is missing, show a clear install hint directly below status
+			if (mcpClient.mcpType == McpTypes.ClaudeCode && string.IsNullOrEmpty(ExecPath.ResolveClaude()))
+			{
+				GUIStyle installHintStyle = new GUIStyle(clientStatusStyle);
+				installHintStyle.normal.textColor = new Color(1f, 0.5f, 0f); // orange
+				EditorGUILayout.BeginHorizontal();
+				GUIContent installText = new GUIContent("Make sure Claude Code is installed!");
+				Vector2 textSize = installHintStyle.CalcSize(installText);
+				EditorGUILayout.LabelField(installText, installHintStyle, GUILayout.Height(22), GUILayout.Width(textSize.x + 2), GUILayout.ExpandWidth(false));
+				GUIStyle helpLinkStyle = new GUIStyle(EditorStyles.linkLabel) { fontStyle = FontStyle.Bold };
+				GUILayout.Space(6);
+				if (GUILayout.Button("[CLICK]", helpLinkStyle, GUILayout.Height(22), GUILayout.ExpandWidth(false)))
+				{
+					Application.OpenURL("https://github.com/CoplayDev/unity-mcp/wiki/Troubleshooting-Unity-MCP-and-Claude-Code");
+				}
+				EditorGUILayout.EndHorizontal();
+			}
+			
             EditorGUILayout.Space(10);
             
             // Action buttons in horizontal layout
@@ -723,23 +744,57 @@ namespace UnityMcpBridge.Editor.Windows
                     ConfigureMcpClient(mcpClient);
                 }
             }
-            else if (mcpClient.mcpType == McpTypes.ClaudeCode)
-            {
-                bool isConfigured = mcpClient.status == McpStatus.Configured;
-                string buttonText = isConfigured ? "Unregister UnityMCP with Claude Code" : "Register with Claude Code";
-                if (GUILayout.Button(buttonText, GUILayout.Height(32)))
-                {
-                    if (isConfigured)
-                    {
-                        UnregisterWithClaudeCode();
-                    }
-                    else
-                    {
-                        string pythonDir = FindPackagePythonDirectory();
-                        RegisterWithClaudeCode(pythonDir);
-                    }
-                }
-            }
+			else if (mcpClient.mcpType == McpTypes.ClaudeCode)
+			{
+				bool claudeAvailable = !string.IsNullOrEmpty(ExecPath.ResolveClaude());
+				if (claudeAvailable)
+				{
+					bool isConfigured = mcpClient.status == McpStatus.Configured;
+					string buttonText = isConfigured ? "Unregister UnityMCP with Claude Code" : "Register with Claude Code";
+					if (GUILayout.Button(buttonText, GUILayout.Height(32)))
+					{
+						if (isConfigured)
+						{
+							UnregisterWithClaudeCode();
+						}
+						else
+						{
+							string pythonDir = FindPackagePythonDirectory();
+							RegisterWithClaudeCode(pythonDir);
+						}
+					}
+					// Hide the picker once a valid binary is available
+					EditorGUILayout.EndHorizontal();
+					EditorGUILayout.BeginHorizontal();
+					GUIStyle pathLabelStyle = new GUIStyle(EditorStyles.miniLabel) { wordWrap = true };
+					string resolvedClaude = ExecPath.ResolveClaude();
+					EditorGUILayout.LabelField($"Claude CLI: {resolvedClaude}", pathLabelStyle);
+					EditorGUILayout.EndHorizontal();
+					EditorGUILayout.BeginHorizontal();
+				}
+				// CLI picker row (only when not found)
+				EditorGUILayout.EndHorizontal();
+				EditorGUILayout.BeginHorizontal();
+				if (!claudeAvailable)
+				{
+					// Only show the picker button in not-found state (no redundant "not found" label)
+					if (GUILayout.Button("Choose Claude Install Location", GUILayout.Width(260), GUILayout.Height(22)))
+					{
+						string suggested = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "/opt/homebrew/bin" : Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+						string picked = EditorUtility.OpenFilePanel("Select 'claude' CLI", suggested, "");
+						if (!string.IsNullOrEmpty(picked))
+						{
+							ExecPath.SetClaudeCliPath(picked);
+							// Auto-register after setting a valid path
+							string pythonDir = FindPackagePythonDirectory();
+							RegisterWithClaudeCode(pythonDir);
+							Repaint();
+						}
+					}
+				}
+				EditorGUILayout.EndHorizontal();
+				EditorGUILayout.BeginHorizontal();
+			}
             else
             {
                 if (GUILayout.Button($"Auto Configure", GUILayout.Height(32)))
@@ -793,13 +848,17 @@ namespace UnityMcpBridge.Editor.Windows
             
             EditorGUILayout.EndHorizontal();
             
-            EditorGUILayout.Space(8);
-            // Quick info
-            GUIStyle configInfoStyle = new GUIStyle(EditorStyles.miniLabel)
-            {
-                fontSize = 10
-            };
-            EditorGUILayout.LabelField($"Config: {Path.GetFileName(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? mcpClient.windowsConfigPath : mcpClient.linuxConfigPath)}", configInfoStyle);
+			EditorGUILayout.Space(8);
+			// Quick info (hide when Claude is not found to avoid confusion)
+			bool hideConfigInfo = (mcpClient.mcpType == McpTypes.ClaudeCode) && string.IsNullOrEmpty(ExecPath.ResolveClaude());
+			if (!hideConfigInfo)
+			{
+				GUIStyle configInfoStyle = new GUIStyle(EditorStyles.miniLabel)
+				{
+					fontSize = 10
+				};
+				EditorGUILayout.LabelField($"Config: {Path.GetFileName(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? mcpClient.windowsConfigPath : mcpClient.linuxConfigPath)}", configInfoStyle);
+			}
         }
 
         private void ToggleUnityBridge()
