@@ -944,8 +944,11 @@ namespace UnityMcpBridge.Editor.Windows
             {
                 command = uvPath,
                 args = new[] { "--directory", pythonDir, "run", "server.py" },
-                type = "stdio",
             };
+            if (mcpClient?.mcpType == McpTypes.VSCode)
+            {
+                unityMCPConfig.type = "stdio";
+            }
 
             JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
 
