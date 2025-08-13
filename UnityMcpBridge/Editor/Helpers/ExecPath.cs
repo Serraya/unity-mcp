@@ -101,7 +101,14 @@ namespace UnityMcpBridge.Editor.Helpers
                     if (string.IsNullOrEmpty(name)) continue;
                     if (name.StartsWith("v", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (Version.TryParse(name.Substring(1), out Version parsed))
+                        // Extract numeric portion: e.g., v18.19.0-nightly -> 18.19.0
+                        string versionStr = name.Substring(1);
+                        int dashIndex = versionStr.IndexOf('-');
+                        if (dashIndex > 0)
+                        {
+                            versionStr = versionStr.Substring(0, dashIndex);
+                        }
+                        if (Version.TryParse(versionStr, out Version parsed))
                         {
                             string candidate = Path.Combine(versionDir, "bin", "claude");
                             if (File.Exists(candidate))

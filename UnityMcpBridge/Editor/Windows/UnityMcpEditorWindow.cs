@@ -739,7 +739,7 @@ namespace UnityMcpBridge.Editor.Windows
 				EditorGUILayout.LabelField(installText, installHintStyle, GUILayout.Height(22), GUILayout.Width(textSize.x + 2), GUILayout.ExpandWidth(false));
 				GUIStyle helpLinkStyle = new GUIStyle(EditorStyles.linkLabel) { fontStyle = FontStyle.Bold };
 				GUILayout.Space(6);
-				if (GUILayout.Button("[CLICK]", helpLinkStyle, GUILayout.Height(22), GUILayout.ExpandWidth(false)))
+				if (GUILayout.Button("[HELP]", helpLinkStyle, GUILayout.Height(22), GUILayout.ExpandWidth(false)))
 				{
 					Application.OpenURL("https://github.com/CoplayDev/unity-mcp/wiki/Troubleshooting-Unity-MCP-and-Claude-Code");
 				}
@@ -764,7 +764,7 @@ namespace UnityMcpBridge.Editor.Windows
 				EditorGUILayout.LabelField(installText2, installHintStyle2, GUILayout.Height(22), GUILayout.Width(sz.x + 2), GUILayout.ExpandWidth(false));
 				GUIStyle helpLinkStyle2 = new GUIStyle(EditorStyles.linkLabel) { fontStyle = FontStyle.Bold };
 				GUILayout.Space(6);
-				if (GUILayout.Button("[CLICK]", helpLinkStyle2, GUILayout.Height(22), GUILayout.ExpandWidth(false)))
+				if (GUILayout.Button("[HELP]", helpLinkStyle2, GUILayout.Height(22), GUILayout.ExpandWidth(false)))
 				{
 					Application.OpenURL("https://github.com/CoplayDev/unity-mcp/wiki/Troubleshooting-Unity-MCP-and-Cursor,-VSCode-&-Windsurf");
 				}
@@ -1050,22 +1050,29 @@ namespace UnityMcpBridge.Editor.Windows
             // Use switch statement to handle different client types
             switch (mcpClient.mcpType)
             {
-                case McpTypes.VSCode:
-                    // Create VSCode-specific configuration with proper format
-                    var vscodeConfig = new
-                    {
-                        servers = new
-                        {
-                            unityMCP = new
-                            {
-                                command = "uv",
-                                args = new[] { "--directory", pythonDir, "run", "server.py" },
-                                type = "stdio"
-                            }
-                        }
-                    };
-                    manualConfigJson = JsonConvert.SerializeObject(vscodeConfig, jsonSettings);
-                    break;
+				case McpTypes.VSCode:
+					// Resolve uv so VSCode launches the correct executable even if not on PATH
+					string uvPathManual = FindUvPath();
+					if (uvPathManual == null)
+					{
+						UnityEngine.Debug.LogError("UV package manager not found. Cannot generate manual configuration.");
+						return;
+					}
+					// Create VSCode-specific configuration with proper format
+					var vscodeConfig = new
+					{
+						servers = new
+						{
+							unityMCP = new
+							{
+								command = uvPathManual,
+								args = new[] { "--directory", pythonDir, "run", "server.py" },
+								type = "stdio"
+							}
+						}
+					};
+					manualConfigJson = JsonConvert.SerializeObject(vscodeConfig, jsonSettings);
+					break;
                     
                 default:
                     // Create standard MCP configuration for other clients
