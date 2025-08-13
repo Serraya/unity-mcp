@@ -1,6 +1,6 @@
 {
   "name": "com.coplaydev.unity-mcp",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "displayName": "Unity MCP Bridge",
   "description": "A bridge that manages and communicates with the sister application, Unity MCP Server, which allows for communications with MCP Clients like Claude Desktop or Cursor.",
   "unity": "2020.3",
