@@ -124,7 +124,13 @@ Connect your MCP Client (Claude, Cursor, etc.) to the Python server you installe
 
 1.  In Unity, go to `Window > Unity MCP`.
 2.  Click `Auto-Setup`.
-3.  Look for a green status indicator 🟢 and "Connected ✓". *(This attempts to modify the MCP Client\'s config file automatically)*.
+3.  Look for a green status indicator 🟢 and "Connected ✓". *(This attempts to modify the MCP Client\'s config file automatically).* 
+
+Client-specific notes
+
+- **VSCode**: uses `Code/User/mcp.json` with top-level `servers.unityMCP` and `"type": "stdio"`. On Windows, Unity MCP writes an absolute `uv.exe` (prefers WinGet Links shim) to avoid PATH issues.
+- **Cursor / Windsurf**: if `uv` is missing, the Unity MCP window shows "uv Not Found" with a quick [HELP] link and a "Choose UV Install Location" button.
+- **Claude Code**: if `claude` isn't found, the window shows "Claude Not Found" with [HELP] and a "Choose Claude Location" button. Unregister now updates the UI immediately.
 
 
 **Option B: Manual Configuration**
@@ -137,7 +143,23 @@ If Auto-Setup fails or you use a different client:
 2.  **Edit the file** to add/update the `mcpServers` section, using the *exact* paths from Step 1.
 
 <details>
-<summary><strong>Click for OS-Specific JSON Configuration Snippets...</strong></summary>
+<summary><strong>Click for Client-Specific JSON Configuration Snippets...</strong></summary>
+
+**VSCode (all OS)**
+
+```json
+{
+  "servers": {
+    "unityMCP": {
+      "command": "uv",
+      "args": ["--directory","<ABSOLUTE_PATH_TO>/UnityMcpServer/src","run","server.py"],
+      "type": "stdio"
+    }
+  }
+}
+```
+
+On Windows, set `command` to the absolute shim, e.g. `C:\\Users\\YOU\\AppData\\Local\\Microsoft\\WinGet\\Links\\uv.exe`.
 
 **Windows:**
 
