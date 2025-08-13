@@ -270,19 +270,29 @@ namespace UnityMcpBridge.Editor.Helpers
             string[] candidates;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty;
+                string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) ?? string.Empty;
+                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty;
+
                 candidates = new[]
                 {
+                    // Preferred: WinGet Links shims (stable entrypoints)
+                    Path.Combine(localAppData, "Microsoft", "WinGet", "Links", "uv.exe"),
+                    Path.Combine(programFiles, "WinGet", "Links", "uv.exe"),
+
                     // Common per-user installs
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python313\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python312\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python311\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty, @"Programs\Python\Python310\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python313\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python312\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python311\Scripts\uv.exe"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty, @"Python\Python310\Scripts\uv.exe"),
+                    Path.Combine(localAppData, @"Programs\Python\Python313\Scripts\uv.exe"),
+                    Path.Combine(localAppData, @"Programs\Python\Python312\Scripts\uv.exe"),
+                    Path.Combine(localAppData, @"Programs\Python\Python311\Scripts\uv.exe"),
+                    Path.Combine(localAppData, @"Programs\Python\Python310\Scripts\uv.exe"),
+                    Path.Combine(appData, @"Python\Python313\Scripts\uv.exe"),
+                    Path.Combine(appData, @"Python\Python312\Scripts\uv.exe"),
+                    Path.Combine(appData, @"Python\Python311\Scripts\uv.exe"),
+                    Path.Combine(appData, @"Python\Python310\Scripts\uv.exe"),
+
                     // Program Files style installs (if a native installer was used)
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) ?? string.Empty, @"uv\uv.exe"),
+                    Path.Combine(programFiles, @"uv\uv.exe"),
+
                     // Try simple name resolution later via PATH
                     "uv.exe",
                     "uv"

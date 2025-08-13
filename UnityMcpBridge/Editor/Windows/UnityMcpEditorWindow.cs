@@ -1023,6 +1023,68 @@ namespace UnityMcpBridge.Editor.Windows
                     break;
             }
 
+            // If config already has a working absolute uv path, avoid rewriting it on refresh
+            try
+            {
+                if (mcpClient?.mcpType != McpTypes.ClaudeCode)
+                {
+                    // Inspect existing command for stability (Windows absolute path that exists)
+                    string existingCommand = null;
+                    if (mcpClient?.mcpType == McpTypes.VSCode)
+                    {
+                        existingCommand = existingConfig?.servers?.unityMCP?.command?.ToString();
+                    }
+                    else
+                    {
+                        existingCommand = existingConfig?.mcpServers?.unityMCP?.command?.ToString();
+                    }
+
+                    if (!string.IsNullOrEmpty(existingCommand))
+                    {
+                        bool keep = false;
+                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                        {
+                            // Consider absolute, existing paths as stable; prefer WinGet Links
+                            if (Path.IsPathRooted(existingCommand) && File.Exists(existingCommand))
+                            {
+                                keep = true;
+                            }
+                        }
+                        else
+                        {
+                            // On Unix, keep absolute existing path as well
+                            if (Path.IsPathRooted(existingCommand) && File.Exists(existingCommand))
+                            {
+                                keep = true;
+                            }
+                        }
+
+                        if (keep)
+                        {
+                            // Merge without replacing the existing command
+                            if (mcpClient?.mcpType == McpTypes.VSCode)
+                            {
+                                existingConfig.servers.unityMCP.args =
+                                    JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JToken>(
+                                        JsonConvert.SerializeObject(unityMCPConfig.args)
+                                    );
+                            }
+                            else
+                            {
+                                existingConfig.mcpServers.unityMCP.args =
+                                    JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JToken>(
+                                        JsonConvert.SerializeObject(unityMCPConfig.args)
+                                    );
+                            }
+                            string mergedKeep = JsonConvert.SerializeObject(existingConfig, jsonSettings);
+                            File.WriteAllText(configPath, mergedKeep);
+                            return "Configured successfully";
+                        }
+                    }
+                }
+            }
+            catch { /* fall back to normal write */ }
+
             // Write the merged configuration back to file
             string mergedJson = JsonConvert.SerializeObject(existingConfig, jsonSettings);
             File.WriteAllText(configPath, mergedJson);
