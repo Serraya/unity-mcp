@@ -87,7 +87,7 @@ namespace UnityMcpBridge.Editor.Data
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                     "Code",
                     "User",
-                    "settings.json"
+                    "mcp.json"
                 ),
                 linuxConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -95,7 +95,7 @@ namespace UnityMcpBridge.Editor.Data
                     "Application Support",
                     "Code",
                     "User",
-                    "settings.json"
+                    "mcp.json"
                 ),
                 mcpType = McpTypes.VSCode,
                 configStatus = "Not Configured",
