@@ -701,6 +701,20 @@ namespace UnityMcpBridge.Editor.Windows
 				}
 			}
 
+			// Pre-check for clients that require uv (all except Claude Code)
+			bool uvRequired = mcpClient.mcpType != McpTypes.ClaudeCode;
+			bool uvMissingEarly = false;
+			if (uvRequired)
+			{
+				string uvPathEarly = FindUvPath();
+				if (string.IsNullOrEmpty(uvPathEarly))
+				{
+					uvMissingEarly = true;
+					mcpClient.configStatus = "uv Not Found";
+					mcpClient.status = McpStatus.NotConfigured;
+				}
+			}
+
             // Status display
             EditorGUILayout.BeginHorizontal();
             Rect statusRect = GUILayoutUtility.GetRect(0, 28, GUILayout.Width(24));
@@ -732,7 +746,46 @@ namespace UnityMcpBridge.Editor.Windows
 				EditorGUILayout.EndHorizontal();
 			}
 			
-            EditorGUILayout.Space(10);
+			EditorGUILayout.Space(10);
+
+			// If uv is missing for required clients, show hint and picker then exit early to avoid showing other controls
+			if (uvRequired && uvMissingEarly)
+			{
+				GUIStyle installHintStyle2 = new GUIStyle(EditorStyles.label)
+				{
+					fontSize = 12,
+					fontStyle = FontStyle.Bold,
+					wordWrap = false
+				};
+				installHintStyle2.normal.textColor = new Color(1f, 0.5f, 0f);
+				EditorGUILayout.BeginHorizontal();
+				GUIContent installText2 = new GUIContent("Make sure uv is installed!");
+				Vector2 sz = installHintStyle2.CalcSize(installText2);
+				EditorGUILayout.LabelField(installText2, installHintStyle2, GUILayout.Height(22), GUILayout.Width(sz.x + 2), GUILayout.ExpandWidth(false));
+				GUIStyle helpLinkStyle2 = new GUIStyle(EditorStyles.linkLabel) { fontStyle = FontStyle.Bold };
+				GUILayout.Space(6);
+				if (GUILayout.Button("[CLICK]", helpLinkStyle2, GUILayout.Height(22), GUILayout.ExpandWidth(false)))
+				{
+					Application.OpenURL("https://github.com/CoplayDev/unity-mcp/wiki/Troubleshooting-Unity-MCP-and-Cursor,-VSCode-&-Windsurf");
+				}
+				EditorGUILayout.EndHorizontal();
+
+				EditorGUILayout.Space(8);
+				EditorGUILayout.BeginHorizontal();
+				if (GUILayout.Button("Choose UV Install Location", GUILayout.Width(260), GUILayout.Height(22)))
+				{
+					string suggested = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "/opt/homebrew/bin" : Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+					string picked = EditorUtility.OpenFilePanel("Select 'uv' binary", suggested, "");
+					if (!string.IsNullOrEmpty(picked))
+					{
+						EditorPrefs.SetString("UnityMCP.UvPath", picked);
+						ConfigureMcpClient(mcpClient);
+						Repaint();
+					}
+				}
+				EditorGUILayout.EndHorizontal();
+				return;
+			}
             
             // Action buttons in horizontal layout
             EditorGUILayout.BeginHorizontal();
@@ -850,7 +903,9 @@ namespace UnityMcpBridge.Editor.Windows
             
 			EditorGUILayout.Space(8);
 			// Quick info (hide when Claude is not found to avoid confusion)
-			bool hideConfigInfo = (mcpClient.mcpType == McpTypes.ClaudeCode) && string.IsNullOrEmpty(ExecPath.ResolveClaude());
+			bool hideConfigInfo =
+				(mcpClient.mcpType == McpTypes.ClaudeCode && string.IsNullOrEmpty(ExecPath.ResolveClaude()))
+				|| ((mcpClient.mcpType != McpTypes.ClaudeCode) && string.IsNullOrEmpty(FindUvPath()));
 			if (!hideConfigInfo)
 			{
 				GUIStyle configInfoStyle = new GUIStyle(EditorStyles.miniLabel)
@@ -889,6 +944,7 @@ namespace UnityMcpBridge.Editor.Windows
             {
                 command = uvPath,
                 args = new[] { "--directory", pythonDir, "run", "server.py" },
+                type = "stdio",
             };
 
             JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
@@ -908,29 +964,41 @@ namespace UnityMcpBridge.Editor.Windows
             }
 
             // Parse the existing JSON while preserving all properties
-            dynamic existingConfig = JsonConvert.DeserializeObject(existingJson);
-            existingConfig ??= new Newtonsoft.Json.Linq.JObject();
+            dynamic existingConfig;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(existingJson))
+                {
+                    existingConfig = new Newtonsoft.Json.Linq.JObject();
+                }
+                else
+                {
+                    existingConfig = JsonConvert.DeserializeObject(existingJson) ?? new Newtonsoft.Json.Linq.JObject();
+                }
+            }
+            catch
+            {
+                // If user has partial/invalid JSON (e.g., mid-edit), start from a fresh object
+                if (!string.IsNullOrWhiteSpace(existingJson))
+                {
+                    UnityEngine.Debug.LogWarning("UnityMCP: VSCode mcp.json could not be parsed; rewriting servers block.");
+                }
+                existingConfig = new Newtonsoft.Json.Linq.JObject();
+            }
 
             // Handle different client types with a switch statement
             //Comments: Interestingly, VSCode has mcp.servers.unityMCP while others have mcpServers.unityMCP, which is why we need to prevent this
             switch (mcpClient?.mcpType)
             {
                 case McpTypes.VSCode:
-                    // VSCode specific configuration
-                    // Ensure mcp object exists
-                    if (existingConfig.mcp == null)
+                    // VSCode-specific configuration (top-level "servers")
+                    if (existingConfig.servers == null)
                     {
-                        existingConfig.mcp = new Newtonsoft.Json.Linq.JObject();
+                        existingConfig.servers = new Newtonsoft.Json.Linq.JObject();
                     }
 
-                    // Ensure mcp.servers object exists
-                    if (existingConfig.mcp.servers == null)
-                    {
-                        existingConfig.mcp.servers = new Newtonsoft.Json.Linq.JObject();
-                    }
-
-                    // Add/update UnityMCP server in VSCode settings
-                    existingConfig.mcp.servers.unityMCP =
+                    // Add/update UnityMCP server in VSCode mcp.json
+                    existingConfig.servers.unityMCP =
                         JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JToken>(
                             JsonConvert.SerializeObject(unityMCPConfig)
                         );
@@ -986,15 +1054,13 @@ namespace UnityMcpBridge.Editor.Windows
                     // Create VSCode-specific configuration with proper format
                     var vscodeConfig = new
                     {
-                        mcp = new
+                        servers = new
                         {
-                            servers = new
+                            unityMCP = new
                             {
-                                unityMCP = new
-                                {
-                                    command = "uv",
-                                    args = new[] { "--directory", pythonDir, "run", "server.py" }
-                                }
+                                command = "uv",
+                                args = new[] { "--directory", pythonDir, "run", "server.py" },
+                                type = "stdio"
                             }
                         }
                     };
@@ -1303,9 +1369,15 @@ namespace UnityMcpBridge.Editor.Windows
                     case McpTypes.VSCode:
                         dynamic config = JsonConvert.DeserializeObject(configJson);
                         
-                        if (config?.mcp?.servers?.unityMCP != null)
+                        // New schema: top-level servers
+                        if (config?.servers?.unityMCP != null)
                         {
-                            // Extract args from VSCode config format
+                            args = config.servers.unityMCP.args.ToObject<string[]>();
+                            configExists = true;
+                        }
+                        // Back-compat: legacy mcp.servers
+                        else if (config?.mcp?.servers?.unityMCP != null)
+                        {
                             args = config.mcp.servers.unityMCP.args.ToObject<string[]>();
                             configExists = true;
                         }

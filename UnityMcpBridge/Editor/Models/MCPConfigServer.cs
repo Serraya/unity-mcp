@@ -11,5 +11,9 @@ namespace UnityMcpBridge.Editor.Models
 
         [JsonProperty("args")]
         public string[] args;
+
+        // VSCode expects a transport type; default to stdio for compatibility
+        [JsonProperty("type", NullValueHandling = NullValueHandling.Ignore)]
+        public string type = "stdio";
     }
 }
