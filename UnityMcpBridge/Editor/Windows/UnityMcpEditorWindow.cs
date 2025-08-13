@@ -1585,6 +1585,8 @@ namespace UnityMcpBridge.Editor.Windows
                 var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
                 if (claudeClient != null)
                 {
+                    // Optimistically flip to NotConfigured; then verify
+                    claudeClient.SetStatus(McpStatus.NotConfigured);
                     CheckClaudeCodeConfiguration(claudeClient);
                 }
                 Repaint();
@@ -1593,6 +1595,12 @@ namespace UnityMcpBridge.Editor.Windows
             else
             {
                 UnityEngine.Debug.LogWarning($"Claude MCP removal failed: {stderr}\n{stdout}");
+                var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
+                if (claudeClient != null)
+                {
+                    CheckClaudeCodeConfiguration(claudeClient);
+                }
+                Repaint();
             }
         }
 
