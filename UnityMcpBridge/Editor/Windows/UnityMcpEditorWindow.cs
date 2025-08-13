@@ -1064,6 +1064,14 @@ namespace UnityMcpBridge.Editor.Windows
                             // Merge without replacing the existing command
                             if (mcpClient?.mcpType == McpTypes.VSCode)
                             {
+                                if (existingConfig.servers == null)
+                                {
+                                    existingConfig.servers = new Newtonsoft.Json.Linq.JObject();
+                                }
+                                if (existingConfig.servers.unityMCP == null)
+                                {
+                                    existingConfig.servers.unityMCP = new Newtonsoft.Json.Linq.JObject();
+                                }
                                 existingConfig.servers.unityMCP.args =
                                     JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JToken>(
                                         JsonConvert.SerializeObject(unityMCPConfig.args)
@@ -1071,6 +1079,14 @@ namespace UnityMcpBridge.Editor.Windows
                             }
                             else
                             {
+                                if (existingConfig.mcpServers == null)
+                                {
+                                    existingConfig.mcpServers = new Newtonsoft.Json.Linq.JObject();
+                                }
+                                if (existingConfig.mcpServers.unityMCP == null)
+                                {
+                                    existingConfig.mcpServers.unityMCP = new Newtonsoft.Json.Linq.JObject();
+                                }
                                 existingConfig.mcpServers.unityMCP.args =
                                     JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JToken>(
                                         JsonConvert.SerializeObject(unityMCPConfig.args)
@@ -1617,7 +1633,8 @@ namespace UnityMcpBridge.Editor.Windows
                     UnityEngine.Debug.Log($"Successfully removed MCP server: {serverName}");
                     break;
                 }
-                else if (!stderr.Contains("No MCP server found"))
+                else if (!string.IsNullOrEmpty(stderr) &&
+                         !stderr.Contains("No MCP server found", StringComparison.OrdinalIgnoreCase))
                 {
                     // If it's not a "not found" error, log it and stop trying
                     UnityEngine.Debug.LogWarning($"Error removing {serverName}: {stderr}");

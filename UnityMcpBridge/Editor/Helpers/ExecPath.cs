@@ -176,10 +176,16 @@ namespace UnityMcpBridge.Editor.Helpers
             stderr = string.Empty;
             try
             {
+                // Handle PowerShell scripts on Windows by invoking through powershell.exe
+                bool isPs1 = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
+                             file.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase);
+
                 var psi = new ProcessStartInfo
                 {
-                    FileName = file,
-                    Arguments = args,
+                    FileName = isPs1 ? "powershell.exe" : file,
+                    Arguments = isPs1
+                        ? $"-NoProfile -ExecutionPolicy Bypass -File \"{file}\" {args}".Trim()
+                        : args,
                     WorkingDirectory = string.IsNullOrEmpty(workingDir) ? Environment.CurrentDirectory : workingDir,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,

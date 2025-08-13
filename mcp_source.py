@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generic helper to switch the Unity MCP package source in a Unity project's
-Packages/manifest.json without embedding any personal paths.
+Packages/manifest.json.  This is useful for switching between upstream and local repos while working on the MCP.
 
 Usage:
   python mcp_source.py [--manifest /abs/path/to/manifest.json] [--repo /abs/path/to/unity-mcp] [--choice 1|2|3]
