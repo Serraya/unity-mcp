@@ -99,7 +99,9 @@ Unity MCP connects your tools using two components:
 
         **Note:** Without Roslyn, script validation falls back to basic structural checks. Roslyn enables full C# compiler diagnostics with precise error reporting.</details>
 
-### 🌟Step 1: Install the Unity Package (Bridge)🌟
+### 🌟Step 1: Install the Unity Package🌟
+
+### To install via Git URL
 
 1.  Open your Unity project.
 2.  Go to `Window > Package Manager`.
@@ -110,6 +112,12 @@ Unity MCP connects your tools using two components:
     ```
 5.  Click `Add`.
 6. The MCP Server should automatically be installed onto your machine as a result of this process.
+
+### To install via OpenUPM
+
+1.  Instal the [OpenUPM CLI](https://openupm.com/docs/getting-started-cli.html)
+2.  Open a terminal (PowerShell, Terminal, etc.) and navigate to your Unity project directory
+3.  Run `openupm add com.coplaydev.unity-mcp`
 
 **Note:** If you installed the MCP Server before Coplay's maintenance, you will need to uninstall the old package before re-installing the new one.
 
