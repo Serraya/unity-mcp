@@ -278,7 +278,6 @@ namespace UnityMcpBridge.Editor.Helpers
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty;
                 string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) ?? string.Empty;
                 string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty;
-                string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) ?? string.Empty; // optional fallback
 
                 // Fast path: resolve from PATH first
                 try
@@ -309,10 +308,8 @@ namespace UnityMcpBridge.Editor.Helpers
                 candidates = new[]
                 {
                     // Preferred: WinGet Links shims (stable entrypoints)
-                    // Per-user shim, then machine-wide shim
+                    // Per-user shim (LOCALAPPDATA) → machine-wide shim (Program Files\WinGet\Links)
                     Path.Combine(localAppData, "Microsoft", "WinGet", "Links", "uv.exe"),
-                    Path.Combine(programData,  "Microsoft", "WinGet", "Links", "uv.exe"),
-                    // ProgramFiles Links is uncommon; keep as low-priority fallback
                     Path.Combine(programFiles, "WinGet", "Links", "uv.exe"),
 
                     // Common per-user installs
