@@ -931,24 +931,41 @@ namespace UnityMcpBridge.Editor.Windows
             Repaint();
         }
 
-        private string WriteToConfig(string pythonDir, string configPath, McpClient mcpClient = null)
+		private static bool IsValidUv(string path)
+		{
+			return !string.IsNullOrEmpty(path)
+				&& System.IO.Path.IsPathRooted(path)
+				&& System.IO.File.Exists(path);
+		}
+
+		private static string ExtractDirectoryArg(string[] args)
+		{
+			if (args == null) return null;
+			for (int i = 0; i < args.Length - 1; i++)
+			{
+				if (string.Equals(args[i], "--directory", StringComparison.OrdinalIgnoreCase))
+				{
+					return args[i + 1];
+				}
+			}
+			return null;
+		}
+
+		private static bool ArgsEqual(string[] a, string[] b)
+		{
+			if (a == null || b == null) return a == b;
+			if (a.Length != b.Length) return false;
+			for (int i = 0; i < a.Length; i++)
+			{
+				if (!string.Equals(a[i], b[i], StringComparison.Ordinal)) return false;
+			}
+			return true;
+		}
+
+		private string WriteToConfig(string pythonDir, string configPath, McpClient mcpClient = null)
         {
-            string uvPath = FindUvPath();
-            if (uvPath == null)
-            {
-                return "UV package manager not found. Please install UV first.";
-            }
-            
-            // Create configuration object for unityMCP
-            McpConfigServer unityMCPConfig = new()
-            {
-                command = uvPath,
-                args = new[] { "--directory", pythonDir, "run", "server.py" },
-            };
-            if (mcpClient?.mcpType == McpTypes.VSCode)
-            {
-                unityMCPConfig.type = "stdio";
-            }
+			// 0) Respect explicit lock (hidden pref or UI toggle)
+			try { if (UnityEditor.EditorPrefs.GetBool("UnityMCP.LockCursorConfig", false)) return "Skipped (locked)"; } catch { }
 
             JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
 
@@ -989,123 +1006,83 @@ namespace UnityMcpBridge.Editor.Windows
                 existingConfig = new Newtonsoft.Json.Linq.JObject();
             }
 
-            // Handle different client types with a switch statement
-            //Comments: Interestingly, VSCode has mcp.servers.unityMCP while others have mcpServers.unityMCP, which is why we need to prevent this
-            switch (mcpClient?.mcpType)
-            {
-                case McpTypes.VSCode:
-                    // VSCode-specific configuration (top-level "servers")
-                    if (existingConfig.servers == null)
-                    {
-                        existingConfig.servers = new Newtonsoft.Json.Linq.JObject();
-                    }
+			// Determine existing entry references (command/args)
+			string existingCommand = null;
+			string[] existingArgs = null;
+			bool isVSCode = (mcpClient?.mcpType == McpTypes.VSCode);
+			try
+			{
+				if (isVSCode)
+				{
+					existingCommand = existingConfig?.servers?.unityMCP?.command?.ToString();
+					existingArgs = existingConfig?.servers?.unityMCP?.args?.ToObject<string[]>();
+				}
+				else
+				{
+					existingCommand = existingConfig?.mcpServers?.unityMCP?.command?.ToString();
+					existingArgs = existingConfig?.mcpServers?.unityMCP?.args?.ToObject<string[]>();
+				}
+			}
+			catch { }
 
-                    // Add/update UnityMCP server in VSCode mcp.json
-                    existingConfig.servers.unityMCP =
-                        JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JToken>(
-                            JsonConvert.SerializeObject(unityMCPConfig)
-                        );
-                    break;
+			// 1) Start from existing, only fill gaps
+			string uvPath = IsValidUv(existingCommand) ? existingCommand : FindUvPath();
+			if (uvPath == null) return "UV package manager not found. Please install UV first.";
 
-                default:
-                    // Standard MCP configuration (Claude Desktop, Cursor, etc.)
-                    // Ensure mcpServers object exists
-                    if (existingConfig.mcpServers == null)
-                    {
-                        existingConfig.mcpServers = new Newtonsoft.Json.Linq.JObject();
-                    }
+			string serverSrc = ExtractDirectoryArg(existingArgs);
+			bool serverValid = !string.IsNullOrEmpty(serverSrc)
+				&& System.IO.File.Exists(System.IO.Path.Combine(serverSrc, "server.py"));
+			if (!serverValid)
+			{
+				serverSrc = ResolveServerSrc();
+			}
 
-                    // Add/update UnityMCP server in standard MCP settings
-                    existingConfig.mcpServers.unityMCP =
-                        JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JToken>(
-                            JsonConvert.SerializeObject(unityMCPConfig)
-                        );
-                    break;
-            }
+			// Hard-block PackageCache on Windows unless dev override is set
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+				&& serverSrc.IndexOf(@"\Library\PackageCache\", StringComparison.OrdinalIgnoreCase) >= 0
+				&& !UnityEditor.EditorPrefs.GetBool("UnityMCP.UseEmbeddedServer", false))
+			{
+				serverSrc = ServerInstaller.GetServerPath();
+			}
 
-            // If config already has a working absolute uv path, avoid rewriting it on refresh
-            try
-            {
-                if (mcpClient?.mcpType != McpTypes.ClaudeCode)
-                {
-                    // Inspect existing command for stability (Windows absolute path that exists)
-                    string existingCommand = null;
-                    if (mcpClient?.mcpType == McpTypes.VSCode)
-                    {
-                        existingCommand = existingConfig?.servers?.unityMCP?.command?.ToString();
-                    }
-                    else
-                    {
-                        existingCommand = existingConfig?.mcpServers?.unityMCP?.command?.ToString();
-                    }
+			// 2) Canonical args order
+			var newArgs = new[] { "run", "--directory", serverSrc, "server.py" };
 
-                    if (!string.IsNullOrEmpty(existingCommand))
-                    {
-                        bool keep = false;
-                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                        {
-                            // Consider absolute, existing paths as stable; prefer WinGet Links
-                            if (Path.IsPathRooted(existingCommand) && File.Exists(existingCommand))
-                            {
-                                keep = true;
-                            }
-                        }
-                        else
-                        {
-                            // On Unix, keep absolute existing path as well
-                            if (Path.IsPathRooted(existingCommand) && File.Exists(existingCommand))
-                            {
-                                keep = true;
-                            }
-                        }
+			// 3) Only write if changed
+			bool changed = !string.Equals(existingCommand, uvPath, StringComparison.Ordinal)
+				|| !ArgsEqual(existingArgs, newArgs);
+			if (!changed)
+			{
+				return "Configured successfully"; // nothing to do
+			}
 
-                        if (keep)
-                        {
-                            // Merge without replacing the existing command
-                            if (mcpClient?.mcpType == McpTypes.VSCode)
-                            {
-                                if (existingConfig.servers == null)
-                                {
-                                    existingConfig.servers = new Newtonsoft.Json.Linq.JObject();
-                                }
-                                if (existingConfig.servers.unityMCP == null)
-                                {
-                                    existingConfig.servers.unityMCP = new Newtonsoft.Json.Linq.JObject();
-                                }
-                                existingConfig.servers.unityMCP.args =
-                                    JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JToken>(
-                                        JsonConvert.SerializeObject(unityMCPConfig.args)
-                                    );
-                            }
-                            else
-                            {
-                                if (existingConfig.mcpServers == null)
-                                {
-                                    existingConfig.mcpServers = new Newtonsoft.Json.Linq.JObject();
-                                }
-                                if (existingConfig.mcpServers.unityMCP == null)
-                                {
-                                    existingConfig.mcpServers.unityMCP = new Newtonsoft.Json.Linq.JObject();
-                                }
-                                existingConfig.mcpServers.unityMCP.args =
-                                    JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JToken>(
-                                        JsonConvert.SerializeObject(unityMCPConfig.args)
-                                    );
-                            }
-                            string mergedKeep = JsonConvert.SerializeObject(existingConfig, jsonSettings);
-                            File.WriteAllText(configPath, mergedKeep);
-                            return "Configured successfully";
-                        }
-                    }
-                }
-            }
-            catch { /* fall back to normal write */ }
+			// 4) Ensure containers exist and write back minimal changes
+			if (isVSCode)
+			{
+				if (existingConfig.servers == null) existingConfig.servers = new Newtonsoft.Json.Linq.JObject();
+				if (existingConfig.servers.unityMCP == null) existingConfig.servers.unityMCP = new Newtonsoft.Json.Linq.JObject();
+				existingConfig.servers.unityMCP.command = uvPath;
+				existingConfig.servers.unityMCP.args = Newtonsoft.Json.Linq.JArray.FromObject(newArgs);
+				existingConfig.servers.unityMCP.type = "stdio";
+			}
+			else
+			{
+				if (existingConfig.mcpServers == null) existingConfig.mcpServers = new Newtonsoft.Json.Linq.JObject();
+				if (existingConfig.mcpServers.unityMCP == null) existingConfig.mcpServers.unityMCP = new Newtonsoft.Json.Linq.JObject();
+				existingConfig.mcpServers.unityMCP.command = uvPath;
+				existingConfig.mcpServers.unityMCP.args = Newtonsoft.Json.Linq.JArray.FromObject(newArgs);
+			}
 
-            // Write the merged configuration back to file
-            string mergedJson = JsonConvert.SerializeObject(existingConfig, jsonSettings);
-            File.WriteAllText(configPath, mergedJson);
+			string mergedJson = JsonConvert.SerializeObject(existingConfig, jsonSettings);
+			File.WriteAllText(configPath, mergedJson);
+			try
+			{
+				if (IsValidUv(uvPath)) UnityEditor.EditorPrefs.SetString("UnityMCP.UvPath", uvPath);
+				UnityEditor.EditorPrefs.SetString("UnityMCP.ServerSrc", serverSrc);
+			}
+			catch { }
 
-            return "Configured successfully";
+			return "Configured successfully";
         }
 
         private void ShowManualConfigurationInstructions(
@@ -1182,9 +1159,38 @@ namespace UnityMcpBridge.Editor.Windows
             ManualConfigEditorWindow.ShowWindow(configPath, manualConfigJson, mcpClient);
         }
 
-        private string FindPackagePythonDirectory()
+		private static string ResolveServerSrc()
+		{
+			try
+			{
+				string remembered = UnityEditor.EditorPrefs.GetString("UnityMCP.ServerSrc", string.Empty);
+				if (!string.IsNullOrEmpty(remembered) && File.Exists(Path.Combine(remembered, "server.py")))
+				{
+					return remembered;
+				}
+
+				ServerInstaller.EnsureServerInstalled();
+				string installed = ServerInstaller.GetServerPath();
+				if (File.Exists(Path.Combine(installed, "server.py")))
+				{
+					return installed;
+				}
+
+				bool useEmbedded = UnityEditor.EditorPrefs.GetBool("UnityMCP.UseEmbeddedServer", false);
+				if (useEmbedded && ServerPathResolver.TryFindEmbeddedServerSource(out string embedded)
+					&& File.Exists(Path.Combine(embedded, "server.py")))
+				{
+					return embedded;
+				}
+
+				return installed;
+			}
+			catch { return ServerInstaller.GetServerPath(); }
+		}
+
+		private string FindPackagePythonDirectory()
         {
-            string pythonDir = ServerInstaller.GetServerPath();
+			string pythonDir = ResolveServerSrc();
 
             try
             {
@@ -1211,17 +1217,25 @@ namespace UnityMcpBridge.Editor.Windows
                     }
                 }
 
-                // Resolve via shared helper (handles local registry and older fallback)
-                if (ServerPathResolver.TryFindEmbeddedServerSource(out string embedded))
-                {
-                    return embedded;
-                }
+				// Resolve via shared helper (handles local registry and older fallback) only if dev override on
+				if (UnityEditor.EditorPrefs.GetBool("UnityMCP.UseEmbeddedServer", false))
+				{
+					if (ServerPathResolver.TryFindEmbeddedServerSource(out string embedded))
+					{
+						return embedded;
+					}
+				}
 
-                // If still not found, return the placeholder path
-                if (debugLogsEnabled)
-                {
-                    UnityEngine.Debug.LogWarning("Could not find Python directory, using placeholder path");
-                }
+				// Log only if the resolved path does not actually contain server.py
+				if (debugLogsEnabled)
+				{
+					bool hasServer = false;
+					try { hasServer = File.Exists(Path.Combine(pythonDir, "server.py")); } catch { }
+					if (!hasServer)
+					{
+						UnityEngine.Debug.LogWarning("Could not find Python directory with server.py; falling back to installed path");
+					}
+				}
             }
             catch (Exception e)
             {
