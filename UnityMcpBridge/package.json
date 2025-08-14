@@ -1,6 +1,6 @@
 {
   "name": "com.coplaydev.unity-mcp",
-  "version": "2.1.2",
+  "version": "2.1.1",
   "displayName": "Unity MCP",
   "description": "A bridge that connects an LLM to Unity via the MCP (Model Context Protocol). This allows MCP Clients like Claude Desktop or Cursor to directly control your Unity Editor.",
   "unity": "2021.3",
