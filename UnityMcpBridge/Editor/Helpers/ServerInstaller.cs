@@ -88,7 +88,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 // Use Application Support for a stable, user-writable location
                 return Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "UnityMCP"
+                    RootFolder
                 );
             }
             throw new Exception("Unsupported operating system.");
@@ -126,6 +126,7 @@ namespace UnityMcpBridge.Editor.Helpers
             return ServerPathResolver.TryFindEmbeddedServerSource(out srcPath);
         }
 
+        private static readonly string[] _skipDirs = { ".venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".git" };
         private static void CopyDirectoryRecursive(string sourceDir, string destinationDir)
         {
             Directory.CreateDirectory(destinationDir);
@@ -140,8 +141,15 @@ namespace UnityMcpBridge.Editor.Helpers
             foreach (string dirPath in Directory.GetDirectories(sourceDir))
             {
                 string dirName = Path.GetFileName(dirPath);
+                foreach (var skip in _skipDirs)
+                {
+                    if (dirName.Equals(skip, StringComparison.OrdinalIgnoreCase))
+                        goto NextDir;
+                }
+                try { if ((File.GetAttributes(dirPath) & FileAttributes.ReparsePoint) != 0) continue; } catch { }
                 string destSubDir = Path.Combine(destinationDir, dirName);
                 CopyDirectoryRecursive(dirPath, destSubDir);
+            NextDir: ;
             }
         }
 
@@ -270,7 +278,6 @@ namespace UnityMcpBridge.Editor.Helpers
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty;
                 string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) ?? string.Empty;
                 string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty;
-                string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) ?? string.Empty; // optional fallback
 
                 // Fast path: resolve from PATH first
                 try
@@ -301,10 +308,9 @@ namespace UnityMcpBridge.Editor.Helpers
                 candidates = new[]
                 {
                     // Preferred: WinGet Links shims (stable entrypoints)
+                    // Per-user shim (LOCALAPPDATA) → machine-wide shim (Program Files\WinGet\Links)
                     Path.Combine(localAppData, "Microsoft", "WinGet", "Links", "uv.exe"),
                     Path.Combine(programFiles, "WinGet", "Links", "uv.exe"),
-                    // Optional low-priority fallback for atypical images
-                    Path.Combine(programData, "Microsoft", "WinGet", "Links", "uv.exe"),
 
                     // Common per-user installs
                     Path.Combine(localAppData, @"Programs\Python\Python313\Scripts\uv.exe"),
