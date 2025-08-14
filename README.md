@@ -64,7 +64,6 @@ Unity MCP connects your tools using two components:
 
 ### Prerequisites
 
-  *   **Git CLI:** For cloning the server code. [Download Git](https://git-scm.com/downloads)
   *   **Python:** Version 3.12 or newer. [Download Python](https://www.python.org/downloads/)
   *   **Unity Hub & Editor:** Version 2020.3 LTS or newer. [Download Unity](https://unity.com/download)
   *   **uv (Python package manager):**
@@ -100,7 +99,7 @@ Unity MCP connects your tools using two components:
 
         **Note:** Without Roslyn, script validation falls back to basic structural checks. Roslyn enables full C# compiler diagnostics with precise error reporting.</details>
 
-### Step 1: Install the Unity Package (Bridge)
+### 🌟Step 1: Install the Unity Package (Bridge)🌟
 
 1.  Open your Unity project.
 2.  Go to `Window > Package Manager`.
@@ -126,11 +125,11 @@ Connect your MCP Client (Claude, Cursor, etc.) to the Python server you installe
 2.  Click `Auto-Setup`.
 3.  Look for a green status indicator 🟢 and "Connected ✓". *(This attempts to modify the MCP Client\'s config file automatically).* 
 
-Client-specific notes
+<details><summary><strong>Client-specific troubleshooting</strong></summary>
 
-- **VSCode**: uses `Code/User/mcp.json` with top-level `servers.unityMCP` and `"type": "stdio"`. On Windows, Unity MCP writes an absolute `uv.exe` (prefers WinGet Links shim) to avoid PATH issues.
-- **Cursor / Windsurf**: if `uv` is missing, the Unity MCP window shows "uv Not Found" with a quick [HELP] link and a "Choose UV Install Location" button.
-- **Claude Code**: if `claude` isn't found, the window shows "Claude Not Found" with [HELP] and a "Choose Claude Location" button. Unregister now updates the UI immediately.
+  - **VSCode**: uses `Code/User/mcp.json` with top-level `servers.unityMCP` and `"type": "stdio"`. On Windows, Unity MCP writes an absolute `uv.exe` (prefers WinGet Links shim) to avoid PATH issues.
+  - **Cursor / Windsurf** [(**help link**)](https://github.com/CoplayDev/unity-mcp/wiki/1.-Fix-Unity-MCP-and-Cursor,-VSCode-&-Windsurf): if `uv` is missing, the Unity MCP window shows "uv Not Found" with a quick [HELP] link and a "Choose UV Install Location" button.
+  - **Claude Code** [(**help link**)](https://github.com/CoplayDev/unity-mcp/wiki/2.-Fix-Unity-MCP-and-Claude-Code): if `claude` isn't found, the window shows "Claude Not Found" with [HELP] and a "Choose Claude Location" button. Unregister now updates the UI immediately.</details>
 
 
 **Option B: Manual Configuration**
