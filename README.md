@@ -101,7 +101,7 @@ Unity MCP connects your tools using two components:
 
 ### 🌟Step 1: Install the Unity Package🌟
 
-### To install via Git URL
+#### To install via Git URL
 
 1.  Open your Unity project.
 2.  Go to `Window > Package Manager`.
@@ -113,7 +113,7 @@ Unity MCP connects your tools using two components:
 5.  Click `Add`.
 6. The MCP Server should automatically be installed onto your machine as a result of this process.
 
-### To install via OpenUPM
+#### To install via OpenUPM
 
 1.  Instal the [OpenUPM CLI](https://openupm.com/docs/getting-started-cli.html)
 2.  Open a terminal (PowerShell, Terminal, etc.) and navigate to your Unity project directory
