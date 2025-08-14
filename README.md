@@ -65,7 +65,7 @@ Unity MCP connects your tools using two components:
 ### Prerequisites
 
   *   **Python:** Version 3.12 or newer. [Download Python](https://www.python.org/downloads/)
-  *   **Unity Hub & Editor:** Version 2020.3 LTS or newer. [Download Unity](https://unity.com/download)
+  *   **Unity Hub & Editor:** Version 2021.3 LTS or newer. [Download Unity](https://unity.com/download)
   *   **uv (Python package manager):**
       ```bash
       pip install uv
