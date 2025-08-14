@@ -630,15 +630,29 @@ namespace UnityMcpBridge.Editor.Windows
                 if (unity == null) return false;
                 var args = unity.args;
                 if (args == null) return false;
-                foreach (var a in args)
+                // Prefer exact extraction of the --directory value and compare normalized paths
+                string[] strArgs = ((System.Collections.Generic.IEnumerable<object>)args)
+                    .Select(x => x?.ToString() ?? string.Empty)
+                    .ToArray();
+                string dir = ExtractDirectoryArg(strArgs);
+                if (string.IsNullOrEmpty(dir)) return false;
+                return PathsEqual(dir, pythonDir);
+            }
+            catch { return false; }
+        }
+
+        private static bool PathsEqual(string a, string b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            try
+            {
+                string na = System.IO.Path.GetFullPath(a.Trim());
+                string nb = System.IO.Path.GetFullPath(b.Trim());
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
                 {
-                    string s = (string)a;
-                    if (!string.IsNullOrEmpty(s) && s.Contains(pythonDir, StringComparison.Ordinal))
-                    {
-                        return true;
-                    }
+                    return string.Equals(na, nb, StringComparison.OrdinalIgnoreCase);
                 }
-                return false;
+                return string.Equals(na, nb, StringComparison.Ordinal);
             }
             catch { return false; }
         }
@@ -883,7 +897,7 @@ namespace UnityMcpBridge.Editor.Windows
                                     unityMCP = new
                                     {
                                         command = uvPath,
-                                        args = new[] { "--directory", pythonDir, "run", "server.py" }
+                                        args = new[] { "run", "--directory", pythonDir, "server.py" }
                                     }
                                 }
                             }
@@ -936,6 +950,30 @@ namespace UnityMcpBridge.Editor.Windows
 			return !string.IsNullOrEmpty(path)
 				&& System.IO.Path.IsPathRooted(path)
 				&& System.IO.File.Exists(path);
+		}
+
+		private static bool ValidateUvBinarySafe(string path)
+		{
+			try
+			{
+				if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return false;
+				var psi = new System.Diagnostics.ProcessStartInfo
+				{
+					FileName = path,
+					Arguments = "--version",
+					UseShellExecute = false,
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					CreateNoWindow = true
+				};
+				using var p = System.Diagnostics.Process.Start(psi);
+				if (p == null) return false;
+				if (!p.WaitForExit(3000)) { try { p.Kill(); } catch { } return false; }
+				if (p.ExitCode != 0) return false;
+				string output = p.StandardOutput.ReadToEnd().Trim();
+				return output.StartsWith("uv ");
+			}
+			catch { return false; }
 		}
 
 		private static string ExtractDirectoryArg(string[] args)
@@ -1026,7 +1064,7 @@ namespace UnityMcpBridge.Editor.Windows
 			catch { }
 
 			// 1) Start from existing, only fill gaps
-			string uvPath = IsValidUv(existingCommand) ? existingCommand : FindUvPath();
+			string uvPath = (ValidateUvBinarySafe(existingCommand) ? existingCommand : FindUvPath());
 			if (uvPath == null) return "UV package manager not found. Please install UV first.";
 
 			string serverSrc = ExtractDirectoryArg(existingArgs);
@@ -1074,7 +1112,12 @@ namespace UnityMcpBridge.Editor.Windows
 			}
 
 			string mergedJson = JsonConvert.SerializeObject(existingConfig, jsonSettings);
-			File.WriteAllText(configPath, mergedJson);
+			string tmp = configPath + ".tmp";
+			System.IO.File.WriteAllText(tmp, mergedJson, System.Text.Encoding.UTF8);
+			if (System.IO.File.Exists(configPath))
+				System.IO.File.Replace(tmp, configPath, null);
+			else
+				System.IO.File.Move(tmp, configPath);
 			try
 			{
 				if (IsValidUv(uvPath)) UnityEditor.EditorPrefs.SetString("UnityMCP.UvPath", uvPath);
@@ -1124,7 +1167,7 @@ namespace UnityMcpBridge.Editor.Windows
 							unityMCP = new
 							{
 								command = uvPathManual,
-								args = new[] { "--directory", pythonDir, "run", "server.py" },
+								args = new[] { "run", "--directory", pythonDir, "server.py" },
 								type = "stdio"
 							}
 						}
@@ -1148,7 +1191,7 @@ namespace UnityMcpBridge.Editor.Windows
                             unityMCP = new McpConfigServer
                             {
                                 command = uvPath,
-                                args = new[] { "--directory", pythonDir, "run", "server.py" },
+                                args = new[] { "run", "--directory", pythonDir, "server.py" },
                             },
                         },
                     };
@@ -1368,7 +1411,7 @@ namespace UnityMcpBridge.Editor.Windows
                     unityMCP = new McpConfigServer
                     {
                         command = uvPath,
-                        args = new[] { "--directory", pythonDir, "run", "server.py" },
+                        args = new[] { "run", "--directory", pythonDir, "server.py" },
                     },
                 },
             };

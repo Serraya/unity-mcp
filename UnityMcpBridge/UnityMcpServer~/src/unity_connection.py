@@ -9,6 +9,7 @@ import errno
 from typing import Dict, Any
 from config import config
 from port_discovery import PortDiscovery
+import struct
 
 # Configure logging using settings from config
 logging.basicConfig(
@@ -53,60 +54,52 @@ class UnityConnection:
             finally:
                 self.sock = None
 
-    def receive_full_response(self, sock, buffer_size=config.buffer_size) -> bytes:
-        """Receive a complete response from Unity, handling chunked data."""
-        chunks = []
-        sock.settimeout(config.connection_timeout)  # Use timeout from config
+    def receive_full_response(self, sock) -> bytes:
+        """Receive a complete response from Unity using 8-byte length-prefixed framing, with legacy fallback."""
+        sock.settimeout(config.connection_timeout)
+        # Try framed first
         try:
-            while True:
-                chunk = sock.recv(buffer_size)
-                if not chunk:
-                    if not chunks:
-                        raise Exception("Connection closed before receiving data")
-                    break
-                chunks.append(chunk)
-                
-                # Process the data received so far
+            header = self._read_exact(sock, 8)
+            (payload_len,) = struct.unpack('>Q', header)
+            if 0 < payload_len <= (64 * 1024 * 1024):
+                return self._read_exact(sock, payload_len)
+            # Implausible length -> treat as legacy stream; fall through
+            legacy_prefix = header
+        except Exception:
+            # Could not read header — treat as legacy
+            legacy_prefix = b''
+
+        # Legacy: read until parses as JSON or times out
+        chunks: list[bytes] = []
+        if legacy_prefix:
+            chunks.append(legacy_prefix)
+        while True:
+            chunk = sock.recv(config.buffer_size)
+            if not chunk:
                 data = b''.join(chunks)
-                decoded_data = data.decode('utf-8')
-                
-                # Check if we've received a complete response
-                try:
-                    # Special case for ping-pong
-                    if decoded_data.strip().startswith('{"status":"success","result":{"message":"pong"'):
-                        logger.debug("Received ping response")
-                        return data
-                    
-                    # Handle escaped quotes in the content
-                    if '"content":' in decoded_data:
-                        # Find the content field and its value
-                        content_start = decoded_data.find('"content":') + 9
-                        content_end = decoded_data.rfind('"', content_start)
-                        if content_end > content_start:
-                            # Replace escaped quotes in content with regular quotes
-                            content = decoded_data[content_start:content_end]
-                            content = content.replace('\\"', '"')
-                            decoded_data = decoded_data[:content_start] + content + decoded_data[content_end:]
-                    
-                    # Validate JSON format
-                    json.loads(decoded_data)
-                    
-                    # If we get here, we have valid JSON
-                    logger.info(f"Received complete response ({len(data)} bytes)")
+                if not data:
+                    raise Exception("Connection closed before receiving data")
+                return data
+            chunks.append(chunk)
+            data = b''.join(chunks)
+            try:
+                if data.strip() == b'ping':
                     return data
-                except json.JSONDecodeError:
-                    # We haven't received a complete valid JSON response yet
-                    continue
-                except Exception as e:
-                    logger.warning(f"Error processing response chunk: {str(e)}")
-                    # Continue reading more chunks as this might not be the complete response
-                    continue
-        except socket.timeout:
-            logger.warning("Socket timeout during receive")
-            raise Exception("Timeout receiving Unity response")
-        except Exception as e:
-            logger.error(f"Error during receive: {str(e)}")
-            raise
+                json.loads(data.decode('utf-8'))
+                return data
+            except Exception:
+                continue
+
+    def _read_exact(self, sock: socket.socket, n: int) -> bytes:
+        buf = bytearray(n)
+        view = memoryview(buf)
+        read = 0
+        while read < n:
+            r = sock.recv_into(view[read:])
+            if r == 0:
+                raise Exception("Connection closed during read")
+            read += r
+        return bytes(buf)
 
     def send_command(self, command_type: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """Send a command with retry/backoff and port rediscovery. Pings only when requested."""
@@ -160,13 +153,14 @@ class UnityConnection:
 
                 # Build payload
                 if command_type == 'ping':
-                    payload = b'ping'
+                    body = b'ping'
                 else:
                     command = {"type": command_type, "params": params or {}}
-                    payload = json.dumps(command, ensure_ascii=False).encode('utf-8')
+                    body = json.dumps(command, ensure_ascii=False).encode('utf-8')
 
-                # Send
-                self.sock.sendall(payload)
+                # Send with 8-byte big-endian length prefix for robustness
+                header = struct.pack('>Q', len(body))
+                self.sock.sendall(header + body)
 
                 # During retry bursts use a short receive timeout
                 if attempt > 0 and last_short_timeout is None:

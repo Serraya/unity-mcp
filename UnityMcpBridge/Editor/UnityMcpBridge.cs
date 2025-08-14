@@ -395,22 +395,80 @@ namespace UnityMcpBridge.Editor
             using (client)
             using (NetworkStream stream = client.GetStream())
             {
+                const int MaxMessageBytes = 64 * 1024 * 1024; // 64 MB safety cap
                 byte[] buffer = new byte[8192];
                 while (isRunning)
                 {
                     try
                     {
-                        int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                        if (bytesRead == 0)
+                        // Read message with optional length prefix (8-byte big-endian)
+                        bool usedFraming = false;
+                        string commandText = null;
+
+                        // First, attempt to read an 8-byte header
+                        byte[] header = new byte[8];
+                        int headerFilled = 0;
+                        while (headerFilled < 8)
                         {
-                            break; // Client disconnected
+                            int r = await stream.ReadAsync(header, headerFilled, 8 - headerFilled);
+                            if (r == 0)
+                            {
+                                // Disconnected
+                                return;
+                            }
+                            headerFilled += r;
                         }
 
-                        string commandText = System.Text.Encoding.UTF8.GetString(
-                            buffer,
-                            0,
-                            bytesRead
-                        );
+                        // Interpret header as big-endian payload length, with plausibility check
+                        ulong payloadLen = ReadUInt64BigEndian(header);
+                        if (payloadLen > 0 && payloadLen <= (ulong)MaxMessageBytes)
+                        {
+                            // Framed message path
+                            usedFraming = true;
+                            byte[] payload = await ReadExactAsync(stream, (int)payloadLen);
+                            commandText = System.Text.Encoding.UTF8.GetString(payload);
+                        }
+                        else
+                        {
+                            // Legacy path: treat header bytes as the beginning of a JSON/plain message and read until we have a full JSON
+                            usedFraming = false;
+                            using var ms = new MemoryStream();
+                            ms.Write(header, 0, header.Length);
+
+                            // Read available data in chunks; stop when we have valid JSON or ping, or when no more data available for now
+                            while (true)
+                            {
+                                // If we already have enough text, try to interpret
+                                string currentText = System.Text.Encoding.UTF8.GetString(ms.ToArray());
+                                string trimmed = currentText.Trim();
+                                if (trimmed == "ping")
+                                {
+                                    commandText = trimmed;
+                                    break;
+                                }
+                                if (IsValidJson(trimmed))
+                                {
+                                    commandText = trimmed;
+                                    break;
+                                }
+
+                                // Read next chunk
+                                int r = await stream.ReadAsync(buffer, 0, buffer.Length);
+                                if (r == 0)
+                                {
+                                    // Disconnected mid-message; fall back to whatever we have
+                                    commandText = currentText;
+                                    break;
+                                }
+                                ms.Write(buffer, 0, r);
+
+                                if (ms.Length > MaxMessageBytes)
+                                {
+                                    throw new IOException($"Incoming message exceeded {MaxMessageBytes} bytes cap");
+                                }
+                            }
+                        }
+
                         string commandId = Guid.NewGuid().ToString();
                         TaskCompletionSource<string> tcs = new();
 
@@ -422,6 +480,14 @@ namespace UnityMcpBridge.Editor
                                 /*lang=json,strict*/
                                 "{\"status\":\"success\",\"result\":{\"message\":\"pong\"}}"
                             );
+
+                            if (usedFraming)
+                            {
+                                // Mirror framing for response
+                                byte[] outHeader = new byte[8];
+                                WriteUInt64BigEndian(outHeader, (ulong)pingResponseBytes.Length);
+                                await stream.WriteAsync(outHeader, 0, outHeader.Length);
+                            }
                             await stream.WriteAsync(pingResponseBytes, 0, pingResponseBytes.Length);
                             continue;
                         }
@@ -433,6 +499,12 @@ namespace UnityMcpBridge.Editor
 
                         string response = await tcs.Task;
                         byte[] responseBytes = System.Text.Encoding.UTF8.GetBytes(response);
+                        if (usedFraming)
+                        {
+                            byte[] outHeader = new byte[8];
+                            WriteUInt64BigEndian(outHeader, (ulong)responseBytes.Length);
+                            await stream.WriteAsync(outHeader, 0, outHeader.Length);
+                        }
                         await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
                     }
                     catch (Exception ex)
@@ -442,6 +514,55 @@ namespace UnityMcpBridge.Editor
                     }
                 }
             }
+        }
+
+        // Read exactly count bytes or throw if stream closes prematurely
+        private static async Task<byte[]> ReadExactAsync(NetworkStream stream, int count)
+        {
+            byte[] data = new byte[count];
+            int offset = 0;
+            while (offset < count)
+            {
+                int r = await stream.ReadAsync(data, offset, count - offset);
+                if (r == 0)
+                {
+                    throw new IOException("Connection closed before reading expected bytes");
+                }
+                offset += r;
+            }
+            return data;
+        }
+
+        private static ulong ReadUInt64BigEndian(byte[] buffer)
+        {
+            if (buffer == null || buffer.Length < 8)
+            {
+                return 0UL;
+            }
+            return ((ulong)buffer[0] << 56)
+                 | ((ulong)buffer[1] << 48)
+                 | ((ulong)buffer[2] << 40)
+                 | ((ulong)buffer[3] << 32)
+                 | ((ulong)buffer[4] << 24)
+                 | ((ulong)buffer[5] << 16)
+                 | ((ulong)buffer[6] << 8)
+                 | buffer[7];
+        }
+
+        private static void WriteUInt64BigEndian(byte[] dest, ulong value)
+        {
+            if (dest == null || dest.Length < 8)
+            {
+                throw new ArgumentException("Destination buffer too small for UInt64");
+            }
+            dest[0] = (byte)(value >> 56);
+            dest[1] = (byte)(value >> 48);
+            dest[2] = (byte)(value >> 40);
+            dest[3] = (byte)(value >> 32);
+            dest[4] = (byte)(value >> 24);
+            dest[5] = (byte)(value >> 16);
+            dest[6] = (byte)(value >> 8);
+            dest[7] = (byte)(value);
         }
 
         private static void ProcessCommands()
