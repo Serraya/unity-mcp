@@ -67,23 +67,6 @@ namespace MCPForUnity.Editor.Helpers
                                            || (!string.IsNullOrEmpty(embeddedVer) && CompareSemverSafe(legacyVer, embeddedVer) < 0);
                         if (legacyOlder)
                         {
-                            // If referenced, attempt to rewire known configs (EditorPrefs, Cursor) to canonical
-                            bool stillRef = IsPathPossiblyReferencedByPrefsOrKnownConfigs(legacySrc);
-                            if (stillRef)
-                            {
-                                bool rewired = TryRewriteKnownConfigsToCanonical(legacySrc, destSrc);
-                                if (rewired)
-                                {
-                                    McpLog.Info($"Rewired configs from legacy '{legacySrc}' to canonical '{destSrc}'.", always: false);
-                                }
-                                stillRef = IsPathPossiblyReferencedByPrefsOrKnownConfigs(legacySrc);
-                            }
-                            // If still referenced after rewrite attempts, skip deletion
-                            if (stillRef)
-                            {
-                                McpLog.Info($"Skipping removal of legacy server at '{legacyRoot}' (still referenced).", always: false);
-                                continue;
-                            }
                             TryKillUvForPath(legacySrc);
                             try
                             {
@@ -134,24 +117,20 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         private static string GetSaveLocation()
         {
-            // Prefer Unity's platform to avoid RuntimeInformation quirks under Mono/macOS
+            // Prefer Unity's platform first (more reliable under Mono/macOS), then fallback
             try
             {
                 if (Application.platform == RuntimePlatform.OSXEditor)
                 {
                     string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
                     string appSupport = Path.Combine(home, "Library", "Application Support");
-                    string path = Path.Combine(appSupport, RootFolder);
-                    McpLog.Info($"Resolved canonical install root (macOS): {path}", always: false);
-                    return path;
+                    return Path.Combine(appSupport, RootFolder);
                 }
                 if (Application.platform == RuntimePlatform.WindowsEditor)
                 {
                     var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
                                        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, "AppData", "Local");
-                    string path = Path.Combine(localAppData, RootFolder);
-                    McpLog.Info($"Resolved canonical install root (Windows): {path}", always: false);
-                    return path;
+                    return Path.Combine(localAppData, RootFolder);
                 }
                 if (Application.platform == RuntimePlatform.LinuxEditor)
                 {
@@ -160,19 +139,12 @@ namespace MCPForUnity.Editor.Helpers
                     {
                         xdg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, ".local", "share");
                     }
-                    string path = Path.Combine(xdg, RootFolder);
-                    McpLog.Info($"Resolved canonical install root (Linux): {path}", always: false);
-                    return path;
+                    return Path.Combine(xdg, RootFolder);
                 }
             }
             catch { }
 
-            // Fallback to RuntimeInformation if Application.platform is unavailable
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
-                return Path.Combine(home, "Library", "Application Support", RootFolder);
-            }
+            // Fallback to RuntimeInformation
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
@@ -182,8 +154,16 @@ namespace MCPForUnity.Editor.Helpers
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
-                if (string.IsNullOrEmpty(xdg)) xdg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, ".local", "share");
+                if (string.IsNullOrEmpty(xdg))
+                {
+                    xdg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, ".local", "share");
+                }
                 return Path.Combine(xdg, RootFolder);
+            }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
+                return Path.Combine(home, "Library", "Application Support", RootFolder);
             }
             throw new Exception("Unsupported operating system.");
         }
@@ -297,200 +277,6 @@ namespace MCPForUnity.Editor.Helpers
             catch { return false; }
         }
 
-        private static bool IsPathPossiblyReferencedByPrefsOrKnownConfigs(string serverSrcPath)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(serverSrcPath)) return false;
-
-                // EditorPrefs overrides
-                try
-                {
-                    string prefServerSrc = EditorPrefs.GetString("MCPForUnity.ServerSrc", string.Empty) ?? string.Empty;
-                    if (!string.IsNullOrEmpty(prefServerSrc) && PathsEqualSafe(prefServerSrc, serverSrcPath)) return true;
-
-                    string prefOverride = EditorPrefs.GetString("MCPForUnity.PythonDirOverride", string.Empty) ?? string.Empty;
-                    if (!string.IsNullOrEmpty(prefOverride) && PathsEqualSafe(prefOverride, serverSrcPath)) return true;
-                }
-                catch { }
-
-                // Cursor config (~/.cursor/mcp.json)
-                string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
-                string cursorCfg = Path.Combine(user, ".cursor", "mcp.json");
-                if (File.Exists(cursorCfg))
-                {
-                    try
-                    {
-                        string json = File.ReadAllText(cursorCfg);
-                        string dir = ExtractDirectoryArgFromJson(json);
-                        if (!string.IsNullOrEmpty(dir) && PathsEqualSafe(dir, serverSrcPath)) return true;
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-            return false;
-        }
-
-        private static bool TryRewriteKnownConfigsToCanonical(string legacySrc, string canonicalSrc)
-        {
-            bool changed = false;
-            try
-            {
-                // Normalize for comparison
-                string normLegacy = NormalizePathSafe(legacySrc);
-                string normCanon = NormalizePathSafe(canonicalSrc);
-
-                // EditorPrefs
-                try
-                {
-                    string prefServerSrc = EditorPrefs.GetString("MCPForUnity.ServerSrc", string.Empty) ?? string.Empty;
-                    if (!string.IsNullOrEmpty(prefServerSrc) && PathsEqualSafe(prefServerSrc, normLegacy))
-                    {
-                        EditorPrefs.SetString("MCPForUnity.ServerSrc", normCanon);
-                        changed = true;
-                    }
-                    string prefOverride = EditorPrefs.GetString("MCPForUnity.PythonDirOverride", string.Empty) ?? string.Empty;
-                    if (!string.IsNullOrEmpty(prefOverride) && PathsEqualSafe(prefOverride, normLegacy))
-                    {
-                        EditorPrefs.SetString("MCPForUnity.PythonDirOverride", normCanon);
-                        changed = true;
-                    }
-                }
-                catch { }
-
-                // Cursor config (~/.cursor/mcp.json)
-                try
-                {
-                    string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
-                    string cursorCfg = Path.Combine(user, ".cursor", "mcp.json");
-                    if (File.Exists(cursorCfg))
-                    {
-                        string json = File.ReadAllText(cursorCfg);
-                        string currentDir = ExtractDirectoryArgFromJson(json);
-                        if (!string.IsNullOrEmpty(currentDir) && PathsEqualSafe(currentDir, normLegacy))
-                        {
-                            string updated = ReplaceDirectoryArgInJson(json, normCanon);
-                            if (!string.IsNullOrEmpty(updated) && !string.Equals(updated, json, StringComparison.Ordinal))
-                            {
-                                try
-                                {
-                                    string backup = cursorCfg + ".bak";
-                                    File.Copy(cursorCfg, backup, overwrite: true);
-                                }
-                                catch { }
-                                File.WriteAllText(cursorCfg, updated);
-                                changed = true;
-                            }
-                        }
-                    }
-                }
-                catch { }
-            }
-            catch { }
-            return changed;
-        }
-
-        // Best-effort: rewrite the value following --directory in the first args array found
-        private static string ReplaceDirectoryArgInJson(string json, string newDirectory)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(json)) return json;
-                int argsIdx = json.IndexOf("\"args\"", StringComparison.OrdinalIgnoreCase);
-                if (argsIdx < 0) return json;
-                int arrStart = json.IndexOf('[', argsIdx);
-                if (arrStart < 0) return json;
-                int depth = 0;
-                int arrEnd = -1;
-                for (int i = arrStart; i < json.Length; i++)
-                {
-                    char c = json[i];
-                    if (c == '[') depth++;
-                    else if (c == ']') { depth--; if (depth == 0) { arrEnd = i; break; } }
-                }
-                if (arrEnd <= arrStart) return json;
-
-                string arrBody = json.Substring(arrStart + 1, arrEnd - arrStart - 1);
-                // Split simple string array by commas at top level
-                string[] raw = arrBody.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries);
-                var parts = new List<string>(raw.Length);
-                foreach (var r in raw)
-                {
-                    string s = r.Trim();
-                    if (s.Length >= 2 && s[0] == '"' && s[s.Length - 1] == '"')
-                    {
-                        s = s.Substring(1, s.Length - 2);
-                    }
-                    parts.Add(s);
-                }
-
-                for (int i = 0; i < parts.Count - 1; i++)
-                {
-                    if (string.Equals(parts[i], "--directory", StringComparison.OrdinalIgnoreCase))
-                    {
-                        parts[i + 1] = newDirectory;
-                        // Rebuild array JSON
-                        var sb = new StringBuilder();
-                        for (int j = 0; j < parts.Count; j++)
-                        {
-                            if (j > 0) sb.Append(", ");
-                            sb.Append('"').Append(parts[j].Replace("\\", "\\\\").Replace("\"", "\\\"")).Append('"');
-                        }
-                        string newArr = sb.ToString();
-                        string rebuilt = json.Substring(0, arrStart + 1) + newArr + json.Substring(arrEnd);
-                        return rebuilt;
-                    }
-                }
-            }
-            catch { }
-            return json;
-        }
-
-        // Minimal helper to extract the value following a --directory token in a plausible JSON args array
-        private static string ExtractDirectoryArgFromJson(string json)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(json)) return null;
-                int argsIdx = json.IndexOf("\"args\"", StringComparison.OrdinalIgnoreCase);
-                if (argsIdx < 0) return null;
-                int arrStart = json.IndexOf('[', argsIdx);
-                if (arrStart < 0) return null;
-                int depth = 0;
-                int arrEnd = -1;
-                for (int i = arrStart; i < json.Length; i++)
-                {
-                    char c = json[i];
-                    if (c == '[') depth++;
-                    else if (c == ']') { depth--; if (depth == 0) { arrEnd = i; break; } }
-                }
-                if (arrEnd <= arrStart) return null;
-                string arrBody = json.Substring(arrStart + 1, arrEnd - arrStart - 1);
-                // Split on commas at top-level (best effort for simple arrays of strings)
-                string[] raw = arrBody.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries);
-                var parts = new List<string>(raw.Length);
-                foreach (var r in raw)
-                {
-                    string s = r.Trim();
-                    if (s.Length >= 2 && s[0] == '"' && s[s.Length - 1] == '"')
-                    {
-                        s = s.Substring(1, s.Length - 2);
-                    }
-                    parts.Add(s);
-                }
-                for (int i = 0; i < parts.Count - 1; i++)
-                {
-                    if (string.Equals(parts[i], "--directory", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return parts[i + 1];
-                    }
-                }
-            }
-            catch { }
-            return null;
-        }
-
         private static IEnumerable<string> GetLegacyRootsForDetection()
         {
             var roots = new System.Collections.Generic.List<string>();
@@ -544,6 +330,21 @@ namespace MCPForUnity.Editor.Helpers
             catch { }
         }
 
+        // Escape regex metacharacters so the path is treated literally by pgrep -f
+        private static string EscapeForPgrep(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            string s = path.Replace("\\", "\\\\");
+            char[] meta = new[] {'.','+','*','?','^','$','(',')','[',']','{','}','|'};
+            var sb = new StringBuilder(s.Length * 2);
+            foreach (char c in s)
+            {
+                if (Array.IndexOf(meta, c) >= 0) sb.Append('\\');
+                sb.Append(c);
+            }
+            return sb.ToString().Replace("\"", "\\\"");
+        }
+
         private static string ReadVersionFile(string path)
         {
             try
@@ -553,26 +354,6 @@ namespace MCPForUnity.Editor.Helpers
                 return string.IsNullOrEmpty(v) ? null : v;
             }
             catch { return null; }
-        }
-
-        // Escape regex metacharacters so the path is treated literally by pgrep -f
-        private static string EscapeForPgrep(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return path;
-            // Escape backslash first, then regex metacharacters
-            string s = path.Replace("\\", "\\\\");
-            char[] meta = new[] {'.','+','*','?','^','$','(',')','[',']','{','}','|'};
-            var sb = new StringBuilder(s.Length * 2);
-            foreach (char c in s)
-            {
-                if (Array.IndexOf(meta, c) >= 0)
-                {
-                    sb.Append('\\');
-                }
-                sb.Append(c);
-            }
-            // Also escape double quotes which we wrap the pattern with
-            return sb.ToString().Replace("\"", "\\\"");
         }
 
         private static int CompareSemverSafe(string a, string b)
