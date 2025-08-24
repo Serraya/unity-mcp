@@ -58,6 +58,10 @@ namespace MCPForUnity.Editor.Windows
             isUnityBridgeRunning = MCPForUnityBridge.IsRunning;
             autoRegisterEnabled = EditorPrefs.GetBool("MCPForUnity.AutoRegisterEnabled", true);
             debugLogsEnabled = EditorPrefs.GetBool("MCPForUnity.DebugLogs", false);
+            if (debugLogsEnabled)
+            {
+                LogDebugPrefsState();
+            }
             foreach (McpClient mcpClient in mcpClients.clients)
             {
                 CheckMcpConfiguration(mcpClient);
@@ -242,8 +246,77 @@ namespace MCPForUnity.Editor.Windows
             {
                 debugLogsEnabled = newDebug;
                 EditorPrefs.SetBool("MCPForUnity.DebugLogs", debugLogsEnabled);
+                if (debugLogsEnabled)
+                {
+                    LogDebugPrefsState();
+                }
             }
             EditorGUILayout.Space(15);
+        }
+
+        private void LogDebugPrefsState()
+        {
+            try
+            {
+                string pythonDirOverridePref = SafeGetPrefString("MCPForUnity.PythonDirOverride");
+                string uvPathPref = SafeGetPrefString("MCPForUnity.UvPath");
+                string serverSrcPref = SafeGetPrefString("MCPForUnity.ServerSrc");
+                bool useEmbedded = SafeGetPrefBool("MCPForUnity.UseEmbeddedServer");
+
+                // Version-scoped detection key
+                string embeddedVer = ReadEmbeddedVersionOrFallback();
+                string detectKey = $"MCPForUnity.LegacyDetectLogged:{embeddedVer}";
+                bool detectLogged = SafeGetPrefBool(detectKey);
+
+                // Project-scoped auto-register key
+                string projectPath = Application.dataPath ?? string.Empty;
+                string autoKey = $"MCPForUnity.AutoRegistered.{ComputeSha1(projectPath)}";
+                bool autoRegistered = SafeGetPrefBool(autoKey);
+
+                MCPForUnity.Editor.Helpers.McpLog.Info(
+                    "MCP Debug Prefs:\n" +
+                    $"  DebugLogs: {debugLogsEnabled}\n" +
+                    $"  PythonDirOverride: '{pythonDirOverridePref}'\n" +
+                    $"  UvPath: '{uvPathPref}'\n" +
+                    $"  ServerSrc: '{serverSrcPref}'\n" +
+                    $"  UseEmbeddedServer: {useEmbedded}\n" +
+                    $"  DetectOnceKey: '{detectKey}' => {detectLogged}\n" +
+                    $"  AutoRegisteredKey: '{autoKey}' => {autoRegistered}",
+                    always: false
+                );
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogWarning($"MCP Debug Prefs logging failed: {ex.Message}");
+            }
+        }
+
+        private static string SafeGetPrefString(string key)
+        {
+            try { return EditorPrefs.GetString(key, string.Empty) ?? string.Empty; } catch { return string.Empty; }
+        }
+
+        private static bool SafeGetPrefBool(string key)
+        {
+            try { return EditorPrefs.GetBool(key, false); } catch { return false; }
+        }
+
+        private static string ReadEmbeddedVersionOrFallback()
+        {
+            try
+            {
+                if (ServerPathResolver.TryFindEmbeddedServerSource(out var embeddedSrc))
+                {
+                    var p = Path.Combine(embeddedSrc, "server_version.txt");
+                    if (File.Exists(p))
+                    {
+                        var s = File.ReadAllText(p)?.Trim();
+                        if (!string.IsNullOrEmpty(s)) return s;
+                    }
+                }
+            }
+            catch { }
+            return "unknown";
         }
 
         private void DrawServerStatusSection()
@@ -504,7 +577,7 @@ namespace MCPForUnity.Editor.Windows
                         }
                         catch (Exception ex)
                         {
-                            UnityEngine.Debug.LogWarning($"Auto-setup client '{client.name}' failed: {ex.Message}");
+                            MCPForUnity.Editor.Helpers.McpLog.Warn($"Auto-setup client '{client.name}' failed: {ex.Message}");
                         }
                     }
                     lastClientRegisteredOk = anyRegistered || IsCursorConfigured(pythonDir) || IsClaudeConfigured();
@@ -521,7 +594,7 @@ namespace MCPForUnity.Editor.Windows
                     }
                     catch (Exception ex)
                     {
-                        UnityEngine.Debug.LogWarning($"Auto-setup StartAutoConnect failed: {ex.Message}");
+                        MCPForUnity.Editor.Helpers.McpLog.Warn($"Auto-setup StartAutoConnect failed: {ex.Message}");
                     }
                 }
 
@@ -532,7 +605,7 @@ namespace MCPForUnity.Editor.Windows
             }
             catch (Exception e)
             {
-                UnityEngine.Debug.LogWarning($"MCP for Unity auto-setup skipped: {e.Message}");
+                MCPForUnity.Editor.Helpers.McpLog.Warn($"MCP for Unity auto-setup skipped: {e.Message}");
             }
         }
 
@@ -1000,7 +1073,7 @@ namespace MCPForUnity.Editor.Windows
 			return true;
 		}
 
-		private string WriteToConfig(string pythonDir, string configPath, McpClient mcpClient = null)
+        private string WriteToConfig(string pythonDir, string configPath, McpClient mcpClient = null)
         {
 			// 0) Respect explicit lock (hidden pref or UI toggle)
 			try { if (UnityEditor.EditorPrefs.GetBool("MCPForUnity.LockCursorConfig", false)) return "Skipped (locked)"; } catch { }
