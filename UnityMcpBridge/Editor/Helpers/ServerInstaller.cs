@@ -23,6 +23,7 @@ namespace MCPForUnity.Editor.Helpers
             try
             {
                 string saveLocation = GetSaveLocation();
+                TryCreateMacSymlinkForAppSupport();
                 string destRoot = Path.Combine(saveLocation, ServerFolder);
                 string destSrc = Path.Combine(destRoot, "src");
 
@@ -117,55 +118,77 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         private static string GetSaveLocation()
         {
-            // Prefer Unity's platform first (more reliable under Mono/macOS), then fallback
-            try
-            {
-                if (Application.platform == RuntimePlatform.OSXEditor)
-                {
-                    string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
-                    string appSupport = Path.Combine(home, "Library", "Application Support");
-                    return Path.Combine(appSupport, RootFolder);
-                }
-                if (Application.platform == RuntimePlatform.WindowsEditor)
-                {
-                    var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
-                                       ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, "AppData", "Local");
-                    return Path.Combine(localAppData, RootFolder);
-                }
-                if (Application.platform == RuntimePlatform.LinuxEditor)
-                {
-                    var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
-                    if (string.IsNullOrEmpty(xdg))
-                    {
-                        xdg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, ".local", "share");
-                    }
-                    return Path.Combine(xdg, RootFolder);
-                }
-            }
-            catch { }
-
-            // Fallback to RuntimeInformation
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
+                // Use per-user LocalApplicationData for canonical install location
                 var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
                                    ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, "AppData", "Local");
                 return Path.Combine(localAppData, RootFolder);
             }
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
                 if (string.IsNullOrEmpty(xdg))
                 {
-                    xdg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, ".local", "share");
+                    xdg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty,
+                                       ".local", "share");
                 }
                 return Path.Combine(xdg, RootFolder);
             }
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
-                return Path.Combine(home, "Library", "Application Support", RootFolder);
+                // On macOS, use LocalApplicationData (~/Library/Application Support)
+                var localAppSupport = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                // Unity/Mono may map LocalApplicationData to ~/.local/share on macOS; normalize to Application Support
+                bool looksLikeXdg = !string.IsNullOrEmpty(localAppSupport) && localAppSupport.Replace('\\', '/').Contains("/.local/share");
+                if (string.IsNullOrEmpty(localAppSupport) || looksLikeXdg)
+                {
+                    // Fallback: construct from $HOME
+                    var home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
+                    localAppSupport = Path.Combine(home, "Library", "Application Support");
+                }
+                TryCreateMacSymlinkForAppSupport();
+                return Path.Combine(localAppSupport, RootFolder);
             }
             throw new Exception("Unsupported operating system.");
+        }
+
+        /// <summary>
+        /// On macOS, create a no-spaces symlink ~/Library/AppSupport -> ~/Library/Application Support
+        /// to mitigate arg parsing and quoting issues in some MCP clients.
+        /// Safe to call repeatedly.
+        /// </summary>
+        private static void TryCreateMacSymlinkForAppSupport()
+        {
+            try
+            {
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return;
+                string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
+                if (string.IsNullOrEmpty(home)) return;
+
+                string canonical = Path.Combine(home, "Library", "Application Support");
+                string symlink = Path.Combine(home, "Library", "AppSupport");
+
+                // If symlink exists already, nothing to do
+                if (Directory.Exists(symlink) || File.Exists(symlink)) return;
+
+                // Create symlink only if canonical exists
+                if (!Directory.Exists(canonical)) return;
+
+                // Use 'ln -s' to create a directory symlink (macOS)
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "/bin/ln",
+                    Arguments = $"-s \"{canonical}\" \"{symlink}\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using var p = System.Diagnostics.Process.Start(psi);
+                p?.WaitForExit(2000);
+            }
+            catch { /* best-effort */ }
         }
 
         private static bool IsDirectoryWritable(string path)
@@ -302,11 +325,10 @@ namespace MCPForUnity.Editor.Helpers
                 if (string.IsNullOrEmpty(serverSrcPath)) return;
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
-                string safePath = EscapeForPgrep(serverSrcPath);
                 var psi = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "/usr/bin/pgrep",
-                    Arguments = $"-f \"uv .*--directory {safePath}\"",
+                    Arguments = $"-f \"uv .*--directory {serverSrcPath}\"",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -328,21 +350,6 @@ namespace MCPForUnity.Editor.Helpers
                 }
             }
             catch { }
-        }
-
-        // Escape regex metacharacters so the path is treated literally by pgrep -f
-        private static string EscapeForPgrep(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return path;
-            string s = path.Replace("\\", "\\\\");
-            char[] meta = new[] {'.','+','*','?','^','$','(',')','[',']','{','}','|'};
-            var sb = new StringBuilder(s.Length * 2);
-            foreach (char c in s)
-            {
-                if (Array.IndexOf(meta, c) >= 0) sb.Append('\\');
-                sb.Append(c);
-            }
-            return sb.ToString().Replace("\"", "\\\"");
         }
 
         private static string ReadVersionFile(string path)

@@ -961,18 +961,15 @@ namespace MCPForUnity.Editor.Windows
                             UnityEngine.Debug.LogError("UV package manager not found. Cannot configure VSCode.");
                             return;
                         }
-                        
+                        // VSCode now reads from mcp.json with a top-level "servers" block
                         var vscodeConfig = new
                         {
-                            mcp = new
+                            servers = new
                             {
-                                servers = new
+                                unityMCP = new
                                 {
-                                    unityMCP = new
-                                    {
-                                        command = uvPath,
-                                        args = new[] { "run", "--directory", pythonDir, "server.py" }
-                                    }
+                                    command = uvPath,
+                                    args = new[] { "run", "--directory", pythonDir, "server.py" }
                                 }
                             }
                         };
@@ -1156,6 +1153,24 @@ namespace MCPForUnity.Editor.Windows
 					serverSrc = ResolveServerSrc();
 				}
 			}
+
+			// macOS normalization: map XDG-style ~/.local/share to canonical Application Support
+			try
+			{
+				if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX)
+					&& !string.IsNullOrEmpty(serverSrc))
+				{
+					string norm = serverSrc.Replace('\\', '/');
+					int idx = norm.IndexOf("/.local/share/UnityMCP/", StringComparison.Ordinal);
+					if (idx >= 0)
+					{
+						string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
+						string suffix = norm.Substring(idx + "/.local/share/".Length); // UnityMCP/...
+						serverSrc = System.IO.Path.Combine(home, "Library", "Application Support", suffix);
+					}
+				}
+			}
+			catch { }
 
 			// Hard-block PackageCache on Windows unless dev override is set
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
