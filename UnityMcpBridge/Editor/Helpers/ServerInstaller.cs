@@ -123,34 +123,56 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         private static string GetSaveLocation()
         {
+            // Prefer Unity's platform to avoid RuntimeInformation quirks under Mono/macOS
+            try
+            {
+                if (Application.platform == RuntimePlatform.OSXEditor)
+                {
+                    string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
+                    string appSupport = Path.Combine(home, "Library", "Application Support");
+                    string path = Path.Combine(appSupport, RootFolder);
+                    McpLog.Info($"Resolved canonical install root (macOS): {path}", always: false);
+                    return path;
+                }
+                if (Application.platform == RuntimePlatform.WindowsEditor)
+                {
+                    var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+                                       ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, "AppData", "Local");
+                    string path = Path.Combine(localAppData, RootFolder);
+                    McpLog.Info($"Resolved canonical install root (Windows): {path}", always: false);
+                    return path;
+                }
+                if (Application.platform == RuntimePlatform.LinuxEditor)
+                {
+                    var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+                    if (string.IsNullOrEmpty(xdg))
+                    {
+                        xdg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, ".local", "share");
+                    }
+                    string path = Path.Combine(xdg, RootFolder);
+                    McpLog.Info($"Resolved canonical install root (Linux): {path}", always: false);
+                    return path;
+                }
+            }
+            catch { }
+
+            // Fallback to RuntimeInformation if Application.platform is unavailable
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
+                return Path.Combine(home, "Library", "Application Support", RootFolder);
+            }
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                // Use per-user LocalApplicationData for canonical install location
                 var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
                                    ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, "AppData", "Local");
                 return Path.Combine(localAppData, RootFolder);
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
-                if (string.IsNullOrEmpty(xdg))
-                {
-                    xdg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty,
-                                       ".local", "share");
-                }
+                if (string.IsNullOrEmpty(xdg)) xdg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty, ".local", "share");
                 return Path.Combine(xdg, RootFolder);
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                // On macOS, use LocalApplicationData (~/Library/Application Support)
-                var localAppSupport = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                if (string.IsNullOrEmpty(localAppSupport))
-                {
-                    // Fallback: construct from $HOME
-                    var home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
-                    localAppSupport = Path.Combine(home, "Library", "Application Support");
-                }
-                return Path.Combine(localAppSupport, RootFolder);
             }
             throw new Exception("Unsupported operating system.");
         }
