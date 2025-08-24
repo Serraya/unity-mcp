@@ -67,6 +67,12 @@ namespace MCPForUnity.Editor.Helpers
                                            || (!string.IsNullOrEmpty(embeddedVer) && CompareSemverSafe(legacyVer, embeddedVer) < 0);
                         if (legacyOlder)
                         {
+                            // Skip deletion if this path is still referenced by prefs or known client configs
+                            if (IsPathPossiblyReferencedByPrefsOrKnownConfigs(legacySrc))
+                            {
+                                McpLog.Info($"Skipping removal of legacy server at '{legacyRoot}' (still referenced).", always: false);
+                                continue;
+                            }
                             TryKillUvForPath(legacySrc);
                             try
                             {
@@ -256,6 +262,85 @@ namespace MCPForUnity.Editor.Helpers
                 return string.Equals(na, nb, StringComparison.Ordinal);
             }
             catch { return false; }
+        }
+
+        private static bool IsPathPossiblyReferencedByPrefsOrKnownConfigs(string serverSrcPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(serverSrcPath)) return false;
+
+                // EditorPrefs overrides
+                try
+                {
+                    string prefServerSrc = EditorPrefs.GetString("MCPForUnity.ServerSrc", string.Empty) ?? string.Empty;
+                    if (!string.IsNullOrEmpty(prefServerSrc) && PathsEqualSafe(prefServerSrc, serverSrcPath)) return true;
+
+                    string prefOverride = EditorPrefs.GetString("MCPForUnity.PythonDirOverride", string.Empty) ?? string.Empty;
+                    if (!string.IsNullOrEmpty(prefOverride) && PathsEqualSafe(prefOverride, serverSrcPath)) return true;
+                }
+                catch { }
+
+                // Cursor config (~/.cursor/mcp.json)
+                string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
+                string cursorCfg = Path.Combine(user, ".cursor", "mcp.json");
+                if (File.Exists(cursorCfg))
+                {
+                    try
+                    {
+                        string json = File.ReadAllText(cursorCfg);
+                        string dir = ExtractDirectoryArgFromJson(json);
+                        if (!string.IsNullOrEmpty(dir) && PathsEqualSafe(dir, serverSrcPath)) return true;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        // Minimal helper to extract the value following a --directory token in a plausible JSON args array
+        private static string ExtractDirectoryArgFromJson(string json)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(json)) return null;
+                int argsIdx = json.IndexOf("\"args\"", StringComparison.OrdinalIgnoreCase);
+                if (argsIdx < 0) return null;
+                int arrStart = json.IndexOf('[', argsIdx);
+                if (arrStart < 0) return null;
+                int depth = 0;
+                int arrEnd = -1;
+                for (int i = arrStart; i < json.Length; i++)
+                {
+                    char c = json[i];
+                    if (c == '[') depth++;
+                    else if (c == ']') { depth--; if (depth == 0) { arrEnd = i; break; } }
+                }
+                if (arrEnd <= arrStart) return null;
+                string arrBody = json.Substring(arrStart + 1, arrEnd - arrStart - 1);
+                // Split on commas at top-level (best effort for simple arrays of strings)
+                string[] raw = arrBody.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries);
+                var parts = new List<string>(raw.Length);
+                foreach (var r in raw)
+                {
+                    string s = r.Trim();
+                    if (s.Length >= 2 && s[0] == '"' && s[s.Length - 1] == '"')
+                    {
+                        s = s.Substring(1, s.Length - 2);
+                    }
+                    parts.Add(s);
+                }
+                for (int i = 0; i < parts.Count - 1; i++)
+                {
+                    if (string.Equals(parts[i], "--directory", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return parts[i + 1];
+                    }
+                }
+            }
+            catch { }
+            return null;
         }
 
         private static IEnumerable<string> GetLegacyRootsForDetection()
