@@ -1145,11 +1145,20 @@ namespace MCPForUnity.Editor.Windows
 				&& System.IO.File.Exists(System.IO.Path.Combine(serverSrc, "server.py"));
 			if (!serverValid)
 			{
-				serverSrc = ResolveServerSrc();
+				// Prefer the provided pythonDir if valid; fall back to resolver
+				if (!string.IsNullOrEmpty(pythonDir) && System.IO.File.Exists(System.IO.Path.Combine(pythonDir, "server.py")))
+				{
+					serverSrc = pythonDir;
+				}
+				else
+				{
+					serverSrc = ResolveServerSrc();
+				}
 			}
 
 			// Hard-block PackageCache on Windows unless dev override is set
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+				&& !string.IsNullOrEmpty(serverSrc)
 				&& serverSrc.IndexOf(@"\Library\PackageCache\", StringComparison.OrdinalIgnoreCase) >= 0
 				&& !UnityEditor.EditorPrefs.GetBool("MCPForUnity.UseEmbeddedServer", false))
 			{
@@ -1616,7 +1625,8 @@ namespace MCPForUnity.Editor.Windows
                 // Common logic for checking configuration status
                 if (configExists)
                 {
-                    bool matches = pythonDir != null && Array.Exists(args, arg => arg.Contains(pythonDir, StringComparison.Ordinal));
+                    string configuredDir = ExtractDirectoryArg(args);
+                    bool matches = !string.IsNullOrEmpty(configuredDir) && PathsEqual(configuredDir, pythonDir);
                     if (matches)
                     {
                         mcpClient.SetStatus(McpStatus.Configured);
@@ -1799,31 +1809,7 @@ namespace MCPForUnity.Editor.Windows
             }
         }
 
-        private bool ParseTextOutput(string claudePath, string projectDir, string pathPrepend)
-        {
-            if (ExecPath.TryRun(claudePath, "mcp list", projectDir, out var listStdout, out var listStderr, 10000, pathPrepend))
-            {
-                UnityEngine.Debug.Log($"Claude MCP servers (text): {listStdout}");
-                
-                // Check if output indicates no servers or contains "UnityMCP" variants
-                if (listStdout.Contains("No MCP servers configured") || 
-                    listStdout.Contains("no servers") ||
-                    listStdout.Contains("No servers") ||
-                    string.IsNullOrWhiteSpace(listStdout) ||
-                    listStdout.Trim().Length == 0)
-                {
-                    return false;
-                }
-                
-                // Look for "UnityMCP" variants in the output
-                return listStdout.Contains("UnityMCP") || 
-                       listStdout.Contains("unityMCP") || 
-                       listStdout.Contains("unity-mcp");
-            }
-            
-            // If command failed, assume no servers
-            return false;
-        }
+        // Removed unused ParseTextOutput
 
         private string FindUvPath()
         {
@@ -2105,93 +2091,7 @@ namespace MCPForUnity.Editor.Windows
             return null; // Will fallback to using 'uv' from PATH
         }
 
-        private string FindClaudeCommand()
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                // Common locations for Claude CLI on Windows
-                string[] possiblePaths = {
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "claude.cmd"),
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "npm", "claude.cmd"),
-                    "claude.cmd", // Fallback to PATH
-                    "claude" // Final fallback
-                };
-                
-                foreach (string path in possiblePaths)
-                {
-                    if (path.Contains("\\") && File.Exists(path))
-                    {
-                        return path;
-                    }
-                }
-                
-                // Try to find via where command (PowerShell compatible)
-                try
-                {
-                    var psi = new ProcessStartInfo
-                    {
-                        FileName = "where.exe",
-                        Arguments = "claude",
-                        UseShellExecute = false,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true
-                    };
-                    
-                    using var process = Process.Start(psi);
-                    string output = process.StandardOutput.ReadToEnd().Trim();
-                    process.WaitForExit();
-                    
-                    if (process.ExitCode == 0 && !string.IsNullOrEmpty(output))
-                    {
-                        string[] lines = output.Split('\n');
-                        foreach (string line in lines)
-                        {
-                            string cleanPath = line.Trim();
-                            if (File.Exists(cleanPath))
-                            {
-                                return cleanPath;
-                            }
-                        }
-                    }
-                }
-                catch
-                {
-                    // If where.exe fails, try PowerShell's Get-Command as fallback
-                    try
-                    {
-                        var psi = new ProcessStartInfo
-                        {
-                            FileName = "powershell.exe",
-                            Arguments = "-Command \"(Get-Command claude -ErrorAction SilentlyContinue).Source\"",
-                            UseShellExecute = false,
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true,
-                            CreateNoWindow = true
-                        };
-                        
-                        using var process = Process.Start(psi);
-                        string output = process.StandardOutput.ReadToEnd().Trim();
-                        process.WaitForExit();
-                        
-                        if (process.ExitCode == 0 && !string.IsNullOrEmpty(output) && File.Exists(output))
-                        {
-                            return output;
-                        }
-                    }
-                    catch
-                    {
-                        // Ignore PowerShell errors too
-                    }
-                }
-                
-                return "claude"; // Final fallback to PATH
-            }
-            else
-            {
-                return "/usr/local/bin/claude";
-            }
-        }
+        // Removed unused FindClaudeCommand
 
         private void CheckClaudeCodeConfiguration(McpClient mcpClient)
         {
