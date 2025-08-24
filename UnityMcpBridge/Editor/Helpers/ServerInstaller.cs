@@ -368,10 +368,11 @@ namespace MCPForUnity.Editor.Helpers
                 if (string.IsNullOrEmpty(serverSrcPath)) return;
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
+                string safePath = EscapeForPgrep(serverSrcPath);
                 var psi = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "/usr/bin/pgrep",
-                    Arguments = $"-f \"uv .*--directory {serverSrcPath}\"",
+                    Arguments = $"-f \"uv .*--directory {safePath}\"",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -404,6 +405,26 @@ namespace MCPForUnity.Editor.Helpers
                 return string.IsNullOrEmpty(v) ? null : v;
             }
             catch { return null; }
+        }
+
+        // Escape regex metacharacters so the path is treated literally by pgrep -f
+        private static string EscapeForPgrep(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            // Escape backslash first, then regex metacharacters
+            string s = path.Replace("\\", "\\\\");
+            char[] meta = new[] {'.','+','*','?','^','$','(',')','[',']','{','}','|'};
+            var sb = new StringBuilder(s.Length * 2);
+            foreach (char c in s)
+            {
+                if (Array.IndexOf(meta, c) >= 0)
+                {
+                    sb.Append('\\');
+                }
+                sb.Append(c);
+            }
+            // Also escape double quotes which we wrap the pattern with
+            return sb.ToString().Replace("\"", "\\\"");
         }
 
         private static int CompareSemverSafe(string a, string b)
