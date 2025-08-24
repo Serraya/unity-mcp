@@ -67,8 +67,19 @@ namespace MCPForUnity.Editor.Helpers
                                            || (!string.IsNullOrEmpty(embeddedVer) && CompareSemverSafe(legacyVer, embeddedVer) < 0);
                         if (legacyOlder)
                         {
-                            // Skip deletion if this path is still referenced by prefs or known client configs
-                            if (IsPathPossiblyReferencedByPrefsOrKnownConfigs(legacySrc))
+                            // If referenced, attempt to rewire known configs (EditorPrefs, Cursor) to canonical
+                            bool stillRef = IsPathPossiblyReferencedByPrefsOrKnownConfigs(legacySrc);
+                            if (stillRef)
+                            {
+                                bool rewired = TryRewriteKnownConfigsToCanonical(legacySrc, destSrc);
+                                if (rewired)
+                                {
+                                    McpLog.Info($"Rewired configs from legacy '{legacySrc}' to canonical '{destSrc}'.", always: false);
+                                }
+                                stillRef = IsPathPossiblyReferencedByPrefsOrKnownConfigs(legacySrc);
+                            }
+                            // If still referenced after rewrite attempts, skip deletion
+                            if (stillRef)
                             {
                                 McpLog.Info($"Skipping removal of legacy server at '{legacyRoot}' (still referenced).", always: false);
                                 continue;
@@ -319,6 +330,121 @@ namespace MCPForUnity.Editor.Helpers
             }
             catch { }
             return false;
+        }
+
+        private static bool TryRewriteKnownConfigsToCanonical(string legacySrc, string canonicalSrc)
+        {
+            bool changed = false;
+            try
+            {
+                // Normalize for comparison
+                string normLegacy = NormalizePathSafe(legacySrc);
+                string normCanon = NormalizePathSafe(canonicalSrc);
+
+                // EditorPrefs
+                try
+                {
+                    string prefServerSrc = EditorPrefs.GetString("MCPForUnity.ServerSrc", string.Empty) ?? string.Empty;
+                    if (!string.IsNullOrEmpty(prefServerSrc) && PathsEqualSafe(prefServerSrc, normLegacy))
+                    {
+                        EditorPrefs.SetString("MCPForUnity.ServerSrc", normCanon);
+                        changed = true;
+                    }
+                    string prefOverride = EditorPrefs.GetString("MCPForUnity.PythonDirOverride", string.Empty) ?? string.Empty;
+                    if (!string.IsNullOrEmpty(prefOverride) && PathsEqualSafe(prefOverride, normLegacy))
+                    {
+                        EditorPrefs.SetString("MCPForUnity.PythonDirOverride", normCanon);
+                        changed = true;
+                    }
+                }
+                catch { }
+
+                // Cursor config (~/.cursor/mcp.json)
+                try
+                {
+                    string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
+                    string cursorCfg = Path.Combine(user, ".cursor", "mcp.json");
+                    if (File.Exists(cursorCfg))
+                    {
+                        string json = File.ReadAllText(cursorCfg);
+                        string currentDir = ExtractDirectoryArgFromJson(json);
+                        if (!string.IsNullOrEmpty(currentDir) && PathsEqualSafe(currentDir, normLegacy))
+                        {
+                            string updated = ReplaceDirectoryArgInJson(json, normCanon);
+                            if (!string.IsNullOrEmpty(updated) && !string.Equals(updated, json, StringComparison.Ordinal))
+                            {
+                                try
+                                {
+                                    string backup = cursorCfg + ".bak";
+                                    File.Copy(cursorCfg, backup, overwrite: true);
+                                }
+                                catch { }
+                                File.WriteAllText(cursorCfg, updated);
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+            catch { }
+            return changed;
+        }
+
+        // Best-effort: rewrite the value following --directory in the first args array found
+        private static string ReplaceDirectoryArgInJson(string json, string newDirectory)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(json)) return json;
+                int argsIdx = json.IndexOf("\"args\"", StringComparison.OrdinalIgnoreCase);
+                if (argsIdx < 0) return json;
+                int arrStart = json.IndexOf('[', argsIdx);
+                if (arrStart < 0) return json;
+                int depth = 0;
+                int arrEnd = -1;
+                for (int i = arrStart; i < json.Length; i++)
+                {
+                    char c = json[i];
+                    if (c == '[') depth++;
+                    else if (c == ']') { depth--; if (depth == 0) { arrEnd = i; break; } }
+                }
+                if (arrEnd <= arrStart) return json;
+
+                string arrBody = json.Substring(arrStart + 1, arrEnd - arrStart - 1);
+                // Split simple string array by commas at top level
+                string[] raw = arrBody.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries);
+                var parts = new List<string>(raw.Length);
+                foreach (var r in raw)
+                {
+                    string s = r.Trim();
+                    if (s.Length >= 2 && s[0] == '"' && s[s.Length - 1] == '"')
+                    {
+                        s = s.Substring(1, s.Length - 2);
+                    }
+                    parts.Add(s);
+                }
+
+                for (int i = 0; i < parts.Count - 1; i++)
+                {
+                    if (string.Equals(parts[i], "--directory", StringComparison.OrdinalIgnoreCase))
+                    {
+                        parts[i + 1] = newDirectory;
+                        // Rebuild array JSON
+                        var sb = new StringBuilder();
+                        for (int j = 0; j < parts.Count; j++)
+                        {
+                            if (j > 0) sb.Append(", ");
+                            sb.Append('"').Append(parts[j].Replace("\\", "\\\\").Replace("\"", "\\\"")).Append('"');
+                        }
+                        string newArr = sb.ToString();
+                        string rebuilt = json.Substring(0, arrStart + 1) + newArr + json.Substring(arrEnd);
+                        return rebuilt;
+                    }
+                }
+            }
+            catch { }
+            return json;
         }
 
         // Minimal helper to extract the value following a --directory token in a plausible JSON args array
