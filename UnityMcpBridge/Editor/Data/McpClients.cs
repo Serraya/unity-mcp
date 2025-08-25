@@ -70,12 +70,22 @@ namespace MCPForUnity.Editor.Data
                     "Claude",
                     "claude_desktop_config.json"
                 ),
-                linuxConfigPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    ".config",
-                    "Claude",
-                    "claude_desktop_config.json"
-                ),
+                // For macOS, Claude Desktop stores config under ~/Library/Application Support/Claude
+                // For Linux, it remains under ~/.config/Claude
+                linuxConfigPath = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                    ? Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        "Library",
+                        "Application Support",
+                        "Claude",
+                        "claude_desktop_config.json"
+                    )
+                    : Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        ".config",
+                        "Claude",
+                        "claude_desktop_config.json"
+                    ),
                 mcpType = McpTypes.ClaudeDesktop,
                 configStatus = "Not Configured",
             },
