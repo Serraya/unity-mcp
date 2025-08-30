@@ -25,19 +25,32 @@ namespace MCPForUnity.Editor.Helpers
 
                 if (!EditorPrefs.GetBool(key, false) || legacyPresent || canonicalMissing)
                 {
+                    // Marshal the entire flow to the main thread. EnsureServerInstalled may touch Unity APIs.
                     EditorApplication.delayCall += () =>
                     {
+                        string error = null;
+                        System.Exception capturedEx = null;
                         try
                         {
+                            // Ensure any UnityEditor API usage inside runs on the main thread
                             ServerInstaller.EnsureServerInstalled();
                         }
                         catch (System.Exception ex)
                         {
-                            Debug.LogWarning("MCP for Unity: Auto-detect on load failed: " + ex.Message);
+                            error = ex.Message;
+                            capturedEx = ex;
                         }
-                        finally
+
+                        // Unity APIs must stay on main thread
+                        try { EditorPrefs.SetBool(key, true); } catch { }
+                        // Ensure prefs cleanup happens on main thread
+                        try { EditorPrefs.DeleteKey("MCPForUnity.ServerSrc"); } catch { }
+                        try { EditorPrefs.DeleteKey("MCPForUnity.PythonDirOverride"); } catch { }
+
+                        if (!string.IsNullOrEmpty(error))
                         {
-                            EditorPrefs.SetBool(key, true);
+                            Debug.LogWarning($"MCP for Unity: Auto-detect on load failed: {capturedEx}");
+                            // Alternatively: Debug.LogException(capturedEx);
                         }
                     };
                 }
