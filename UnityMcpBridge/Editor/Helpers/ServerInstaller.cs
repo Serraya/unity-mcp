@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -564,6 +565,31 @@ namespace MCPForUnity.Editor.Helpers
                         {
                             string path = line.Trim();
                             if (File.Exists(path) && ValidateUvBinary(path)) return path;
+                        }
+                    }
+                }
+                catch { }
+
+                // Windows Store (PythonSoftwareFoundation) install location probe
+                // Example: %LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python.3.13_*\LocalCache\local-packages\Python313\Scripts\uv.exe
+                try
+                {
+                    string pkgsRoot = Path.Combine(localAppData, "Packages");
+                    if (Directory.Exists(pkgsRoot))
+                    {
+                        var pythonPkgs = Directory.GetDirectories(pkgsRoot, "PythonSoftwareFoundation.Python.*", SearchOption.TopDirectoryOnly)
+                                                 .OrderByDescending(p => p, StringComparer.OrdinalIgnoreCase);
+                        foreach (var pkg in pythonPkgs)
+                        {
+                            string localCache = Path.Combine(pkg, "LocalCache", "local-packages");
+                            if (!Directory.Exists(localCache)) continue;
+                            var pyRoots = Directory.GetDirectories(localCache, "Python*", SearchOption.TopDirectoryOnly)
+                                                   .OrderByDescending(d => d, StringComparer.OrdinalIgnoreCase);
+                            foreach (var pyRoot in pyRoots)
+                            {
+                                string uvExe = Path.Combine(pyRoot, "Scripts", "uv.exe");
+                                if (File.Exists(uvExe) && ValidateUvBinary(uvExe)) return uvExe;
+                            }
                         }
                     }
                 }
