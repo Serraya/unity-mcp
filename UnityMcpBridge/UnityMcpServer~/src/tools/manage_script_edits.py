@@ -2,6 +2,7 @@ from mcp.server.fastmcp import FastMCP, Context
 from typing import Dict, Any, List, Tuple
 import base64
 import re
+import os
 from unity_connection import send_command_with_retry
 
 
@@ -79,6 +80,37 @@ def _apply_edits_locally(original_text: str, edits: List[Dict[str, Any]]) -> str
             raise RuntimeError(f"unknown edit op: {op}; allowed: {allowed}. Use 'op' (aliases accepted: type/mode/operation).")
     return text
 
+
+def _trigger_sentinel_async() -> None:
+    """Fire the Unity menu flip on a short-lived background thread.
+
+    This avoids blocking the current request or getting stuck during domain reloads
+    (socket reconnects) when the Editor recompiles.
+    """
+    try:
+        import threading, time
+
+        def _flip():
+            try:
+                import json, glob, os
+                # Small delay so write flushes; prefer early flip to avoid editor-focus second reload
+                time.sleep(0.1)
+                try:
+                    files = sorted(glob.glob(os.path.expanduser("~/.unity-mcp/unity-mcp-status-*.json")), key=os.path.getmtime, reverse=True)
+                    if files:
+                        with open(files[0], "r") as f:
+                            st = json.loads(f.read())
+                            if st.get("reloading"):
+                                return
+                except Exception:
+                    pass
+
+            except Exception:
+                pass
+
+        threading.Thread(target=_flip, daemon=True).start()
+    except Exception:
+        pass
 
 def _infer_class_name(script_name: str) -> str:
     # Default to script name as class name (common Unity pattern)
@@ -470,7 +502,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
         # If everything is structured (method/class/anchor ops), forward directly to Unity's structured editor.
         if all_struct:
             opts2 = dict(options or {})
-            # Do not force sequential; allow server default (atomic) unless caller requests otherwise
+            # For structured edits, prefer immediate refresh to avoid missed reloads when Editor is unfocused
             opts2.setdefault("refresh", "immediate")
             params_struct: Dict[str, Any] = {
                 "action": "edit",
@@ -482,6 +514,13 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                 "options": opts2,
             }
             resp_struct = send_command_with_retry("manage_script", params_struct)
+            if isinstance(resp_struct, dict) and resp_struct.get("success"):
+                # Optional: flip sentinel only if explicitly requested
+                if (options or {}).get("force_sentinel_reload"):
+                    try:
+                        _trigger_sentinel_async()
+                    except Exception:
+                        pass
             return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="structured")
 
         # 1) read from Unity
@@ -597,18 +636,24 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         "scriptType": script_type,
                         "edits": at_edits,
                         "precondition_sha256": sha,
-                        "options": {"refresh": "immediate", "validate": (options or {}).get("validate", "standard"), "applyMode": ("atomic" if len(at_edits) > 1 else (options or {}).get("applyMode", "sequential"))}
+                        "options": {"refresh": (options or {}).get("refresh", "debounced"), "validate": (options or {}).get("validate", "standard"), "applyMode": ("atomic" if len(at_edits) > 1 else (options or {}).get("applyMode", "sequential"))}
                     }
                     resp_text = send_command_with_retry("manage_script", params_text)
                     if not (isinstance(resp_text, dict) and resp_text.get("success")):
                         return _with_norm(resp_text if isinstance(resp_text, dict) else {"success": False, "message": str(resp_text)}, normalized_for_echo, routing="mixed/text-first")
+                    # Successful text write; flip sentinel only if explicitly requested
+                    if (options or {}).get("force_sentinel_reload"):
+                        try:
+                            _trigger_sentinel_async()
+                        except Exception:
+                            pass
             except Exception as e:
                 return _with_norm({"success": False, "message": f"Text edit conversion failed: {e}"}, normalized_for_echo, routing="mixed/text-first")
 
             if struct_edits:
                 opts2 = dict(options or {})
-                # Let server decide; do not force sequential
-                opts2.setdefault("refresh", "immediate")
+                # Prefer debounced background refresh unless explicitly overridden
+                opts2.setdefault("refresh", "debounced")
                 params_struct: Dict[str, Any] = {
                     "action": "edit",
                     "name": name,
@@ -619,6 +664,12 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     "options": opts2
                 }
                 resp_struct = send_command_with_retry("manage_script", params_struct)
+                if isinstance(resp_struct, dict) and resp_struct.get("success"):
+                    if (options or {}).get("force_sentinel_reload"):
+                        try:
+                            _trigger_sentinel_async()
+                        except Exception:
+                            pass
                 return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="mixed/text-first")
 
             return _with_norm({"success": True, "message": "Applied text edits (no structured ops)"}, normalized_for_echo, routing="mixed/text-first")
@@ -648,9 +699,10 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     if op == "anchor_insert":
                         anchor = e.get("anchor") or ""
                         position = (e.get("position") or "after").lower()
-                        # Early regex compile with helpful errors
+                        # Early regex compile with helpful errors, honoring ignore_case
                         try:
-                            regex_obj = _re.compile(anchor, _re.MULTILINE)
+                            flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
+                            regex_obj = _re.compile(anchor, flags)
                         except Exception as ex:
                             return _with_norm(_err("bad_regex", f"Invalid anchor regex: {ex}", normalized=normalized_for_echo, routing="text", extra={"hint": "Escape parentheses/braces or use a simpler anchor."}), normalized_for_echo, routing="text")
                         m = regex_obj.search(base_text)
@@ -734,12 +786,18 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     "edits": at_edits,
                     "precondition_sha256": sha,
                     "options": {
-                        "refresh": "immediate",
+                        "refresh": (options or {}).get("refresh", "debounced"),
                         "validate": (options or {}).get("validate", "standard"),
                         "applyMode": ("atomic" if len(at_edits) > 1 else (options or {}).get("applyMode", "sequential"))
                     }
                 }
                 resp = send_command_with_retry("manage_script", params)
+                if isinstance(resp, dict) and resp.get("success"):
+                    if (options or {}).get("force_sentinel_reload"):
+                        try:
+                            _trigger_sentinel_async()
+                        except Exception:
+                            pass
                 return _with_norm(
                     resp if isinstance(resp, dict) else {"success": False, "message": str(resp)},
                     normalized_for_echo,
@@ -791,7 +849,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
         # Default refresh/validate for natural usage on text path as well
         options = dict(options or {})
         options.setdefault("validate", "standard")
-        options.setdefault("refresh", "immediate")
+        options.setdefault("refresh", "debounced")
 
         import hashlib
         # Compute the SHA of the current file contents for the precondition
@@ -816,10 +874,16 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                 }
             ],
             "precondition_sha256": sha,
-            "options": options or {"validate": "standard", "refresh": "immediate"},
+            "options": options or {"validate": "standard", "refresh": "debounced"},
         }
 
         write_resp = send_command_with_retry("manage_script", params)
+        if isinstance(write_resp, dict) and write_resp.get("success"):
+            if (options or {}).get("force_sentinel_reload"):
+                try:
+                    _trigger_sentinel_async()
+                except Exception:
+                    pass
         return _with_norm(
             write_resp if isinstance(write_resp, dict) 
                       else {"success": False, "message": str(write_resp)},

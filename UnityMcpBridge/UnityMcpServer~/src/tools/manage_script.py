@@ -306,6 +306,38 @@ def register_manage_script_tools(mcp: FastMCP):
             data.setdefault("normalizedEdits", normalized_edits)
             if warnings:
                 data.setdefault("warnings", warnings)
+            if resp.get("success") and (options or {}).get("force_sentinel_reload"):
+                # Optional: flip sentinel via menu if explicitly requested
+                try:
+                    import threading, time, json, glob, os
+                    def _latest_status() -> dict | None:
+                        try:
+                            files = sorted(glob.glob(os.path.expanduser("~/.unity-mcp/unity-mcp-status-*.json")), key=os.path.getmtime, reverse=True)
+                            if not files:
+                                return None
+                            with open(files[0], "r") as f:
+                                return json.loads(f.read())
+                        except Exception:
+                            return None
+
+                    def _flip_async():
+                        try:
+                            time.sleep(0.1)
+                            st = _latest_status()
+                            if st and st.get("reloading"):
+                                return
+                            send_command_with_retry(
+                                "execute_menu_item",
+                                {"menuPath": "MCP/Flip Reload Sentinel"},
+                                max_retries=0,
+                                retry_ms=0,
+                            )
+                        except Exception:
+                            pass
+                    threading.Thread(target=_flip_async, daemon=True).start()
+                except Exception:
+                    pass
+                return resp
             return resp
         return {"success": False, "message": str(resp)}
 
@@ -457,7 +489,7 @@ def register_manage_script_tools(mcp: FastMCP):
                         "path": path,
                         "edits": edits,
                         "precondition_sha256": sha,
-                        "options": {"refresh": "immediate", "validate": "standard"},
+                        "options": {"refresh": "debounced", "validate": "standard"},
                     }
                     # Preflight size vs. default cap (256 KiB) to avoid opaque server errors
                     try:

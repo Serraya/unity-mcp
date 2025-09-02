@@ -193,10 +193,10 @@ namespace MCPForUnity.Editor.Tools
                         namespaceName
                     );
                 case "read":
-                    Debug.LogWarning("manage_script.read is deprecated; prefer resources/read. Serving read for backward compatibility.");
+                    McpLog.Warn("manage_script.read is deprecated; prefer resources/read. Serving read for backward compatibility.");
                     return ReadScript(fullPath, relativePath);
                 case "update":
-                    Debug.LogWarning("manage_script.update is deprecated; prefer apply_text_edits. Serving update for backward compatibility.");
+                    McpLog.Warn("manage_script.update is deprecated; prefer apply_text_edits. Serving update for backward compatibility.");
                     return UpdateScript(fullPath, relativePath, name, contents);
                 case "delete":
                     return DeleteScript(fullPath, relativePath);
@@ -356,11 +356,11 @@ namespace MCPForUnity.Editor.Tools
                 var uri = $"unity://path/{relativePath}";
                 var ok = Response.Success(
                     $"Script '{name}.cs' created successfully at '{relativePath}'.",
-                    new { uri, scheduledRefresh = true }
+                    new { uri, scheduledRefresh = false }
                 );
 
-                // Schedule heavy work AFTER replying
-                ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
+                ManageScriptRefreshHelpers.ImportAndRequestCompile(relativePath);
+
                 return ok;
             }
             catch (Exception e)
@@ -650,7 +650,7 @@ namespace MCPForUnity.Editor.Tools
             spans = spans.OrderByDescending(t => t.start).ToList();
             for (int i = 1; i < spans.Count; i++)
             {
-                if (spans[i].end > spans[i - 1].start)
+                 if (spans[i].end > spans[i - 1].start)
                 {
                     var conflict = new[] { new { startA = spans[i].start, endA = spans[i].end, startB = spans[i - 1].start, endB = spans[i - 1].end } };
                     return Response.Error("overlap", new { status = "overlap", conflicts = conflict, hint = "Sort ranges descending by start and compute from the same snapshot." });
@@ -763,19 +763,18 @@ namespace MCPForUnity.Editor.Tools
                                   string.Equals(refreshModeFromCaller, "sync", StringComparison.OrdinalIgnoreCase);
                 if (immediate)
                 {
-                    EditorApplication.delayCall += () =>
-                    {
-                        AssetDatabase.ImportAsset(
-                            relativePath,
-                            ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
-                        );
+                    McpLog.Info($"[ManageScript] ApplyTextEdits: immediate refresh for '{relativePath}'");
+                    AssetDatabase.ImportAsset(
+                        relativePath,
+                        ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
+                    );
 #if UNITY_EDITOR
-                        UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
+                    UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
 #endif
-                    };
                 }
                 else
                 {
+                    McpLog.Info($"[ManageScript] ApplyTextEdits: debounced refresh scheduled for '{relativePath}'");
                     ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
                 }
 
@@ -786,7 +785,8 @@ namespace MCPForUnity.Editor.Tools
                         uri = $"unity://path/{relativePath}",
                         path = relativePath,
                         editsApplied = spans.Count,
-                        sha256 = newSha
+                        sha256 = newSha,
+                        scheduledRefresh = !immediate
                     }
                 );
             }
@@ -1326,7 +1326,7 @@ namespace MCPForUnity.Editor.Tools
                             if (ordered[i].start + ordered[i].length > ordered[i - 1].start)
                             {
                                 var conflict = new[] { new { startA = ordered[i].start, endA = ordered[i].start + ordered[i].length, startB = ordered[i - 1].start, endB = ordered[i - 1].start + ordered[i - 1].length } };
-                                return Response.Error("overlap", new { status = "overlap", conflicts = conflict, hint = "Apply in descending order against the same precondition snapshot." });
+                                return Response.Error("overlap", new { status = "overlap", conflicts = conflict, hint = "Sort ranges descending by start and compute from the same snapshot." });
                             }
                         }
                         return Response.Error("overlap", new { status = "overlap" });
@@ -1421,17 +1421,8 @@ namespace MCPForUnity.Editor.Tools
 
                 if (immediate)
                 {
-                    // Force on main thread
-                    EditorApplication.delayCall += () =>
-                    {
-                        AssetDatabase.ImportAsset(
-                            relativePath,
-                            ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
-                        );
-#if UNITY_EDITOR
-                        UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
-#endif
-                    };
+                    McpLog.Info($"[ManageScript] EditScript: immediate refresh for '{relativePath}'", always: false);
+                    ManageScriptRefreshHelpers.ImportAndRequestCompile(relativePath);
                 }
                 else
                 {
@@ -2619,6 +2610,16 @@ static class ManageScriptRefreshHelpers
     public static void ScheduleScriptRefresh(string relPath)
     {
         RefreshDebounce.Schedule(relPath, TimeSpan.FromMilliseconds(200));
+    }
+
+    public static void ImportAndRequestCompile(string relPath, bool synchronous = true)
+    {
+        var opts = ImportAssetOptions.ForceUpdate;
+        if (synchronous) opts |= ImportAssetOptions.ForceSynchronousImport;
+        AssetDatabase.ImportAsset(relPath, opts);
+#if UNITY_EDITOR
+        UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
+#endif
     }
 }
 
