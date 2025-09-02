@@ -2568,6 +2568,8 @@ static class RefreshDebounce
         // Kick off a ticking callback that waits until the window has elapsed
         // from the last request before performing the refresh.
         EditorApplication.delayCall += () => Tick(window);
+        // Nudge the editor loop so ticks run even if the window is unfocused
+        EditorApplication.QueuePlayerLoopUpdate();
     }
 
     private static void Tick(TimeSpan window)
@@ -2595,7 +2597,10 @@ static class RefreshDebounce
             string[] toImport;
             lock (_lock) { toImport = _paths.ToArray(); _paths.Clear(); }
             foreach (var p in toImport)
-                AssetDatabase.ImportAsset(p, ImportAssetOptions.ForceUpdate);
+            {
+                var sp = ManageScriptRefreshHelpers.SanitizeAssetsPath(p);
+                AssetDatabase.ImportAsset(sp, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+            }
 #if UNITY_EDITOR
             UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
 #endif
@@ -2607,16 +2612,31 @@ static class RefreshDebounce
 
 static class ManageScriptRefreshHelpers
 {
+    public static string SanitizeAssetsPath(string p)
+    {
+        if (string.IsNullOrEmpty(p)) return p;
+        p = p.Replace('\\', '/').Trim();
+        if (p.StartsWith("unity://path/", StringComparison.OrdinalIgnoreCase))
+            p = p.Substring("unity://path/".Length);
+        while (p.StartsWith("Assets/Assets/", StringComparison.OrdinalIgnoreCase))
+            p = p.Substring("Assets/".Length);
+        if (!p.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+            p = "Assets/" + p.TrimStart('/');
+        return p;
+    }
+
     public static void ScheduleScriptRefresh(string relPath)
     {
-        RefreshDebounce.Schedule(relPath, TimeSpan.FromMilliseconds(200));
+        var sp = SanitizeAssetsPath(relPath);
+        RefreshDebounce.Schedule(sp, TimeSpan.FromMilliseconds(200));
     }
 
     public static void ImportAndRequestCompile(string relPath, bool synchronous = true)
     {
+        var sp = SanitizeAssetsPath(relPath);
         var opts = ImportAssetOptions.ForceUpdate;
         if (synchronous) opts |= ImportAssetOptions.ForceSynchronousImport;
-        AssetDatabase.ImportAsset(relPath, opts);
+        AssetDatabase.ImportAsset(sp, opts);
 #if UNITY_EDITOR
         UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
 #endif
