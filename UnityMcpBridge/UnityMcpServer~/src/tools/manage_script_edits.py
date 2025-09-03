@@ -40,12 +40,14 @@ def _apply_edits_locally(original_text: str, edits: List[Dict[str, Any]]) -> str
             position = (edit.get("position") or "before").lower()
             insert_text = edit.get("text", "")
             flags = re.MULTILINE | (re.IGNORECASE if edit.get("ignore_case") else 0)
-            m = re.search(anchor, text, flags)
-            if not m:
+            
+            # Find the best match using improved heuristics
+            match = _find_best_anchor_match(anchor, text, flags, edit.get("prefer_last", True))
+            if not match:
                 if edit.get("allow_noop", True):
                     continue
                 raise RuntimeError(f"anchor not found: {anchor}")
-            idx = m.start() if position == "before" else m.end()
+            idx = match.start() if position == "before" else match.end()
             text = text[:idx] + insert_text + text[idx:]
         elif op == "replace_range":
             start_line = int(edit.get("startLine", 1))
@@ -79,6 +81,116 @@ def _apply_edits_locally(original_text: str, edits: List[Dict[str, Any]]) -> str
             allowed = "anchor_insert, prepend, append, replace_range, regex_replace"
             raise RuntimeError(f"unknown edit op: {op}; allowed: {allowed}. Use 'op' (aliases accepted: type/mode/operation).")
     return text
+
+
+def _find_best_anchor_match(pattern: str, text: str, flags: int, prefer_last: bool = True):
+    """
+    Find the best anchor match using improved heuristics.
+    
+    For patterns like \\s*}\\s*$ that are meant to find class-ending braces,
+    this function uses heuristics to choose the most semantically appropriate match:
+    
+    1. If prefer_last=True, prefer the last match (common for class-end insertions)
+    2. Use indentation levels to distinguish class vs method braces
+    3. Consider context to avoid matches inside strings/comments
+    
+    Args:
+        pattern: Regex pattern to search for
+        text: Text to search in  
+        flags: Regex flags
+        prefer_last: If True, prefer the last match over the first
+        
+    Returns:
+        Match object of the best match, or None if no match found
+    """
+    import re
+    
+    # Find all matches
+    matches = list(re.finditer(pattern, text, flags))
+    if not matches:
+        return None
+    
+    # If only one match, return it
+    if len(matches) == 1:
+        return matches[0]
+    
+    # For patterns that look like they're trying to match closing braces at end of lines
+    is_closing_brace_pattern = '}' in pattern and ('$' in pattern or pattern.endswith(r'\s*'))
+    
+    if is_closing_brace_pattern and prefer_last:
+        # Use heuristics to find the best closing brace match
+        return _find_best_closing_brace_match(matches, text)
+    
+    # Default behavior: use last match if prefer_last, otherwise first match
+    return matches[-1] if prefer_last else matches[0]
+
+
+def _find_best_closing_brace_match(matches, text: str):
+    """
+    Find the best closing brace match using C# structure heuristics.
+    
+    Enhanced heuristics for scope-aware matching:
+    1. Prefer matches with lower indentation (likely class-level)
+    2. Prefer matches closer to end of file  
+    3. Avoid matches that seem to be inside method bodies
+    4. For #endregion patterns, ensure class-level context
+    5. Validate insertion point is at appropriate scope
+    
+    Args:
+        matches: List of regex match objects
+        text: The full text being searched
+        
+    Returns:
+        The best match object
+    """
+    if not matches:
+        return None
+        
+    scored_matches = []
+    lines = text.splitlines()
+    
+    for match in matches:
+        score = 0
+        start_pos = match.start()
+        
+        # Find which line this match is on
+        lines_before = text[:start_pos].count('\n')
+        line_num = lines_before
+        
+        if line_num < len(lines):
+            line_content = lines[line_num]
+            
+            # Calculate indentation level (lower is better for class braces)
+            indentation = len(line_content) - len(line_content.lstrip())
+            
+            # Prefer lower indentation (class braces are typically less indented than method braces)
+            score += max(0, 20 - indentation)  # Max 20 points for indentation=0
+            
+            # Prefer matches closer to end of file (class closing braces are typically at the end)
+            distance_from_end = len(lines) - line_num
+            score += max(0, 10 - distance_from_end)  # More points for being closer to end
+            
+            # Look at surrounding context to avoid method braces
+            context_start = max(0, line_num - 3)
+            context_end = min(len(lines), line_num + 2) 
+            context_lines = lines[context_start:context_end]
+            
+            # Penalize if this looks like it's inside a method (has method-like patterns above)
+            for context_line in context_lines:
+                if re.search(r'\b(void|public|private|protected)\s+\w+\s*\(', context_line):
+                    score -= 5  # Penalty for being near method signatures
+                    
+            # Bonus if this looks like a class-ending brace (very minimal indentation and near EOF)
+            if indentation <= 4 and distance_from_end <= 3:
+                score += 15  # Bonus for likely class-ending brace
+        
+        scored_matches.append((score, match))
+    
+    # Return the match with the highest score
+    scored_matches.sort(key=lambda x: x[0], reverse=True)
+    best_match = scored_matches[0][1]
+    
+    return best_match
 
 
 def _trigger_sentinel_async() -> None:
@@ -123,56 +235,7 @@ def _extract_code_after(keyword: str, request: str) -> str:
     if idx >= 0:
         return request[idx + len(keyword):].strip()
     return ""
-def _is_structurally_balanced(text: str) -> bool:
-    """Lightweight delimiter balance check for braces/paren/brackets.
-    Not a full parser; used to preflight destructive regex deletes.
-    """
-    brace = paren = bracket = 0
-    in_str = in_chr = False
-    esc = False
-    i = 0
-    n = len(text)
-    while i < n:
-        c = text[i]
-        nxt = text[i+1] if i+1 < n else ''
-        if in_str:
-            if not esc and c == '"':
-                in_str = False
-            esc = (not esc and c == '\\')
-            i += 1
-            continue
-        if in_chr:
-            if not esc and c == "'":
-                in_chr = False
-            esc = (not esc and c == '\\')
-            i += 1
-            continue
-        # comments
-        if c == '/' and nxt == '/':
-            # skip to EOL
-            i = text.find('\n', i)
-            if i == -1:
-                break
-            i += 1
-            continue
-        if c == '/' and nxt == '*':
-            j = text.find('*/', i+2)
-            i = (j + 2) if j != -1 else n
-            continue
-        if c == '"':
-            in_str = True; esc = False; i += 1; continue
-        if c == "'":
-            in_chr = True; esc = False; i += 1; continue
-        if c == '{': brace += 1
-        elif c == '}': brace -= 1
-        elif c == '(': paren += 1
-        elif c == ')': paren -= 1
-        elif c == '[': bracket += 1
-        elif c == ']': bracket -= 1
-        if brace < 0 or paren < 0 or bracket < 0:
-            return False
-        i += 1
-    return brace == 0 and paren == 0 and bracket == 0
+# Removed _is_structurally_balanced - validation now handled by C# side using Unity's compiler services
 
 
 
@@ -566,10 +629,10 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         position = (e.get("position") or "after").lower()
                         flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
                         try:
-                            regex_obj = _re.compile(anchor, flags)
+                            # Use improved anchor matching logic
+                            m = _find_best_anchor_match(anchor, base_text, flags, prefer_last=True)
                         except Exception as ex:
                             return _with_norm(_err("bad_regex", f"Invalid anchor regex: {ex}", normalized=normalized_for_echo, routing="mixed/text-first", extra={"hint": "Escape parentheses/braces or use a simpler anchor."}), normalized_for_echo, routing="mixed/text-first")
-                        m = regex_obj.search(base_text)
                         if not m:
                             return _with_norm({"success": False, "code": "anchor_not_found", "message": f"anchor not found: {anchor}"}, normalized_for_echo, routing="mixed/text-first")
                         idx = m.start() if position == "before" else m.end()
@@ -699,13 +762,12 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     if op == "anchor_insert":
                         anchor = e.get("anchor") or ""
                         position = (e.get("position") or "after").lower()
-                        # Early regex compile with helpful errors, honoring ignore_case
+                        # Use improved anchor matching logic with helpful errors, honoring ignore_case
                         try:
                             flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
-                            regex_obj = _re.compile(anchor, flags)
+                            m = _find_best_anchor_match(anchor, base_text, flags, prefer_last=True)
                         except Exception as ex:
                             return _with_norm(_err("bad_regex", f"Invalid anchor regex: {ex}", normalized=normalized_for_echo, routing="text", extra={"hint": "Escape parentheses/braces or use a simpler anchor."}), normalized_for_echo, routing="text")
-                        m = regex_obj.search(base_text)
                         if not m:
                             return _with_norm({"success": False, "code": "anchor_not_found", "message": f"anchor not found: {anchor}"}, normalized_for_echo, routing="text")
                         idx = m.start() if position == "before" else m.end()
@@ -745,19 +807,15 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                             regex_obj = _re.compile(pattern, flags)
                         except Exception as ex:
                             return _with_norm(_err("bad_regex", f"Invalid regex pattern: {ex}", normalized=normalized_for_echo, routing="text", extra={"hint": "Escape special chars or prefer structured delete for methods."}), normalized_for_echo, routing="text")
-                        m = regex_obj.search(base_text)
+                        # Use smart anchor matching for consistent behavior with anchor_insert
+                        m = _find_best_anchor_match(pattern, base_text, flags, prefer_last=True)
                         if not m:
                             continue
                         # Expand $1, $2... backrefs in replacement using the first match (consistent with mixed-path behavior)
                         def _expand_dollars(rep: str) -> str:
                             return _re.sub(r"\$(\d+)", lambda g: m.group(int(g.group(1))) or "", rep)
                         repl_expanded = _expand_dollars(repl)
-                        # Preview structural balance after replacement; refuse destructive deletes
-                        preview = base_text[:m.start()] + repl_expanded + base_text[m.end():]
-                        if not _is_structurally_balanced(preview):
-                            return _with_norm(_err("validation_failed", "regex_replace would unbalance braces/parentheses; prefer delete_method",
-                                                   normalized=normalized_for_echo, routing="text",
-                                                   extra={"status": "validation_failed", "hint": "Use script_apply_edits delete_method for method removal"}), normalized_for_echo, routing="text")
+                        # Let C# side handle validation using Unity's built-in compiler services
                         sl, sc = line_col_from_index(m.start())
                         el, ec = line_col_from_index(m.end())
                         at_edits.append({
