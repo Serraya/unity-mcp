@@ -7,7 +7,7 @@ using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using MCPForUnity.Editor.Helpers; // For Response class
-using static MCPForUnity.Editor.Tools.ManageGameObject; // For ComponentResolver
+using static MCPForUnity.Editor.Tools.ManageGameObject;
 
 #if UNITY_6000_0_OR_NEWER
 using PhysicsMaterialType = UnityEngine.PhysicsMaterial;
@@ -357,11 +357,14 @@ namespace MCPForUnity.Editor.Tools
                         {
                             // Resolve component type via ComponentResolver, then fetch by Type
                             Component targetComponent = null;
-                            if (ComponentResolver.TryResolve(componentName, out var compType, out var compError))
+                            bool resolved = ComponentResolver.TryResolve(componentName, out var compType, out var compError);
+                            if (resolved)
                             {
                                 targetComponent = gameObject.GetComponent(compType);
                             }
-                            else
+                            
+                            // Only warn about resolution failure if component also not found
+                            if (targetComponent == null && !resolved)
                             {
                                 Debug.LogWarning(
                                     $"[ManageAsset.ModifyAsset] Failed to resolve component '{componentName}' on '{gameObject.name}': {compError}"

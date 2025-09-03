@@ -21,6 +21,21 @@ namespace MCPForUnity.Editor.Tools
     /// </summary>
     public static class ManageGameObject
     {
+        // Shared JsonSerializer to avoid per-call allocation overhead
+        private static readonly JsonSerializer InputSerializer = JsonSerializer.Create(new JsonSerializerSettings
+        {
+            Converters = new List<JsonConverter>
+            {
+                new Vector3Converter(),
+                new Vector2Converter(), 
+                new QuaternionConverter(),
+                new ColorConverter(),
+                new RectConverter(),
+                new BoundsConverter(),
+                new UnityEngineObjectConverter()
+            }
+        });
+        
         // --- Main Handler ---
 
         public static object HandleCommand(JObject @params)
@@ -1583,25 +1598,8 @@ namespace MCPForUnity.Editor.Tools
             BindingFlags flags =
                 BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
 
-             // --- Use a dedicated serializer for input conversion ---
-             // Define this somewhere accessible, maybe static readonly field
-             JsonSerializerSettings inputSerializerSettings = new JsonSerializerSettings
-             {
-                 Converters = new List<JsonConverter>
-                 {
-                    // Add specific converters needed for INPUT deserialization if different from output
-                    new Vector3Converter(),
-                    new Vector2Converter(),
-                    new QuaternionConverter(),
-                    new ColorConverter(),
-                    new RectConverter(),
-                    new BoundsConverter(),
-                    new UnityEngineObjectConverter() // Crucial for finding references from instructions
-                 }
-                 // No ReferenceLoopHandling needed typically for input
-             };
-             JsonSerializer inputSerializer = JsonSerializer.Create(inputSerializerSettings);
-             // --- End Serializer Setup ---
+             // Use shared serializer to avoid per-call allocation
+             var inputSerializer = InputSerializer;
 
             try
             {
@@ -2200,8 +2198,9 @@ namespace MCPForUnity.Editor.Tools
                 return false;
             }
 
-            // 1) Exact FQN via Type.GetType
+            // 1) Exact cache hits
             if (CacheByFqn.TryGetValue(nameOrFullName, out type)) return true;
+            if (!nameOrFullName.Contains(".") && CacheByName.TryGetValue(nameOrFullName, out type)) return true;
             type = Type.GetType(nameOrFullName, throwOnError: false);
             if (IsValidComponent(type)) { Cache(type); return true; }
 
@@ -2375,7 +2374,7 @@ namespace MCPForUnity.Editor.Tools
 
             foreach (var property in availableProperties)
             {
-                var cleanedProperty = property.ToLowerInvariant();
+                var cleanedProperty = property.ToLowerInvariant().Replace(" ", "").Replace("-", "").Replace("_", "");
                 
                 // Exact match after cleaning
                 if (cleanedProperty == cleanedInput)
@@ -2433,29 +2432,7 @@ namespace MCPForUnity.Editor.Tools
             return matrix[s1.Length, s2.Length];
         }
 
-        /// <summary>
-        /// Parses a JArray like [x, y, z] into a Vector3.
-        /// </summary>
-        private static Vector3? ParseVector3(JArray array)
-        {
-            if (array != null && array.Count == 3)
-            {
-                try
-                {
-                    // Use ToObject for potentially better handling than direct indexing
-                    return new Vector3(
-                        array[0].ToObject<float>(),
-                        array[1].ToObject<float>(),
-                        array[2].ToObject<float>()
-                    );
-                }
-                catch (Exception ex)
-                {
-                     Debug.LogWarning($"Failed to parse JArray as Vector3: {array}. Error: {ex.Message}");
-                }
-            }
-            return null;
-        }
+        // Removed duplicate ParseVector3 - using the one at line 1114
 
         // Removed GetGameObjectData, GetComponentData, and related private helpers/caching/serializer setup.
         // They are now in Helpers.GameObjectSerializer
