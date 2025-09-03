@@ -25,6 +25,10 @@ namespace MCPForUnity.Editor.Tools
 
         public static object HandleCommand(JObject @params)
         {
+            if (@params == null)
+            {
+                return Response.Error("Parameters cannot be null.");
+            }
 
             string action = @params["action"]?.ToString().ToLower();
             if (string.IsNullOrEmpty(action))
