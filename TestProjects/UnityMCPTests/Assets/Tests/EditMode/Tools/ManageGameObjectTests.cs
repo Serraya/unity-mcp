@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEditor;
+using UnityEngine.TestTools;
 using Newtonsoft.Json.Linq;
 using MCPForUnity.Editor.Tools;
 
@@ -193,6 +194,119 @@ namespace MCPForUnityTests.Editor.Tools
             
             // Second call should be faster (though this test might be flaky)
             Assert.LessOrEqual(secondCallTime, firstCallTime * 2, "Cached call should not be significantly slower");
+        }
+
+        [Test]
+        public void SetComponentProperties_CollectsAllFailuresAndAppliesValidOnes()
+        {
+            // Arrange - add Transform and Rigidbody components to test with
+            var transform = testGameObject.transform;
+            var rigidbody = testGameObject.AddComponent<Rigidbody>();
+            
+            // Create a params object with mixed valid and invalid properties
+            var setPropertiesParams = new JObject
+            {
+                ["action"] = "modify",
+                ["target"] = testGameObject.name,
+                ["search_method"] = "by_name", 
+                ["componentProperties"] = new JObject
+                {
+                    ["Transform"] = new JObject
+                    {
+                        ["localPosition"] = new JObject { ["x"] = 1.0f, ["y"] = 2.0f, ["z"] = 3.0f },  // Valid
+                        ["rotatoin"] = new JObject { ["x"] = 0.0f, ["y"] = 90.0f, ["z"] = 0.0f }, // Invalid (typo - should be rotation)
+                        ["localScale"] = new JObject { ["x"] = 2.0f, ["y"] = 2.0f, ["z"] = 2.0f }      // Valid
+                    },
+                    ["Rigidbody"] = new JObject  
+                    {
+                        ["mass"] = 5.0f,            // Valid
+                        ["invalidProp"] = "test",   // Invalid - doesn't exist
+                        ["useGravity"] = true       // Valid
+                    }
+                }
+            };
+
+            // Store original values to verify changes  
+            var originalLocalPosition = transform.localPosition;
+            var originalLocalScale = transform.localScale;
+            var originalMass = rigidbody.mass;
+            var originalUseGravity = rigidbody.useGravity;
+            
+            Debug.Log($"BEFORE TEST - Mass: {rigidbody.mass}, UseGravity: {rigidbody.useGravity}");
+
+            // Expect the warning logs from the invalid properties
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Property 'rotatoin' not found"));
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Property 'invalidProp' not found"));
+
+            // Act
+            var result = ManageGameObject.HandleCommand(setPropertiesParams);
+            
+            Debug.Log($"AFTER TEST - Mass: {rigidbody.mass}, UseGravity: {rigidbody.useGravity}");
+            Debug.Log($"AFTER TEST - LocalPosition: {transform.localPosition}");
+            Debug.Log($"AFTER TEST - LocalScale: {transform.localScale}");
+
+            // Assert - verify that valid properties were set despite invalid ones
+            Assert.AreEqual(new Vector3(1.0f, 2.0f, 3.0f), transform.localPosition, 
+                "Valid localPosition should be set even with other invalid properties");
+            Assert.AreEqual(new Vector3(2.0f, 2.0f, 2.0f), transform.localScale,
+                "Valid localScale should be set even with other invalid properties");
+            Assert.AreEqual(5.0f, rigidbody.mass, 0.001f,
+                "Valid mass should be set even with other invalid properties");
+            Assert.AreEqual(true, rigidbody.useGravity,
+                "Valid useGravity should be set even with other invalid properties");
+
+            // Verify the result indicates errors (since we had invalid properties)
+            Assert.IsNotNull(result, "Should return a result object");
+            
+            // The collect-and-continue behavior means we should get an error response 
+            // that contains info about the failed properties, but valid ones were still applied
+            // This proves the collect-and-continue behavior is working
+        }
+
+        [Test] 
+        public void SetComponentProperties_ContinuesAfterException()
+        {
+            // Arrange - create scenario that might cause exceptions
+            var rigidbody = testGameObject.AddComponent<Rigidbody>();
+            
+            // Set initial values that we'll change
+            rigidbody.mass = 1.0f;
+            rigidbody.useGravity = true;
+            
+            var setPropertiesParams = new JObject
+            {
+                ["action"] = "modify",
+                ["target"] = testGameObject.name,
+                ["search_method"] = "by_name",
+                ["componentProperties"] = new JObject
+                {
+                    ["Rigidbody"] = new JObject
+                    {
+                        ["mass"] = 2.5f,                    // Valid - should be set
+                        ["velocity"] = "invalid_type",      // Invalid type - will cause exception  
+                        ["useGravity"] = false              // Valid - should still be set after exception
+                    }
+                }
+            };
+
+            // Expect the error logs from the invalid property
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Unexpected error converting token to UnityEngine.Vector3"));
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("SetProperty.*Failed to set 'velocity'"));
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Property 'velocity' not found"));
+
+            // Act
+            var result = ManageGameObject.HandleCommand(setPropertiesParams);
+
+            // Assert - verify that valid properties before AND after the exception were still set
+            Assert.AreEqual(2.5f, rigidbody.mass, 0.001f,
+                "Mass should be set even if later property causes exception");
+            Assert.AreEqual(false, rigidbody.useGravity,
+                "UseGravity should be set even if previous property caused exception");
+
+            Assert.IsNotNull(result, "Should return a result even with exceptions");
+            
+            // The key test: processing continued after the exception and set useGravity
+            // This proves the collect-and-continue behavior works even with exceptions
         }
     }
 }

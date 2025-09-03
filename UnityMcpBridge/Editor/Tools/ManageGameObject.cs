@@ -785,6 +785,7 @@ namespace MCPForUnity.Editor.Tools
             }
 
             // Set Component Properties
+            var componentErrors = new List<object>();
             if (@params["componentProperties"] is JObject componentPropertiesObj)
             {
                 foreach (var prop in componentPropertiesObj.Properties())
@@ -799,10 +800,24 @@ namespace MCPForUnity.Editor.Tools
                             propertiesToSet
                         );
                         if (setResult != null)
-                            return setResult;
-                        modified = true;
+                        {
+                            componentErrors.Add(setResult);
+                        }
+                        else
+                        {
+                            modified = true;
+                        }
                     }
                 }
+            }
+
+            // Return component errors if any occurred (after processing all components)
+            if (componentErrors.Count > 0)
+            {
+                return Response.Error(
+                    $"One or more component property operations failed on '{targetGo.name}'.",
+                    new { componentErrors = componentErrors }
+                );
             }
 
             if (!modified)
@@ -1534,6 +1549,7 @@ namespace MCPForUnity.Editor.Tools
 
             Undo.RecordObject(targetComponent, "Set Component Properties");
 
+            var failures = new List<string>();
             foreach (var prop in propertiesToSet.Properties())
             {
                 string propName = prop.Name;
@@ -1541,39 +1557,16 @@ namespace MCPForUnity.Editor.Tools
 
                 try
                 {
-                    if (!SetProperty(targetComponent, propName, propValue))
+                    bool setResult = SetProperty(targetComponent, propName, propValue);
+                    if (!setResult)
                     {
-                        // Get available properties and AI suggestions for better error messages
                         var availableProperties = ComponentResolver.GetAllComponentProperties(targetComponent.GetType());
                         var suggestions = ComponentResolver.GetAIPropertySuggestions(propName, availableProperties);
-                        
-                        var errorMessage = $"[ManageGameObject] Could not set property '{propName}' on component '{compName}' ('{targetComponent.GetType().Name}').";
-                        
-                        if (suggestions.Any())
-                        {
-                            errorMessage += $" Did you mean: {string.Join(", ", suggestions)}?";
-                        }
-                        
-                        errorMessage += $" Available properties: [{string.Join(", ", availableProperties)}]";
-                        
-                        Debug.LogWarning(errorMessage);
-                        
-                        // Return enhanced error with suggestions for better UX
-                        if (suggestions.Any())
-                        {
-                            return Response.Error(
-                                $"Property '{propName}' not found on {compName}. " +
-                                $"Did you mean: {string.Join(", ", suggestions)}? " +
-                                $"Available properties: [{string.Join(", ", availableProperties)}]"
-                            );
-                        }
-                        else
-                        {
-                            return Response.Error(
-                                $"Property '{propName}' not found on {compName}. " +
-                                $"Available properties: [{string.Join(", ", availableProperties)}]"
-                            );
-                        }
+                        var msg = suggestions.Any()
+                            ? $"Property '{propName}' not found. Did you mean: {string.Join(", ", suggestions)}? Available: [{string.Join(", ", availableProperties)}]"
+                            : $"Property '{propName}' not found. Available: [{string.Join(", ", availableProperties)}]";
+                        Debug.LogWarning($"[ManageGameObject] {msg}");
+                        failures.Add(msg);
                     }
                 }
                 catch (Exception e)
@@ -1581,12 +1574,13 @@ namespace MCPForUnity.Editor.Tools
                     Debug.LogError(
                         $"[ManageGameObject] Error setting property '{propName}' on '{compName}': {e.Message}"
                     );
-                    // Optionally return an error here
-                    // return Response.Error($"Error setting property '{propName}' on '{compName}': {e.Message}");
+                    failures.Add($"Error setting '{propName}': {e.Message}");
                 }
             }
             EditorUtility.SetDirty(targetComponent);
-            return null; // Success (or partial success if warnings were logged)
+            return failures.Count == 0
+                ? null
+                : Response.Error($"One or more properties failed on '{compName}'.", new { errors = failures });
         }
 
         /// <summary>
