@@ -1,4 +1,4 @@
-#nullable enable
+#nullable disable
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -289,11 +289,16 @@ namespace MCPForUnity.Editor.Tools
                         newGo = GameObject.CreatePrimitive(type);
                         // Set name *after* creation for primitives
                         if (!string.IsNullOrEmpty(name))
+                        {
                             newGo.name = name;
+                        }
                         else
+                        {
+                            UnityEngine.Object.DestroyImmediate(newGo); // cleanup leak
                             return Response.Error(
                                 "'name' parameter is required when creating a primitive."
-                            ); // Name is essential
+                            );
+                        }
                         createdNewObject = true;
                     }
                     catch (ArgumentException)
@@ -1493,7 +1498,18 @@ namespace MCPForUnity.Editor.Tools
             Component targetComponentInstance = null
         )
         {
-            Component targetComponent = targetComponentInstance ?? targetGo.GetComponent(compName);
+            Component targetComponent = targetComponentInstance;
+            if (targetComponent == null)
+            {
+                if (ComponentResolver.TryResolve(compName, out var compType, out var compError))
+                {
+                    targetComponent = targetGo.GetComponent(compType);
+                }
+                else
+                {
+                    targetComponent = targetGo.GetComponent(compName); // fallback to string-based lookup
+                }
+            }
             if (targetComponent == null)
             {
                 return Response.Error(
@@ -1626,6 +1642,20 @@ namespace MCPForUnity.Editor.Tools
                          else {
                              Debug.LogWarning($"[SetProperty] Conversion failed for field '{memberName}' (Type: {fieldInfo.FieldType.Name}) from token: {value.ToString(Formatting.None)}");
                          }
+                    }
+                    else
+                    {
+                        // Try NonPublic [SerializeField] fields
+                        var npField = type.GetField(memberName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                        if (npField != null && npField.GetCustomAttribute<SerializeField>() != null)
+                        {
+                            object convertedValue = ConvertJTokenToType(value, npField.FieldType, inputSerializer);
+                            if (convertedValue != null || value.Type == JTokenType.Null)
+                            {
+                                npField.SetValue(target, convertedValue);
+                                return true;
+                            }
+                        }
                     }
                 }
             }
@@ -2199,7 +2229,7 @@ namespace MCPForUnity.Editor.Tools
             t.Name.Equals(q, StringComparison.Ordinal) ||
             (t.FullName?.Equals(q, StringComparison.Ordinal) ?? false);
 
-        private static bool IsValidComponent(Type? t) =>
+        private static bool IsValidComponent(Type t) =>
             t != null && typeof(Component).IsAssignableFrom(t);
 
         private static void Cache(Type t)

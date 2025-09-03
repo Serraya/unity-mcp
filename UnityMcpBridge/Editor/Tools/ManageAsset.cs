@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using MCPForUnity.Editor.Helpers; // For Response class
+using static MCPForUnity.Editor.Tools.ManageGameObject; // For ComponentResolver
 
 #if UNITY_6000_0_OR_NEWER
 using PhysicsMaterialType = UnityEngine.PhysicsMaterial;
@@ -207,9 +208,10 @@ namespace MCPForUnity.Editor.Tools
                         || !typeof(ScriptableObject).IsAssignableFrom(scriptType)
                     )
                     {
-                        return Response.Error(
-                            $"Script class '{scriptClassName}' not found or does not inherit from ScriptableObject."
-                        );
+                        var reason = scriptType == null
+                            ? (string.IsNullOrEmpty(error) ? "Type not found." : error)
+                            : "Type found but does not inherit from ScriptableObject.";
+                        return Response.Error($"Script class '{scriptClassName}' invalid: {reason}");
                     }
 
                     ScriptableObject so = ScriptableObject.CreateInstance(scriptType);
@@ -353,10 +355,18 @@ namespace MCPForUnity.Editor.Tools
                             && componentProperties.HasValues
                         ) // e.g., {"bobSpeed": 2.0}
                         {
-                            // Find the component on the GameObject using the name from the JSON key
-                            // Using GetComponent(string) is convenient but might require exact type name or be ambiguous.
-                            // Consider using ComponentResolver if needed for more complex scenarios.
-                            Component targetComponent = gameObject.GetComponent(componentName);
+                            // Resolve component type via ComponentResolver, then fetch by Type
+                            Component targetComponent = null;
+                            if (ComponentResolver.TryResolve(componentName, out var compType, out var compError))
+                            {
+                                targetComponent = gameObject.GetComponent(compType);
+                            }
+                            else
+                            {
+                                Debug.LogWarning(
+                                    $"[ManageAsset.ModifyAsset] Failed to resolve component '{componentName}' on '{gameObject.name}': {compError}"
+                                );
+                            }
 
                             if (targetComponent != null)
                             {
@@ -937,8 +947,8 @@ namespace MCPForUnity.Editor.Tools
             {
                 string propName = floatProps["name"]?.ToString();
                 if (
-                    !string.IsNullOrEmpty(propName) && floatProps["value"]?.Type == JTokenType.Float
-                    || floatProps["value"]?.Type == JTokenType.Integer
+                    !string.IsNullOrEmpty(propName) &&
+                    (floatProps["value"]?.Type == JTokenType.Float || floatProps["value"]?.Type == JTokenType.Integer)
                 )
                 {
                     try

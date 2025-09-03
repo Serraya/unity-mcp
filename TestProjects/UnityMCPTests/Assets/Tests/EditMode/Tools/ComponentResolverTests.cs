@@ -31,11 +31,11 @@ namespace MCPForUnityTests.Editor.Tools
         [Test]
         public void TryResolve_ReturnsTrue_ForCustomComponentShortName()
         {
-            bool result = ComponentResolver.TryResolve("TicTacToe3D", out Type type, out string error);
+            bool result = ComponentResolver.TryResolve("CustomComponent", out Type type, out string error);
             
-            Assert.IsTrue(result, "Should resolve TicTacToe3D component");
+            Assert.IsTrue(result, "Should resolve CustomComponent");
             Assert.IsNotNull(type, "Should return valid type");
-            Assert.AreEqual("TicTacToe3D", type.Name, "Should have correct type name");
+            Assert.AreEqual("CustomComponent", type.Name, "Should have correct type name");
             Assert.IsTrue(typeof(Component).IsAssignableFrom(type), "Should be a Component type");
             Assert.IsEmpty(error, "Should have no error message");
         }
