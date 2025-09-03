@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using MCPForUnity.Editor.Helpers; // For Response class
+using static MCPForUnity.Editor.Tools.ManageGameObject;
 
 #if UNITY_6000_0_OR_NEWER
 using PhysicsMaterialType = UnityEngine.PhysicsMaterial;
@@ -201,15 +202,16 @@ namespace MCPForUnity.Editor.Tools
                             "'scriptClass' property required when creating ScriptableObject asset."
                         );
 
-                    Type scriptType = FindType(scriptClassName);
+                    Type scriptType = ComponentResolver.TryResolve(scriptClassName, out var resolvedType, out var error) ? resolvedType : null;
                     if (
                         scriptType == null
                         || !typeof(ScriptableObject).IsAssignableFrom(scriptType)
                     )
                     {
-                        return Response.Error(
-                            $"Script class '{scriptClassName}' not found or does not inherit from ScriptableObject."
-                        );
+                        var reason = scriptType == null
+                            ? (string.IsNullOrEmpty(error) ? "Type not found." : error)
+                            : "Type found but does not inherit from ScriptableObject.";
+                        return Response.Error($"Script class '{scriptClassName}' invalid: {reason}");
                     }
 
                     ScriptableObject so = ScriptableObject.CreateInstance(scriptType);
@@ -353,10 +355,21 @@ namespace MCPForUnity.Editor.Tools
                             && componentProperties.HasValues
                         ) // e.g., {"bobSpeed": 2.0}
                         {
-                            // Find the component on the GameObject using the name from the JSON key
-                            // Using GetComponent(string) is convenient but might require exact type name or be ambiguous.
-                            // Consider using FindType helper if needed for more complex scenarios.
-                            Component targetComponent = gameObject.GetComponent(componentName);
+                            // Resolve component type via ComponentResolver, then fetch by Type
+                            Component targetComponent = null;
+                            bool resolved = ComponentResolver.TryResolve(componentName, out var compType, out var compError);
+                            if (resolved)
+                            {
+                                targetComponent = gameObject.GetComponent(compType);
+                            }
+                            
+                            // Only warn about resolution failure if component also not found
+                            if (targetComponent == null && !resolved)
+                            {
+                                Debug.LogWarning(
+                                    $"[ManageAsset.ModifyAsset] Failed to resolve component '{componentName}' on '{gameObject.name}': {compError}"
+                                );
+                            }
 
                             if (targetComponent != null)
                             {
@@ -937,8 +950,8 @@ namespace MCPForUnity.Editor.Tools
             {
                 string propName = floatProps["name"]?.ToString();
                 if (
-                    !string.IsNullOrEmpty(propName) && floatProps["value"]?.Type == JTokenType.Float
-                    || floatProps["value"]?.Type == JTokenType.Integer
+                    !string.IsNullOrEmpty(propName) &&
+                    (floatProps["value"]?.Type == JTokenType.Float || floatProps["value"]?.Type == JTokenType.Integer)
                 )
                 {
                     try
@@ -1220,46 +1233,6 @@ namespace MCPForUnity.Editor.Tools
             }
         }
 
-        /// <summary>
-        /// Helper to find a Type by name, searching relevant assemblies.
-        /// Needed for creating ScriptableObjects or finding component types by name.
-        /// </summary>
-        private static Type FindType(string typeName)
-        {
-            if (string.IsNullOrEmpty(typeName))
-                return null;
-
-            // Try direct lookup first (common Unity types often don't need assembly qualified name)
-            var type =
-                Type.GetType(typeName)
-                ?? Type.GetType($"UnityEngine.{typeName}, UnityEngine.CoreModule")
-                ?? Type.GetType($"UnityEngine.UI.{typeName}, UnityEngine.UI")
-                ?? Type.GetType($"UnityEditor.{typeName}, UnityEditor.CoreModule");
-
-            if (type != null)
-                return type;
-
-            // If not found, search loaded assemblies (slower but more robust for user scripts)
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                // Look for non-namespaced first
-                type = assembly.GetType(typeName, false, true); // throwOnError=false, ignoreCase=true
-                if (type != null)
-                    return type;
-
-                // Check common namespaces if simple name given
-                type = assembly.GetType("UnityEngine." + typeName, false, true);
-                if (type != null)
-                    return type;
-                type = assembly.GetType("UnityEditor." + typeName, false, true);
-                if (type != null)
-                    return type;
-                // Add other likely namespaces if needed (e.g., specific plugins)
-            }
-
-            Debug.LogWarning($"[FindType] Type '{typeName}' not found in any loaded assembly.");
-            return null; // Not found
-        }
 
         // --- Data Serialization ---
 
