@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -5,6 +6,7 @@ using System.Reflection;
 using Newtonsoft.Json; // Added for JsonSerializationException
 using Newtonsoft.Json.Linq;
 using UnityEditor;
+using UnityEditor.Compilation; // For CompilationPipeline
 using UnityEditor.SceneManagement;
 using UnityEditorInternal;
 using UnityEngine;
@@ -1098,6 +1100,29 @@ namespace MCPForUnity.Editor.Tools
         // --- Internal Helpers ---
 
         /// <summary>
+        /// Parses a JArray like [x, y, z] into a Vector3.
+        /// </summary>
+        private static Vector3? ParseVector3(JArray array)
+        {
+            if (array != null && array.Count == 3)
+            {
+                try
+                {
+                    return new Vector3(
+                        array[0].ToObject<float>(),
+                        array[1].ToObject<float>(),
+                        array[2].ToObject<float>()
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Failed to parse JArray as Vector3: {array}. Error: {ex.Message}");
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
         /// Finds a single GameObject based on token (ID, name, path) and search method.
         /// </summary>
         private static GameObject FindObjectInternal(
@@ -2070,58 +2095,137 @@ namespace MCPForUnity.Editor.Tools
 
 
         /// <summary>
-        /// Helper to find a Type by name, searching relevant assemblies.
+        /// Robust component resolver that avoids Assembly.LoadFrom and works with asmdefs.
+        /// Searches already-loaded assemblies, prioritizing runtime script assemblies.
         /// </summary>
         private static Type FindType(string typeName)
         {
-            if (string.IsNullOrEmpty(typeName))
-                return null;
-
-             // Handle fully qualified names first
-            Type type = Type.GetType(typeName);
-            if (type != null) return type;
-
-             // Handle common namespaces implicitly (add more as needed)
-             string[] namespaces = { "UnityEngine", "UnityEngine.UI", "UnityEngine.AI", "UnityEngine.Animations", "UnityEngine.Audio", "UnityEngine.EventSystems", "UnityEngine.InputSystem", "UnityEngine.Networking", "UnityEngine.Rendering", "UnityEngine.SceneManagement", "UnityEngine.Tilemaps", "UnityEngine.U2D", "UnityEngine.Video", "UnityEditor", "UnityEditor.AI", "UnityEditor.Animations", "UnityEditor.Experimental.GraphView", "UnityEditor.IMGUI.Controls", "UnityEditor.PackageManager.UI", "UnityEditor.SceneManagement", "UnityEditor.UI", "UnityEditor.U2D", "UnityEditor.VersionControl" }; // Add more relevant namespaces
-
-             foreach (string ns in namespaces) {
-                 type = Type.GetType($"{ns}.{typeName}, {ns.Split('.')[0]}.CoreModule") ?? // Heuristic: Check CoreModule first for UnityEngine/UnityEditor
-                        Type.GetType($"{ns}.{typeName}, {ns.Split('.')[0]}"); // Try assembly matching namespace root
-                 if (type != null) return type;
-             }
-
-
-             // If not found, search all loaded assemblies (slower, last resort)
-             // Prioritize assemblies likely to contain game/editor types
-             Assembly[] priorityAssemblies = {
-                 Assembly.Load("Assembly-CSharp"), // Main game scripts
-                 Assembly.Load("Assembly-CSharp-Editor"), // Main editor scripts
-                 // Add other important project assemblies if known
-             };
-             foreach (var assembly in priorityAssemblies.Where(a => a != null))
-             {
-                 type = assembly.GetType(typeName) ?? assembly.GetType("UnityEngine." + typeName) ?? assembly.GetType("UnityEditor." + typeName);
-                 if (type != null) return type;
-             }
-
-             // Search remaining assemblies
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies().Except(priorityAssemblies))
+            if (ComponentResolver.TryResolve(typeName, out Type resolvedType, out string error))
             {
-                 try { // Protect against assembly loading errors
-                     type = assembly.GetType(typeName);
-                     if (type != null) return type;
-                     // Also check with common namespaces if simple name given
-                     foreach (string ns in namespaces) {
-                         type = assembly.GetType($"{ns}.{typeName}");
-                         if (type != null) return type;
-                     }
-                 } catch (Exception ex) {
-                      Debug.LogWarning($"[FindType] Error searching assembly {assembly.FullName}: {ex.Message}");
-                 }
+                return resolvedType;
+            }
+            
+            // Log the resolver error if type wasn't found
+            if (!string.IsNullOrEmpty(error))
+            {
+                Debug.LogWarning($"[FindType] {error}");
+            }
+            
+            return null;
+        }
+    }
+    
+    /// <summary>
+    /// Robust component resolver that avoids Assembly.LoadFrom and supports assembly definitions.
+    /// Prioritizes runtime (Player) assemblies over Editor assemblies.
+    /// </summary>
+    internal static class ComponentResolver
+    {
+        private static readonly Dictionary<string, Type> CacheByFqn = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, Type> CacheByName = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Resolve a Component/MonoBehaviour type by short or fully-qualified name.
+        /// Prefers runtime (Player) script assemblies; falls back to Editor assemblies.
+        /// Never uses Assembly.LoadFrom.
+        /// </summary>
+        public static bool TryResolve(string nameOrFullName, out Type type, out string error)
+        {
+            error = string.Empty;
+
+            // 1) Exact FQN via Type.GetType
+            if (CacheByFqn.TryGetValue(nameOrFullName, out type)) return true;
+            type = Type.GetType(nameOrFullName, throwOnError: false);
+            if (IsValidComponent(type)) { Cache(type); return true; }
+
+            // 2) Search loaded assemblies (prefer Player assemblies)
+            var candidates = FindCandidates(nameOrFullName);
+            if (candidates.Count == 1) { type = candidates[0]; Cache(type); return true; }
+            if (candidates.Count > 1) { error = Ambiguity(nameOrFullName, candidates); type = null!; return false; }
+
+#if UNITY_EDITOR
+            // 3) Last resort: Editor-only TypeCache (fast index)
+            var tc = TypeCache.GetTypesDerivedFrom<Component>()
+                              .Where(t => NamesMatch(t, nameOrFullName));
+            candidates = PreferPlayer(tc).ToList();
+            if (candidates.Count == 1) { type = candidates[0]; Cache(type); return true; }
+            if (candidates.Count > 1) { error = Ambiguity(nameOrFullName, candidates); type = null!; return false; }
+#endif
+
+            error = $"Component type '{nameOrFullName}' not found in loaded runtime assemblies. " +
+                    "Use a fully-qualified name (Namespace.TypeName) and ensure the script compiled.";
+            type = null!;
+            return false;
+        }
+
+        private static bool NamesMatch(Type t, string q) =>
+            t.Name.Equals(q, StringComparison.Ordinal) ||
+            (t.FullName?.Equals(q, StringComparison.Ordinal) ?? false);
+
+        private static bool IsValidComponent(Type? t) =>
+            t != null && typeof(Component).IsAssignableFrom(t);
+
+        private static void Cache(Type t)
+        {
+            if (t.FullName != null) CacheByFqn[t.FullName] = t;
+            CacheByName[t.Name] = t;
+        }
+
+        private static List<Type> FindCandidates(string query)
+        {
+            bool isShort = !query.Contains('.');
+            var loaded = AppDomain.CurrentDomain.GetAssemblies();
+
+#if UNITY_EDITOR
+            // Names of Player (runtime) script assemblies (asmdefs + Assembly-CSharp)
+            var playerAsmNames = new HashSet<string>(
+                UnityEditor.Compilation.CompilationPipeline.GetAssemblies(UnityEditor.Compilation.AssembliesType.Player).Select(a => a.name),
+                StringComparer.Ordinal);
+
+            IEnumerable<System.Reflection.Assembly> playerAsms = loaded.Where(a => playerAsmNames.Contains(a.GetName().Name));
+            IEnumerable<System.Reflection.Assembly> editorAsms = loaded.Except(playerAsms);
+#else
+            IEnumerable<System.Reflection.Assembly> playerAsms = loaded;
+            IEnumerable<System.Reflection.Assembly> editorAsms = Array.Empty<System.Reflection.Assembly>();
+#endif
+            static IEnumerable<Type> SafeGetTypes(System.Reflection.Assembly a)
+            {
+                try { return a.GetTypes(); }
+                catch (ReflectionTypeLoadException rtle) { return rtle.Types.Where(t => t != null)!; }
             }
 
-             Debug.LogWarning($"[FindType] Type not found after extensive search: '{typeName}'");
-            return null; // Not found
+            Func<Type, bool> match = isShort
+                ? (t => t.Name.Equals(query, StringComparison.Ordinal))
+                : (t => t.FullName!.Equals(query, StringComparison.Ordinal));
+
+            var fromPlayer = playerAsms.SelectMany(SafeGetTypes)
+                                       .Where(IsValidComponent)
+                                       .Where(match);
+            var fromEditor = editorAsms.SelectMany(SafeGetTypes)
+                                       .Where(IsValidComponent)
+                                       .Where(match);
+
+            var list = new List<Type>(fromPlayer);
+            if (list.Count == 0) list.AddRange(fromEditor);
+            return list;
+        }
+
+#if UNITY_EDITOR
+        private static IEnumerable<Type> PreferPlayer(IEnumerable<Type> seq)
+        {
+            var player = new HashSet<string>(
+                UnityEditor.Compilation.CompilationPipeline.GetAssemblies(UnityEditor.Compilation.AssembliesType.Player).Select(a => a.name),
+                StringComparer.Ordinal);
+
+            return seq.OrderBy(t => player.Contains(t.Assembly.GetName().Name) ? 0 : 1);
+        }
+#endif
+
+        private static string Ambiguity(string query, IEnumerable<Type> cands)
+        {
+            var lines = cands.Select(t => $"{t.FullName} (assembly {t.Assembly.GetName().Name})");
+            return $"Multiple component types matched '{query}':\n - " + string.Join("\n - ", lines) +
+                   "\nProvide a fully qualified type name to disambiguate.";
         }
 
         /// <summary>

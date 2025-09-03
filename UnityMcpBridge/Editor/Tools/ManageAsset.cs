@@ -201,7 +201,7 @@ namespace MCPForUnity.Editor.Tools
                             "'scriptClass' property required when creating ScriptableObject asset."
                         );
 
-                    Type scriptType = FindType(scriptClassName);
+                    Type scriptType = ComponentResolver.TryResolve(scriptClassName, out var resolvedType, out var error) ? resolvedType : null;
                     if (
                         scriptType == null
                         || !typeof(ScriptableObject).IsAssignableFrom(scriptType)
@@ -355,7 +355,7 @@ namespace MCPForUnity.Editor.Tools
                         {
                             // Find the component on the GameObject using the name from the JSON key
                             // Using GetComponent(string) is convenient but might require exact type name or be ambiguous.
-                            // Consider using FindType helper if needed for more complex scenarios.
+                            // Consider using ComponentResolver if needed for more complex scenarios.
                             Component targetComponent = gameObject.GetComponent(componentName);
 
                             if (targetComponent != null)
@@ -1220,46 +1220,6 @@ namespace MCPForUnity.Editor.Tools
             }
         }
 
-        /// <summary>
-        /// Helper to find a Type by name, searching relevant assemblies.
-        /// Needed for creating ScriptableObjects or finding component types by name.
-        /// </summary>
-        private static Type FindType(string typeName)
-        {
-            if (string.IsNullOrEmpty(typeName))
-                return null;
-
-            // Try direct lookup first (common Unity types often don't need assembly qualified name)
-            var type =
-                Type.GetType(typeName)
-                ?? Type.GetType($"UnityEngine.{typeName}, UnityEngine.CoreModule")
-                ?? Type.GetType($"UnityEngine.UI.{typeName}, UnityEngine.UI")
-                ?? Type.GetType($"UnityEditor.{typeName}, UnityEditor.CoreModule");
-
-            if (type != null)
-                return type;
-
-            // If not found, search loaded assemblies (slower but more robust for user scripts)
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                // Look for non-namespaced first
-                type = assembly.GetType(typeName, false, true); // throwOnError=false, ignoreCase=true
-                if (type != null)
-                    return type;
-
-                // Check common namespaces if simple name given
-                type = assembly.GetType("UnityEngine." + typeName, false, true);
-                if (type != null)
-                    return type;
-                type = assembly.GetType("UnityEditor." + typeName, false, true);
-                if (type != null)
-                    return type;
-                // Add other likely namespaces if needed (e.g., specific plugins)
-            }
-
-            Debug.LogWarning($"[FindType] Type '{typeName}' not found in any loaded assembly.");
-            return null; // Not found
-        }
 
         // --- Data Serialization ---
 
