@@ -105,7 +105,7 @@ namespace MCPForUnityTests.Editor.Tools
         public void TryResolve_PrefersPlayerAssemblies()
         {
             // Test that custom user scripts (in Player assemblies) are found
-            bool result = ComponentResolver.TryResolve("TicTacToe3D", out Type type, out string error);
+            bool result = ComponentResolver.TryResolve("CustomComponent", out Type type, out string error);
             
             Assert.IsTrue(result, "Should resolve user script from Player assembly");
             Assert.IsNotNull(type, "Should return valid type");
@@ -114,6 +114,10 @@ namespace MCPForUnityTests.Editor.Tools
             string assemblyName = type.Assembly.GetName().Name;
             Assert.That(assemblyName, Does.Not.Contain("Editor"), 
                 "User script should come from Player assembly, not Editor assembly");
+            
+            // Verify it's from the TestAsmdef assembly (which is a Player assembly)
+            Assert.AreEqual("TestAsmdef", assemblyName, 
+                "CustomComponent should be resolved from TestAsmdef assembly");
         }
 
         [Test] 
