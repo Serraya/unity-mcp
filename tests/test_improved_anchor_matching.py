@@ -65,33 +65,11 @@ public class TestClass : MonoBehaviour
         anchor_pattern, test_code, flags, prefer_last=True
     )
     
-    if best_match:
-        match_pos = best_match.start()
-        
-        # Get line number
-        lines_before = test_code[:match_pos].count('\n')
-        line_num = lines_before + 1
-        
-        print(f"Improved matching chose position {match_pos} on line {line_num}")
-        
-        # Show context
-        before_context = test_code[max(0, match_pos-50):match_pos]
-        after_context = test_code[match_pos:match_pos+20]
-        print(f"Context: ...{before_context}|MATCH|{after_context}...")
-        
-        # Check if this is closer to the end (should be line 13 or 14, not line 7)
-        total_lines = test_code.count('\n') + 1
-        print(f"Total lines: {total_lines}")
-        
-        if line_num >= total_lines - 2:  # Within last 2 lines
-            print("✅ SUCCESS: Improved matching found class-ending brace!")
-            return True
-        else:
-            print("❌ FAIL: Still matching early in file")
-            return False
-    else:
-        print("❌ FAIL: No match found")
-        return False
+    assert best_match is not None, "anchor pattern not found"
+    match_pos = best_match.start()
+    line_num = test_code[:match_pos].count('\n') + 1
+    total_lines = test_code.count('\n') + 1
+    assert line_num >= total_lines - 2, f"expected match near end (>= {total_lines-2}), got line {line_num}"
 
 def test_old_vs_new_matching():
     """Compare old vs new matching behavior."""
@@ -134,26 +112,10 @@ public class TestClass : MonoBehaviour
     )
     new_line = test_code[:new_match.start()].count('\n') + 1 if new_match else None
     
-    print(f"Old matching (first): Line {old_line}")
-    print(f"New matching (improved): Line {new_line}")
-    
+    assert old_line is not None and new_line is not None, "failed to locate anchors"
+    assert new_line > old_line, f"improved matcher should choose a later line (old={old_line}, new={new_line})"
     total_lines = test_code.count('\n') + 1
-    print(f"Total lines: {total_lines}")
-    
-    # The new approach should choose a line much closer to the end
-    if new_line and old_line and new_line > old_line:
-        print("✅ SUCCESS: New matching chooses a later line!")
-        
-        # Verify it's actually the class end, not just a later method
-        if new_line >= total_lines - 2:
-            print("✅ EXCELLENT: New matching found the actual class end!")
-            return True
-        else:
-            print("⚠️  PARTIAL: Better than before, but might still be a method end")
-            return True
-    else:
-        print("❌ FAIL: New matching didn't improve")
-        return False
+    assert new_line >= total_lines - 2, f"expected class-end match near end (>= {total_lines-2}), got {new_line}"
 
 def test_apply_edits_with_improved_matching():
     """Test that _apply_edits_locally uses improved matching."""
@@ -178,30 +140,14 @@ public class TestClass : MonoBehaviour
         "text": "\n    public void NewMethod() { Debug.Log(\"Added at class end\"); }\n"
     }]
     
+    result = manage_script_edits_module._apply_edits_locally(original_code, edits)
+    lines = result.split('\n')
     try:
-        result = manage_script_edits_module._apply_edits_locally(original_code, edits)
-        
-        # Check where the new method was inserted
-        lines = result.split('\n')
-        for i, line in enumerate(lines):
-            if "NewMethod" in line:
-                print(f"NewMethod inserted at line {i+1}: {line.strip()}")
-                
-                # Verify it's near the end, not in the middle
-                total_lines = len(lines)
-                if i >= total_lines - 5:  # Within last 5 lines
-                    print("✅ SUCCESS: Method inserted near class end!")
-                    return True
-                else:
-                    print("❌ FAIL: Method inserted too early in file")
-                    return False
-                    
-        print("❌ FAIL: NewMethod not found in result")
-        return False
-        
-    except Exception as e:
-        print(f"❌ ERROR: {e}")
-        return False
+        idx = next(i for i, line in enumerate(lines) if "NewMethod" in line)
+    except StopIteration:
+        assert False, "NewMethod not found in result"
+    total_lines = len(lines)
+    assert idx >= total_lines - 5, f"method inserted too early (idx={idx}, total_lines={total_lines})"
 
 if __name__ == "__main__":
     print("Testing improved anchor matching...")
