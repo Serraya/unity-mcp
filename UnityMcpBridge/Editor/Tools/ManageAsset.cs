@@ -1279,21 +1279,24 @@ namespace MCPForUnity.Editor.Tools
                             rt = RenderTexture.GetTemporary(preview.width, preview.height);
                             Graphics.Blit(preview, rt);
                             RenderTexture.active = rt;
-                            readablePreview = new Texture2D(preview.width, preview.height);
+                            readablePreview = new Texture2D(preview.width, preview.height, TextureFormat.RGB24, false);
                             readablePreview.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
                             readablePreview.Apply();
+
+                            var pngData = readablePreview.EncodeToPNG();
+                            if (pngData != null && pngData.Length > 0)
+                            {
+                                previewBase64 = Convert.ToBase64String(pngData);
+                                previewWidth = readablePreview.width;
+                                previewHeight = readablePreview.height;
+                            }
                         }
                         finally
                         {
                             RenderTexture.active = previous;
                             if (rt != null) RenderTexture.ReleaseTemporary(rt);
+                            if (readablePreview != null) UnityEngine.Object.DestroyImmediate(readablePreview);
                         }
-
-                        var pngData = readablePreview.EncodeToPNG();
-                        previewBase64 = Convert.ToBase64String(pngData);
-                        previewWidth = readablePreview.width;
-                        previewHeight = readablePreview.height;
-                        UnityEngine.Object.DestroyImmediate(readablePreview);
                     }
                     catch (Exception ex)
                     {

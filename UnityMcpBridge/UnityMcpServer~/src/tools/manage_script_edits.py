@@ -42,7 +42,7 @@ def _apply_edits_locally(original_text: str, edits: List[Dict[str, Any]]) -> str
             flags = re.MULTILINE | (re.IGNORECASE if edit.get("ignore_case") else 0)
             
             # Find the best match using improved heuristics
-            match = _find_best_anchor_match(anchor, text, flags, edit.get("prefer_last", True))
+            match = _find_best_anchor_match(anchor, text, flags, bool(edit.get("prefer_last", True)))
             if not match:
                 if edit.get("allow_noop", True):
                     continue
