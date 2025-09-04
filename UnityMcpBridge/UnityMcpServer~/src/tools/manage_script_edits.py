@@ -630,8 +630,8 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         if not m:
                             continue
                         # Expand $1, $2... in replacement using this match
-                        def _expand_dollars(rep: str) -> str:
-                            return _re.sub(r"\$(\d+)", lambda g: m.group(int(g.group(1))) or "", rep)
+                        def _expand_dollars(rep: str, _m=m) -> str:
+                            return _re.sub(r"\$(\d+)", lambda g: _m.group(int(g.group(1))) or "", rep)
                         repl = _expand_dollars(text_field)
                         sl, sc = line_col_from_index(m.start())
                         el, ec = line_col_from_index(m.end())
@@ -767,8 +767,8 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         if not m:
                             continue
                         # Expand $1, $2... backrefs in replacement using the first match (consistent with mixed-path behavior)
-                        def _expand_dollars(rep: str) -> str:
-                            return _re.sub(r"\$(\d+)", lambda g: m.group(int(g.group(1))) or "", rep)
+                        def _expand_dollars(rep: str, _m=m) -> str:
+                            return _re.sub(r"\$(\d+)", lambda g: _m.group(int(g.group(1))) or "", rep)
                         repl_expanded = _expand_dollars(repl)
                         # Let C# side handle validation using Unity's built-in compiler services
                         sl, sc = line_col_from_index(m.start())
