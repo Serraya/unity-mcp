@@ -5,11 +5,22 @@ from config import config
 import time
 import os
 import base64
+try:
+    from telemetry_decorator import telemetry_tool
+    from telemetry import record_milestone, MilestoneType
+    HAS_TELEMETRY = True
+except ImportError:
+    HAS_TELEMETRY = False
+    def telemetry_tool(tool_name: str):
+        def decorator(func):
+            return func
+        return decorator
 
 def register_manage_script_tools(mcp: FastMCP):
     """Register all script management tools with the MCP server."""
 
     @mcp.tool()
+    @telemetry_tool("manage_script")
     def manage_script(
         ctx: Context,
         action: str,
