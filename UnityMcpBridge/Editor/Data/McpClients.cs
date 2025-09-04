@@ -19,6 +19,11 @@ namespace MCPForUnity.Editor.Data
                     ".cursor",
                     "mcp.json"
                 ),
+                macConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".cursor",
+                    "mcp.json"
+                ),
                 linuxConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".cursor",
@@ -35,6 +40,10 @@ namespace MCPForUnity.Editor.Data
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".claude.json"
                 ),
+                macConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".claude.json"
+                ),
                 linuxConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".claude.json"
@@ -47,6 +56,12 @@ namespace MCPForUnity.Editor.Data
             {
                 name = "Windsurf",
                 windowsConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".codeium",
+                    "windsurf",
+                    "mcp_config.json"
+                ),
+                macConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".codeium",
                     "windsurf",
@@ -70,22 +85,21 @@ namespace MCPForUnity.Editor.Data
                     "Claude",
                     "claude_desktop_config.json"
                 ),
-                // For macOS, Claude Desktop stores config under ~/Library/Application Support/Claude
-                // For Linux, it remains under ~/.config/Claude
-                linuxConfigPath = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    ? Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                        "Library",
-                        "Application Support",
-                        "Claude",
-                        "claude_desktop_config.json"
-                    )
-                    : Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                        ".config",
-                        "Claude",
-                        "claude_desktop_config.json"
-                    ),
+
+                macConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "Library",
+                    "Application Support",
+                    "Claude",
+                    "claude_desktop_config.json"
+                ),
+                linuxConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".config",
+                    "Claude",
+                    "claude_desktop_config.json"
+                ),
+
                 mcpType = McpTypes.ClaudeDesktop,
                 configStatus = "Not Configured",
             },
@@ -100,24 +114,23 @@ namespace MCPForUnity.Editor.Data
                     "User",
                     "mcp.json"
                 ),
-                // For macOS, VSCode stores user config under ~/Library/Application Support/Code/User
-                // For Linux, it remains under ~/.config/Code/User
-                linuxConfigPath = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    ? Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                        "Library",
-                        "Application Support",
-                        "Code",
-                        "User",
-                        "mcp.json"
-                    )
-                    : Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                        ".config",
-                        "Code",
-                        "User",
-                        "mcp.json"
-                    ),
+                // macOS: ~/Library/Application Support/Code/User/mcp.json
+                macConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "Library",
+                    "Application Support",
+                    "Code",
+                    "User",
+                    "mcp.json"
+                ),
+                // Linux: ~/.config/Code/User/mcp.json
+                linuxConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".config",
+                    "Code",
+                    "User",
+                    "mcp.json"
+                ),
                 mcpType = McpTypes.VSCode,
                 configStatus = "Not Configured",
             },
@@ -126,6 +139,12 @@ namespace MCPForUnity.Editor.Data
             {
                 name = "Kiro",
                 windowsConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".kiro",
+                    "settings",
+                    "mcp.json"
+                ),
+                macConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".kiro",
                     "settings",

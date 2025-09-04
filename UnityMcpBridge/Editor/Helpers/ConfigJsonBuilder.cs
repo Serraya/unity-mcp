@@ -54,7 +54,7 @@ namespace MCPForUnity.Editor.Helpers
             // For Cursor (non-VSCode) on macOS, prefer a no-spaces symlink path to avoid arg parsing issues in some runners
             string effectiveDir = directory;
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-            bool isCursor = !isVSCode && (client == null || client.mcpType != Models.McpTypes.VSCode);
+            bool isCursor = !isVSCode && (client == null || client.mcpType != McpTypes.VSCode);
             if (isCursor && !string.IsNullOrEmpty(directory))
             {
                 // Replace canonical path segment with the symlink path if present
@@ -65,7 +65,11 @@ namespace MCPForUnity.Editor.Helpers
                     // Normalize to full path style
                     if (directory.Contains(canonical))
                     {
-                        effectiveDir = directory.Replace(canonical, symlinkSeg);
+                        var candidate = directory.Replace(canonical, symlinkSeg).Replace('\\', '/');
+                        if (System.IO.Directory.Exists(candidate))
+                        {
+                            effectiveDir = candidate;
+                        }
                     }
                     else
                     {
@@ -76,7 +80,11 @@ namespace MCPForUnity.Editor.Helpers
                         {
                             string home = System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal) ?? string.Empty;
                             string suffix = norm.Substring(idx + "/.local/share/".Length); // UnityMCP/...
-                            effectiveDir = System.IO.Path.Combine(home, "Library", "AppSupport", suffix).Replace('\\', '/');
+                            string candidate = System.IO.Path.Combine(home, "Library", "AppSupport", suffix).Replace('\\', '/');
+                            if (System.IO.Directory.Exists(candidate))
+                            {
+                                effectiveDir = candidate;
+                            }
                         }
                     }
                 }
