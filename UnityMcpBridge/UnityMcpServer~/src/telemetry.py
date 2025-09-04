@@ -61,11 +61,8 @@ class TelemetryConfig:
         # Check environment variables for opt-out
         self.enabled = not self._is_disabled()
         
-        # Telemetry endpoint - can be configured via environment
-        self.endpoint = os.environ.get(
-            "UNITY_MCP_TELEMETRY_ENDPOINT",
-            "https://telemetry.coplay.dev/unity-mcp/anonymous"
-        )
+        # Telemetry endpoint - hardcoded to Coplay production API
+        self.endpoint = "https://api-prod.coplay.dev/telemetry/events"
         
         # Local storage for UUID and milestones
         self.data_dir = self._get_data_directory()

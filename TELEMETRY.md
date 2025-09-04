@@ -78,7 +78,7 @@ Files created:
 - `milestones.json`: One-time events tracker
 
 ### Data Transmission
-- **Endpoint**: `https://telemetry.coplay.dev/unity-mcp/anonymous`
+- **Endpoint**: `https://api-prod.coplay.dev/telemetry/events`
 - **Method**: HTTPS POST with JSON payload
 - **Retry**: Background thread with graceful failure
 - **Timeout**: 10 second timeout, no retries on failure
