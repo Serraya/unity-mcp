@@ -181,7 +181,7 @@ On Windows, set `command` to the absolute shim, e.g. `C:\\Users\\YOU\\AppData\\L
         "args": [
           "run",
           "--directory",
-          "C:\\Users\\YOUR_USERNAME\\AppData\\Local\\Programs\\UnityMCP\\UnityMcpServer\\src",
+          "C:\\Users\\YOUR_USERNAME\\AppData\\Local\\UnityMCP\\UnityMcpServer\\src",
           "server.py"
         ]
       }
@@ -202,7 +202,7 @@ On Windows, set `command` to the absolute shim, e.g. `C:\\Users\\YOU\\AppData\\L
       "args": [
         "run",
         "--directory",
-        "/usr/local/bin/UnityMCP/UnityMcpServer/src",
+        "/Users/YOUR_USERNAME/Library/AppSupport/UnityMCP/UnityMcpServer/src",
         "server.py"
       ]
     }
@@ -211,7 +211,7 @@ On Windows, set `command` to the absolute shim, e.g. `C:\\Users\\YOU\\AppData\\L
 }
 ```
 
-(Replace YOUR_USERNAME if using ~/bin)
+(Replace YOUR_USERNAME. Note: AppSupport is a symlink to "Application Support" to avoid quoting issues)
 
 **Linux:**
 
@@ -223,7 +223,7 @@ On Windows, set `command` to the absolute shim, e.g. `C:\\Users\\YOU\\AppData\\L
       "args": [
         "run",
         "--directory",
-        "/home/YOUR_USERNAME/bin/UnityMCP/UnityMcpServer/src",
+        "/home/YOUR_USERNAME/.local/share/UnityMCP/UnityMcpServer/src",
         "server.py"
       ]
     }
@@ -241,13 +241,13 @@ If you\'re using Claude Code, you can register the MCP server using these comman
 **macOS:**
 
 ```bash
-claude mcp add UnityMCP -- uv --directory /[PATH_TO]/UnityMCP/UnityMcpServer/src run server.py
+claude mcp add UnityMCP -- uv --directory /Users/USERNAME/Library/AppSupport/UnityMCP/UnityMcpServer/src run server.py
 ```
 
 **Windows:**
 
 ```bash
-claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/Scripts/uv.exe" --directory "C:/Users/USERNAME/AppData/Local/Programs/UnityMCP/UnityMcpServer/src" run server.py
+claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/Scripts/uv.exe" --directory "C:/Users/USERNAME/AppData/Local/UnityMCP/UnityMcpServer/src" run server.py
 ```
 </details>
 
