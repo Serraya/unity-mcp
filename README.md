@@ -96,7 +96,7 @@ MCP for Unity connects your tools using two components:
         **Note:** Without Roslyn, script validation falls back to basic structural checks. Roslyn enables full C# compiler diagnostics with precise error reporting.</details>
 
 ---
-### 🌟Install the Unity Package🌟
+### Step 1: 🌟Install the Unity Package🌟
 
 #### To install via Git URL
 
@@ -118,8 +118,8 @@ MCP for Unity connects your tools using two components:
 
 **Note:** If you installed the MCP Server before Coplay's maintenance, you will need to uninstall the old package before re-installing the new one.
 
-### Step 2: Configure Your MCP Client
-
+### 🛠️ Step 2: Configure Your MCP Client 🛠️
+e w
 Connect your MCP Client (Claude, Cursor, etc.) to the Python server set up in Step 1 (auto) or via Manual Configuration (below).
 
 <img width="648" height="599" alt="MCPForUnity-Readme-Image" src="https://github.com/user-attachments/assets/b4a725da-5c43-4bd6-80d6-ee2e3cca9596" />
@@ -241,7 +241,7 @@ claude mcp add UnityMCP -- uv --directory /Users/USERNAME/Library/AppSupport/Uni
 **Windows:**
 
 ```bash
-claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Roaming/Python/Python313/Scripts/uv.exe" --directory "C:/Users/USERNAME/AppData/Local/UnityMCP/UnityMcpServer/src" run server.py
+claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Local/Microsoft/WinGet/Links/uv.exe" --directory "C:/Users/USERNAME/AppData/Local/UnityMCP/UnityMcpServer/src" run server.py
 ```
 </details>
 
