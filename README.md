@@ -119,7 +119,6 @@ MCP for Unity connects your tools using two components:
 **Note:** If you installed the MCP Server before Coplay's maintenance, you will need to uninstall the old package before re-installing the new one.
 
 ### 🛠️ Step 2: Configure Your MCP Client 🛠️
-e w
 Connect your MCP Client (Claude, Cursor, etc.) to the Python server set up in Step 1 (auto) or via Manual Configuration (below).
 
 <img width="648" height="599" alt="MCPForUnity-Readme-Image" src="https://github.com/user-attachments/assets/b4a725da-5c43-4bd6-80d6-ee2e3cca9596" />
