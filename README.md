@@ -67,11 +67,17 @@ MCP for Unity connects your tools using two components:
 
   *   **Python:** Version 3.12 or newer. [Download Python](https://www.python.org/downloads/)
   *   **Unity Hub & Editor:** Version 2021.3 LTS or newer. [Download Unity](https://unity.com/download)
-  *   **uv (Python package manager):**
+  *   **uv (Python toolchain manager):**
       ```bash
-      pip install uv
-      # Or see: https://docs.astral.sh/uv/getting-started/installation/
+      # macOS / Linux
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      # Windows (PowerShell)
+      winget install Astral.Sh.Uv
+
+      # Docs: https://docs.astral.sh/uv/getting-started/installation/
       ```
+      
   *   **An MCP Client:** : [Claude Desktop](https://claude.ai/download) | [Claude Code](https://github.com/anthropics/claude-code) | [Cursor](https://www.cursor.com/en/downloads) | [Visual Studio Code Copilot](https://code.visualstudio.com/docs/copilot/overview) | [Windsurf](https://windsurf.com) | Others work with manual config
 
  *    <details> <summary><strong>[Optional] Roslyn for Advanced Script Validation</strong></summary>
