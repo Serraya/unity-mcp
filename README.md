@@ -102,7 +102,7 @@ MCP for Unity connects your tools using two components:
         **Note:** Without Roslyn, script validation falls back to basic structural checks. Roslyn enables full C# compiler diagnostics with precise error reporting.</details>
 
 ---
-### Step 1: 🌟Install the Unity Package🌟
+### 🌟 Step 1: Install the Unity Package
 
 #### To install via Git URL
 
@@ -124,7 +124,7 @@ MCP for Unity connects your tools using two components:
 
 **Note:** If you installed the MCP Server before Coplay's maintenance, you will need to uninstall the old package before re-installing the new one.
 
-### 🛠️ Step 2: Configure Your MCP Client 🛠️
+### 🛠️ Step 2: Configure Your MCP Client
 Connect your MCP Client (Claude, Cursor, etc.) to the Python server set up in Step 1 (auto) or via Manual Configuration (below).
 
 <img width="648" height="599" alt="MCPForUnity-Readme-Image" src="https://github.com/user-attachments/assets/b4a725da-5c43-4bd6-80d6-ee2e3cca9596" />
@@ -154,6 +154,23 @@ If Auto-Setup fails or you use a different client:
 <details>
 <summary><strong>Click for Client-Specific JSON Configuration Snippets...</strong></summary>
 
+  ---
+**Claude Code**
+
+If you're using Claude Code, you can register the MCP server using the below commands:
+🚨**make sure to run these from your Unity project's home directory**🚨
+
+**macOS:**
+
+```bash
+claude mcp add UnityMCP -- uv --directory /Users/USERNAME/Library/AppSupport/UnityMCP/UnityMcpServer/src run server.py
+```
+
+**Windows:**
+
+```bash
+claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Local/Microsoft/WinGet/Links/uv.exe" --directory "C:/Users/USERNAME/AppData/Local/UnityMCP/UnityMcpServer/src" run server.py
+```
 **VSCode (all OS)**
 
 ```json
@@ -233,21 +250,7 @@ On Windows, set `command` to the absolute shim, e.g. `C:\\Users\\YOU\\AppData\\L
 
 (Replace YOUR_USERNAME)
 
-**For Claude Code**
 
-If you're using Claude Code, you can register the MCP server using these commands:
-
-**macOS:**
-
-```bash
-claude mcp add UnityMCP -- uv --directory /Users/USERNAME/Library/AppSupport/UnityMCP/UnityMcpServer/src run server.py
-```
-
-**Windows:**
-
-```bash
-claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Local/Microsoft/WinGet/Links/uv.exe" --directory "C:/Users/USERNAME/AppData/Local/UnityMCP/UnityMcpServer/src" run server.py
-```
 </details>
 
 ---
