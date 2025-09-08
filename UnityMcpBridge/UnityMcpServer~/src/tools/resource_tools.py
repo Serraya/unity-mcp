@@ -5,13 +5,15 @@ safe path logic (re-implemented here to avoid importing server.py).
 """
 from __future__ import annotations
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import re
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 import fnmatch
 import hashlib
 import os
+
+from telemetry_decorator import telemetry_tool
 
 from mcp.server.fastmcp import FastMCP, Context
 from unity_connection import send_command_with_retry
@@ -114,8 +116,9 @@ def register_resource_tools(mcp: FastMCP) -> None:
         "Security: restricted to Assets/ subtree; symlinks are resolved and must remain under Assets/.\n"
         "Notes: Only .cs files are returned by default; always appends unity://spec/script-edits.\n"
     ))
+    @telemetry_tool("list_resources")
     async def list_resources(
-        ctx: Context | None = None,
+        ctx: Any = None,
         pattern: str | None = "*.cs",
         under: str = "Assets",
         limit: int = 200,
@@ -174,9 +177,10 @@ def register_resource_tools(mcp: FastMCP) -> None:
         "Security: uri must resolve under Assets/.\n"
         "Examples: head_bytes=1024; start_line=100,line_count=40; tail_lines=120.\n"
     ))
+    @telemetry_tool("read_resource")
     async def read_resource(
         uri: str,
-        ctx: Context | None = None,
+        ctx: Any = None,
         start_line: int | None = None,
         line_count: int | None = None,
         head_bytes: int | None = None,
@@ -334,10 +338,11 @@ def register_resource_tools(mcp: FastMCP) -> None:
             return {"success": False, "error": str(e)}
 
     @mcp.tool()
+    @telemetry_tool("find_in_file")
     async def find_in_file(
         uri: str,
         pattern: str,
-        ctx: Context | None = None,
+        ctx: Any = None,
         ignore_case: bool | None = True,
         project_root: str | None = None,
         max_results: int | None = 1,

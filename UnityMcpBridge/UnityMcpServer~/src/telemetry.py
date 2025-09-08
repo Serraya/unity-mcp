@@ -9,6 +9,8 @@ import contextvars
 import json
 import time
 import os
+import sys
+import platform
 import logging
 from enum import Enum
 from dataclasses import dataclass, asdict
@@ -61,8 +63,11 @@ class TelemetryConfig:
         # Check environment variables for opt-out
         self.enabled = not self._is_disabled()
         
-        # Telemetry endpoint - hardcoded to Coplay production API
-        self.endpoint = "https://api-prod.coplay.dev/telemetry/events"
+        # Telemetry endpoint (Cloud Run default; override via env)
+        self.endpoint = os.environ.get(
+            "UNITY_MCP_TELEMETRY_ENDPOINT",
+            "https://unity-mcp-telemetry-375728817078.us-central1.run.app/telemetry/events"
+        )
         
         # Local storage for UUID and milestones
         self.data_dir = self._get_data_directory()
@@ -172,9 +177,7 @@ class TelemetryCollector:
         if not self.config.enabled:
             return
             
-        if not HAS_HTTPX:
-            logger.debug("Telemetry disabled: httpx not available")
-            return
+        # Allow fallback sender when httpx is unavailable (no early return)
             
         record = TelemetryRecord(
             record_type=record_type,
@@ -196,33 +199,62 @@ class TelemetryCollector:
     def _send_telemetry(self, record: TelemetryRecord):
         """Send telemetry data to endpoint"""
         try:
+            # System fingerprint (top-level remains concise; details stored in data JSON)
+            _platform = platform.system()          # 'Darwin' | 'Linux' | 'Windows'
+            _source = sys.platform                 # 'darwin' | 'linux' | 'win32'
+            _platform_detail = f"{_platform} {platform.release()} ({platform.machine()})"
+            _python_version = platform.python_version()
+
+            # Enrich data JSON so BigQuery stores detailed fields without schema change
+            enriched_data = dict(record.data or {})
+            enriched_data.setdefault("platform_detail", _platform_detail)
+            enriched_data.setdefault("python_version", _python_version)
+
             payload = {
                 "record": record.record_type.value,
                 "timestamp": record.timestamp,
                 "customer_uuid": record.customer_uuid,
                 "session_id": record.session_id,
-                "data": record.data,
+                "data": enriched_data,
                 "version": "3.0.2",  # Unity MCP version
-                "platform": os.name
+                "platform": _platform,
+                "source": _source,
             }
-            
+
             if record.milestone:
                 payload["milestone"] = record.milestone.value
-                
-            if not httpx:
-                return
-                
-            with httpx.Client(timeout=self.config.timeout) as client:
-                response = client.post(self.config.endpoint, json=payload)
-                
-                if response.status_code == 200:
-                    logger.debug(f"Telemetry sent: {record.record_type}")
-                else:
-                    logger.debug(f"Telemetry failed: HTTP {response.status_code}")
-                    
+
+            # Prefer httpx when available; otherwise fall back to urllib
+            if httpx:
+                with httpx.Client(timeout=self.config.timeout) as client:
+                    response = client.post(self.config.endpoint, json=payload)
+                    if response.status_code == 200:
+                        logger.debug(f"Telemetry sent: {record.record_type}")
+                    else:
+                        logger.debug(f"Telemetry failed: HTTP {response.status_code}")
+            else:
+                import urllib.request
+                import urllib.error
+                data_bytes = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(
+                    self.config.endpoint,
+                    data=data_bytes,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=self.config.timeout) as resp:
+                        if 200 <= resp.getcode() < 300:
+                            logger.debug(f"Telemetry sent (urllib): {record.record_type}")
+                        else:
+                            logger.debug(f"Telemetry failed (urllib): HTTP {resp.getcode()}")
+                except urllib.error.URLError as ue:
+                    logger.debug(f"Telemetry send failed (urllib): {ue}")
+
         except Exception as e:
             # Never let telemetry errors interfere with app functionality
             logger.debug(f"Telemetry send failed: {e}")
+
 
 # Global telemetry instance
 _telemetry_collector: Optional[TelemetryCollector] = None

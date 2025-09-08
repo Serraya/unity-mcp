@@ -5,6 +5,8 @@ import re
 import os
 from unity_connection import send_command_with_retry
 
+from telemetry_decorator import telemetry_tool
+
 
 def _apply_edits_locally(original_text: str, edits: List[Dict[str, Any]]) -> str:
     text = original_text
@@ -326,8 +328,9 @@ def register_manage_script_edits_tools(mcp: FastMCP):
         "    'position':'after','afterMethodName':'GetCurrentTarget' }\n"
         "] }\n"
     ))
+    @telemetry_tool("script_apply_edits")
     def script_apply_edits(
-        ctx: Context,
+        ctx: Any,
         name: str,
         path: str,
         edits: List[Dict[str, Any]],

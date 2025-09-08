@@ -118,7 +118,7 @@ namespace MCPForUnity.Editor.Helpers
             RecordEvent("bridge_startup", new Dictionary<string, object>
             {
                 ["bridge_version"] = "3.0.2",
-                ["auto_connect"] = MCPForUnityBridge.IsAutoConnectMode
+                ["auto_connect"] = MCPForUnityBridge.IsAutoConnectMode()
             });
         }
         

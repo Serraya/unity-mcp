@@ -4,12 +4,16 @@ from typing import Dict, Any
 from unity_connection import get_unity_connection, send_command_with_retry
 from config import config
 
+from telemetry_decorator import telemetry_tool
+from telemetry import is_telemetry_enabled, record_tool_usage
+
 def register_manage_editor_tools(mcp: FastMCP):
     """Register all editor management tools with the MCP server."""
 
     @mcp.tool()
+    @telemetry_tool("manage_editor")
     def manage_editor(
-        ctx: Context,
+        ctx: Any,
         action: str,
         wait_for_completion: bool = None,
         # --- Parameters for specific actions ---
@@ -28,6 +32,13 @@ def register_manage_editor_tools(mcp: FastMCP):
             Dictionary with operation results ('success', 'message', 'data').
         """
         try:
+            # Diagnostics: quick telemetry checks
+            if action == "telemetry_status":
+                return {"success": True, "telemetry_enabled": is_telemetry_enabled()}
+
+            if action == "telemetry_ping":
+                record_tool_usage("diagnostic_ping", True, 1.0, None)
+                return {"success": True, "message": "telemetry ping queued"}
             # Prepare parameters, removing None values
             params = {
                 "action": action,

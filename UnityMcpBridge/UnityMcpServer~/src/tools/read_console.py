@@ -7,12 +7,15 @@ from mcp.server.fastmcp import FastMCP, Context
 from unity_connection import get_unity_connection, send_command_with_retry
 from config import config
 
+from telemetry_decorator import telemetry_tool
+
 def register_read_console_tools(mcp: FastMCP):
     """Registers the read_console tool with the MCP server."""
 
     @mcp.tool()
+    @telemetry_tool("read_console")
     def read_console(
-        ctx: Context,
+        ctx: Any,
         action: str = None,
         types: List[str] = None,
         count: int = None,

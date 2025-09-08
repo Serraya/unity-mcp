@@ -5,16 +5,8 @@ import base64
 import os
 from urllib.parse import urlparse, unquote
 
-try:
-    from telemetry_decorator import telemetry_tool
-    from telemetry import record_milestone, MilestoneType
-    HAS_TELEMETRY = True
-except ImportError:
-    HAS_TELEMETRY = False
-    def telemetry_tool(tool_name: str):
-        def decorator(func):
-            return func
-        return decorator
+from telemetry_decorator import telemetry_tool
+from telemetry import record_milestone, MilestoneType
 
 def register_manage_script_tools(mcp: FastMCP):
     """Register all script management tools with the MCP server."""
@@ -92,7 +84,7 @@ def register_manage_script_tools(mcp: FastMCP):
     ))
     @telemetry_tool("apply_text_edits")
     def apply_text_edits(
-        ctx: Context,
+        ctx: Any,
         uri: str,
         edits: List[Dict[str, Any]],
         precondition_sha256: str | None = None,
@@ -359,7 +351,7 @@ def register_manage_script_tools(mcp: FastMCP):
     ))
     @telemetry_tool("create_script")
     def create_script(
-        ctx: Context,
+        ctx: Any,
         path: str,
         contents: str = "",
         script_type: str | None = None,
@@ -397,7 +389,8 @@ def register_manage_script_tools(mcp: FastMCP):
         "Args: uri (unity://path/... or file://... or Assets/...).\n"
         "Rules: Target must resolve under Assets/.\n"
     ))
-    def delete_script(ctx: Context, uri: str) -> Dict[str, Any]:
+    @telemetry_tool("delete_script")
+    def delete_script(ctx: Any, uri: str) -> Dict[str, Any]:
         """Delete a C# script by URI."""
         name, directory = _split_uri(uri)
         if not directory or directory.split("/")[0].lower() != "assets":
@@ -412,8 +405,9 @@ def register_manage_script_tools(mcp: FastMCP):
         "- basic: quick syntax checks.\n"
         "- standard: deeper checks (performance hints, common pitfalls).\n"
     ))
+    @telemetry_tool("validate_script")
     def validate_script(
-        ctx: Context, uri: str, level: str = "basic"
+        ctx: Any, uri: str, level: str = "basic"
     ) -> Dict[str, Any]:
         """Validate a C# script and return diagnostics."""
         name, directory = _split_uri(uri)
@@ -443,7 +437,7 @@ def register_manage_script_tools(mcp: FastMCP):
     ))
     @telemetry_tool("manage_script")
     def manage_script(
-        ctx: Context,
+        ctx: Any,
         action: str,
         name: str,
         path: str,
@@ -573,7 +567,8 @@ def register_manage_script_tools(mcp: FastMCP):
         "Get manage_script capabilities (supported ops, limits, and guards).\n\n"
         "Returns:\n- ops: list of supported structured ops\n- text_ops: list of supported text ops\n- max_edit_payload_bytes: server edit payload cap\n- guards: header/using guard enabled flag\n"
     ))
-    def manage_script_capabilities(ctx: Context) -> Dict[str, Any]:
+    @telemetry_tool("manage_script_capabilities")
+    def manage_script_capabilities(ctx: Any) -> Dict[str, Any]:
         try:
             # Keep in sync with server/Editor ManageScript implementation
             ops = [
@@ -600,7 +595,8 @@ def register_manage_script_tools(mcp: FastMCP):
         "Args: uri (unity://path/Assets/... or file://... or Assets/...).\n"
         "Returns: {sha256, lengthBytes, lastModifiedUtc, uri, path}."
     ))
-    def get_sha(ctx: Context, uri: str) -> Dict[str, Any]:
+    @telemetry_tool("get_sha")
+    def get_sha(ctx: Any, uri: str) -> Dict[str, Any]:
         """Return SHA256 and basic metadata for a script."""
         try:
             name, directory = _split_uri(uri)
