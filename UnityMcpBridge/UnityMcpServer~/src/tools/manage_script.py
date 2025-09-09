@@ -602,9 +602,9 @@ def register_manage_script_tools(mcp: FastMCP):
             return {"success": False, "error": f"capabilities error: {e}"}
 
     @mcp.tool(description=(
-        "Get SHA256 and metadata for a Unity C# script without returning file contents.\n\n"
+        "Get SHA256 and basic metadata for a Unity C# script without returning file contents.\n\n"
         "Args: uri (unity://path/Assets/... or file://... or Assets/...).\n"
-        "Returns: {sha256, lengthBytes, lastModifiedUtc, uri, path}."
+        "Returns: {sha256, lengthBytes}."
     ))
     @telemetry_tool("get_sha")
     def get_sha(ctx: Context, uri: str) -> Dict[str, Any]:
