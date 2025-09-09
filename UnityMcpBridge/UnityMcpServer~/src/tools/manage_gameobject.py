@@ -122,9 +122,9 @@ def register_manage_gameobject_tools(mcp: FastMCP):
                     params["prefabPath"] = constructed_path.replace("\\", "/")
                 elif not params["prefabPath"].lower().endswith(".prefab"):
                     return {"success": False, "message": f"Invalid prefab_path: '{params['prefabPath']}' must end with .prefab"}
-            # Ensure prefab_folder itself isn't sent if prefabPath was constructed or provided
+            # Ensure prefabFolder itself isn't sent if prefabPath was constructed or provided
             # The C# side only needs the final prefabPath
-            params.pop("prefab_folder", None) 
+            params.pop("prefabFolder", None) 
             # --------------------------------
             
             # Use centralized retry helper

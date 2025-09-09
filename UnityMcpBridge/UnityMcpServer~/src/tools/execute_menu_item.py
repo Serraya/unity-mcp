@@ -14,7 +14,7 @@ def register_execute_menu_item_tools(mcp: FastMCP):
 
     @mcp.tool()
     @telemetry_tool("execute_menu_item")
-    async def execute_menu_item(
+    def execute_menu_item(
         ctx: Any,
         menu_path: str,
         action: str = 'execute',

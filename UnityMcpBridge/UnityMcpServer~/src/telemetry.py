@@ -13,6 +13,7 @@ import sys
 import platform
 import logging
 from enum import Enum
+from urllib.parse import urlparse
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, List
 from pathlib import Path
@@ -64,9 +65,11 @@ class TelemetryConfig:
         self.enabled = not self._is_disabled()
         
         # Telemetry endpoint (Cloud Run default; override via env)
-        self.endpoint = os.environ.get(
-            "UNITY_MCP_TELEMETRY_ENDPOINT",
-            "https://unity-mcp-telemetry-375728817078.us-central1.run.app/telemetry/events"
+        default_ep = "https://unity-mcp-telemetry-375728817078.us-central1.run.app/telemetry/events"
+        self.default_endpoint = default_ep
+        self.endpoint = self._validated_endpoint(
+            os.environ.get("UNITY_MCP_TELEMETRY_ENDPOINT", default_ep),
+            default_ep,
         )
         
         # Local storage for UUID and milestones
@@ -108,6 +111,25 @@ class TelemetryConfig:
         data_dir = base_dir / 'UnityMCP'
         data_dir.mkdir(parents=True, exist_ok=True)
         return data_dir
+
+    def _validated_endpoint(self, candidate: str, fallback: str) -> str:
+        """Validate telemetry endpoint URL scheme; allow only http/https.
+        Falls back to the provided default on error.
+        """
+        try:
+            parsed = urlparse(candidate)
+            if parsed.scheme not in ("https", "http"):
+                raise ValueError(f"Unsupported scheme: {parsed.scheme}")
+            # Basic sanity: require network location and path
+            if not parsed.netloc:
+                raise ValueError("Missing netloc in endpoint")
+            return candidate
+        except Exception as e:
+            logger.debug(
+                f"Invalid telemetry endpoint '{candidate}', using default. Error: {e}",
+                exc_info=True,
+            )
+            return fallback
 
 class TelemetryCollector:
     """Main telemetry collection class"""
@@ -227,7 +249,9 @@ class TelemetryCollector:
             # Prefer httpx when available; otherwise fall back to urllib
             if httpx:
                 with httpx.Client(timeout=self.config.timeout) as client:
-                    response = client.post(self.config.endpoint, json=payload)
+                    # Re-validate endpoint at send time to handle dynamic changes
+                    endpoint = self.config._validated_endpoint(self.config.endpoint, self.config.default_endpoint)
+                    response = client.post(endpoint, json=payload)
                     if response.status_code == 200:
                         logger.debug(f"Telemetry sent: {record.record_type}")
                     else:
@@ -236,8 +260,9 @@ class TelemetryCollector:
                 import urllib.request
                 import urllib.error
                 data_bytes = json.dumps(payload).encode("utf-8")
+                endpoint = self.config._validated_endpoint(self.config.endpoint, self.config.default_endpoint)
                 req = urllib.request.Request(
-                    self.config.endpoint,
+                    endpoint,
                     data=data_bytes,
                     headers={"Content-Type": "application/json"},
                     method="POST",
