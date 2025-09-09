@@ -192,9 +192,13 @@ class TelemetryCollector:
     def _save_milestones(self):
         """Save milestones to disk"""
         try:
-            self.config.milestones_file.write_text(json.dumps(self._milestones, indent=2))
-        except Exception as e:
-            logger.warning(f"Failed to save milestones: {e}")
+            with self._lock:
+                self.config.milestones_file.write_text(
+                    json.dumps(self._milestones, indent=2),
+                    encoding="utf-8",
+                )
+        except OSError as e:
+            logger.warning(f"Failed to save milestones: {e}", exc_info=True)
     
     def record_milestone(self, milestone: MilestoneType, data: Optional[Dict[str, Any]] = None) -> bool:
         """Record a milestone event, returns True if this is the first occurrence"""
