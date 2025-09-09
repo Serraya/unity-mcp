@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, List
 from pathlib import Path
+import importlib
 
 try:
     import httpx
@@ -61,11 +62,29 @@ class TelemetryRecord:
 class TelemetryConfig:
     """Telemetry configuration"""
     def __init__(self):
-        # Check environment variables for opt-out
-        self.enabled = not self._is_disabled()
+        # Prefer config file, then allow env overrides
+        server_config = None
+        for modname in (
+            "UnityMcpBridge.UnityMcpServer~.src.config",
+            "UnityMcpBridge.UnityMcpServer.src.config",
+            "src.config",
+            "config",
+        ):
+            try:
+                mod = importlib.import_module(modname)
+                server_config = getattr(mod, "config", None)
+                if server_config is not None:
+                    break
+            except Exception:
+                continue
+
+        # Determine enabled flag: config -> env DISABLE_* opt-out
+        cfg_enabled = True if server_config is None else bool(getattr(server_config, "telemetry_enabled", True))
+        self.enabled = cfg_enabled and not self._is_disabled()
         
         # Telemetry endpoint (Cloud Run default; override via env)
-        default_ep = "https://unity-mcp-telemetry-375728817078.us-central1.run.app/telemetry/events"
+        cfg_default = None if server_config is None else getattr(server_config, "telemetry_endpoint", None)
+        default_ep = cfg_default or "https://unity-mcp-telemetry-375728817078.us-central1.run.app/telemetry/events"
         self.default_endpoint = default_ep
         self.endpoint = self._validated_endpoint(
             os.environ.get("UNITY_MCP_TELEMETRY_ENDPOINT", default_ep),
@@ -142,20 +161,31 @@ class TelemetryCollector:
         
     def _load_persistent_data(self):
         """Load UUID and milestones from disk"""
+        # Load customer UUID
         try:
-            # Load customer UUID
             if self.config.uuid_file.exists():
-                self._customer_uuid = self.config.uuid_file.read_text().strip()
+                self._customer_uuid = self.config.uuid_file.read_text(encoding="utf-8").strip() or str(uuid.uuid4())
             else:
                 self._customer_uuid = str(uuid.uuid4())
-                self.config.uuid_file.write_text(self._customer_uuid)
-                
-            # Load milestones
-            if self.config.milestones_file.exists():
-                self._milestones = json.loads(self.config.milestones_file.read_text())
-        except Exception as e:
-            logger.warning(f"Failed to load telemetry data: {e}")
+                try:
+                    self.config.uuid_file.write_text(self._customer_uuid, encoding="utf-8")
+                    if os.name == "posix":
+                        os.chmod(self.config.uuid_file, 0o600)
+                except OSError as e:
+                    logger.debug(f"Failed to persist customer UUID: {e}", exc_info=True)
+        except OSError as e:
+            logger.debug(f"Failed to load customer UUID: {e}", exc_info=True)
             self._customer_uuid = str(uuid.uuid4())
+
+        # Load milestones (failure here must not affect UUID)
+        try:
+            if self.config.milestones_file.exists():
+                content = self.config.milestones_file.read_text(encoding="utf-8")
+                self._milestones = json.loads(content) or {}
+                if not isinstance(self._milestones, dict):
+                    self._milestones = {}
+        except (OSError, json.JSONDecodeError, ValueError) as e:
+            logger.debug(f"Failed to load milestones: {e}", exc_info=True)
             self._milestones = {}
     
     def _save_milestones(self):

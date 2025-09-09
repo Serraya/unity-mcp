@@ -409,13 +409,14 @@ def register_manage_script_tools(mcp: FastMCP):
 
     @mcp.tool(description=(
         "Validate a C# script and return diagnostics.\n\n"
-        "Args: uri, level=('basic'|'standard').\n"
+        "Args: uri, level=('basic'|'standard'), include_diagnostics (bool, optional).\n"
         "- basic: quick syntax checks.\n"
         "- standard: deeper checks (performance hints, common pitfalls).\n"
+        "- include_diagnostics: when true, returns full diagnostics and summary; default returns counts only.\n"
     ))
     @telemetry_tool("validate_script")
     def validate_script(
-        ctx: Context, uri: str, level: str = "basic"
+        ctx: Context, uri: str, level: str = "basic", include_diagnostics: bool = False
     ) -> Dict[str, Any]:
         """Validate a C# script and return diagnostics."""
         name, directory = _split_uri(uri)
@@ -431,9 +432,11 @@ def register_manage_script_tools(mcp: FastMCP):
         }
         resp = send_command_with_retry("manage_script", params)
         if isinstance(resp, dict) and resp.get("success"):
-            diags = resp.get("data", {}).get("diagnostics", [])
-            warnings = sum(1 for d in diags if str(d.get("severity", "")).lower() in ("warning",))
+            diags = resp.get("data", {}).get("diagnostics", []) or []
+            warnings = sum(1 for d in diags if str(d.get("severity", "")).lower() == "warning")
             errors = sum(1 for d in diags if str(d.get("severity", "")).lower() in ("error", "fatal"))
+            if include_diagnostics:
+                return {"success": True, "data": {"diagnostics": diags, "summary": {"warnings": warnings, "errors": errors}}}
             return {"success": True, "data": {"warnings": warnings, "errors": errors}}
         return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
 
@@ -573,7 +576,6 @@ def register_manage_script_tools(mcp: FastMCP):
 
     @mcp.tool(description=(
         "Get manage_script capabilities (supported ops, limits, and guards).\n\n"
-        "Args:\n- random_string: required parameter (any string value)\n\n"
         "Returns:\n- ops: list of supported structured ops\n- text_ops: list of supported text ops\n- max_edit_payload_bytes: server edit payload cap\n- guards: header/using guard enabled flag\n"
     ))
     @telemetry_tool("manage_script_capabilities")
