@@ -5,8 +5,16 @@ import base64
 import os
 from urllib.parse import urlparse, unquote
 
-from telemetry_decorator import telemetry_tool
-from telemetry import record_milestone, MilestoneType
+try:
+    from telemetry_decorator import telemetry_tool
+    from telemetry import record_milestone, MilestoneType
+    HAS_TELEMETRY = True
+except ImportError:
+    HAS_TELEMETRY = False
+    def telemetry_tool(tool_name: str):
+        def decorator(func):
+            return func
+        return decorator
 
 def register_manage_script_tools(mcp: FastMCP):
     """Register all script management tools with the MCP server."""
@@ -84,7 +92,7 @@ def register_manage_script_tools(mcp: FastMCP):
     ))
     @telemetry_tool("apply_text_edits")
     def apply_text_edits(
-        ctx: Any,
+        ctx: Context,
         uri: str,
         edits: List[Dict[str, Any]],
         precondition_sha256: str | None = None,
@@ -351,7 +359,7 @@ def register_manage_script_tools(mcp: FastMCP):
     ))
     @telemetry_tool("create_script")
     def create_script(
-        ctx: Any,
+        ctx: Context,
         path: str,
         contents: str = "",
         script_type: str | None = None,
@@ -390,7 +398,7 @@ def register_manage_script_tools(mcp: FastMCP):
         "Rules: Target must resolve under Assets/.\n"
     ))
     @telemetry_tool("delete_script")
-    def delete_script(ctx: Any, uri: str) -> Dict[str, Any]:
+    def delete_script(ctx: Context, uri: str) -> Dict[str, Any]:
         """Delete a C# script by URI."""
         name, directory = _split_uri(uri)
         if not directory or directory.split("/")[0].lower() != "assets":
@@ -407,7 +415,7 @@ def register_manage_script_tools(mcp: FastMCP):
     ))
     @telemetry_tool("validate_script")
     def validate_script(
-        ctx: Any, uri: str, level: str = "basic"
+        ctx: Context, uri: str, level: str = "basic"
     ) -> Dict[str, Any]:
         """Validate a C# script and return diagnostics."""
         name, directory = _split_uri(uri)
@@ -422,11 +430,6 @@ def register_manage_script_tools(mcp: FastMCP):
             "level": level,
         }
         resp = send_command_with_retry("manage_script", params)
-        if isinstance(resp, dict) and resp.get("success"):
-            diags = resp.get("data", {}).get("diagnostics", []) or []
-            warnings = sum(d.get("severity", "").lower() == "warning" for d in diags)
-            errors = sum(d.get("severity", "").lower() in ("error", "fatal") for d in diags)
-            return {"success": True, "data": {"warnings": warnings, "errors": errors}}
         return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
 
     @mcp.tool(description=(
@@ -437,7 +440,7 @@ def register_manage_script_tools(mcp: FastMCP):
     ))
     @telemetry_tool("manage_script")
     def manage_script(
-        ctx: Any,
+        ctx: Context,
         action: str,
         name: str,
         path: str,
@@ -565,10 +568,11 @@ def register_manage_script_tools(mcp: FastMCP):
 
     @mcp.tool(description=(
         "Get manage_script capabilities (supported ops, limits, and guards).\n\n"
+        "Args:\n- random_string: required parameter (any string value)\n\n"
         "Returns:\n- ops: list of supported structured ops\n- text_ops: list of supported text ops\n- max_edit_payload_bytes: server edit payload cap\n- guards: header/using guard enabled flag\n"
     ))
     @telemetry_tool("manage_script_capabilities")
-    def manage_script_capabilities(ctx: Any) -> Dict[str, Any]:
+    def manage_script_capabilities(ctx: Context) -> Dict[str, Any]:
         try:
             # Keep in sync with server/Editor ManageScript implementation
             ops = [
@@ -596,21 +600,12 @@ def register_manage_script_tools(mcp: FastMCP):
         "Returns: {sha256, lengthBytes, lastModifiedUtc, uri, path}."
     ))
     @telemetry_tool("get_sha")
-    def get_sha(ctx: Any, uri: str) -> Dict[str, Any]:
+    def get_sha(ctx: Context, uri: str) -> Dict[str, Any]:
         """Return SHA256 and basic metadata for a script."""
         try:
             name, directory = _split_uri(uri)
             params = {"action": "get_sha", "name": name, "path": directory}
             resp = send_command_with_retry("manage_script", params)
-            if isinstance(resp, dict) and resp.get("success"):
-                data = resp.get("data", {})
-                return {
-                    "success": True,
-                    "data": {
-                        "sha256": data.get("sha256"),
-                        "lengthBytes": data.get("lengthBytes"),
-                    },
-                }
             return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
         except Exception as e:
             return {"success": False, "message": f"get_sha error: {e}"}

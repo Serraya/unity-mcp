@@ -27,8 +27,8 @@ def register_manage_asset_tools(mcp: FastMCP):
         search_pattern: str = None,
         filter_type: str = None,
         filter_date_after: str = None,
-        page_size: int = None,
-        page_number: int = None
+        page_size: Any = None,
+        page_number: Any = None
     ) -> Dict[str, Any]:
         """Performs asset operations (import, create, modify, delete, etc.) in Unity.
 
@@ -53,6 +53,25 @@ def register_manage_asset_tools(mcp: FastMCP):
         if properties is None:
             properties = {}
             
+        # Coerce numeric inputs defensively
+        def _coerce_int(value, default=None):
+            if value is None:
+                return default
+            try:
+                if isinstance(value, bool):
+                    return default
+                if isinstance(value, int):
+                    return int(value)
+                s = str(value).strip()
+                if s.lower() in ("", "none", "null"):
+                    return default
+                return int(float(s))
+            except Exception:
+                return default
+
+        page_size = _coerce_int(page_size)
+        page_number = _coerce_int(page_number)
+
         # Prepare parameters for the C# handler
         params_dict = {
             "action": action.lower(),

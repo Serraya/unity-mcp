@@ -16,7 +16,7 @@ def register_manage_scene_tools(mcp: FastMCP):
         action: str,
         name: str,
         path: str,
-        build_index: int,
+        build_index: Any,
     ) -> Dict[str, Any]:
         """Manages Unity scenes (load, save, create, get hierarchy, etc.).
 
@@ -31,6 +31,24 @@ def register_manage_scene_tools(mcp: FastMCP):
             Dictionary with results ('success', 'message', 'data').
         """
         try:
+            # Coerce numeric inputs defensively
+            def _coerce_int(value, default=None):
+                if value is None:
+                    return default
+                try:
+                    if isinstance(value, bool):
+                        return default
+                    if isinstance(value, int):
+                        return int(value)
+                    s = str(value).strip()
+                    if s.lower() in ("", "none", "null"):
+                        return default
+                    return int(float(s))
+                except Exception:
+                    return default
+
+            build_index = _coerce_int(build_index, default=0)
+
             params = {
                 "action": action,
                 "name": name,
