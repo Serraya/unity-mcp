@@ -18,6 +18,8 @@ from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 import importlib
+import queue
+import contextlib
 
 try:
     import httpx
@@ -158,6 +160,10 @@ class TelemetryCollector:
         self._customer_uuid: Optional[str] = None
         self._milestones: Dict[str, Dict[str, Any]] = {}
         self._lock: threading.Lock = threading.Lock()
+        # Bounded queue with single background worker to avoid spawning a thread per event
+        self._queue: "queue.Queue[tuple[contextvars.Context, TelemetryRecord]]" = queue.Queue(maxsize=1000)
+        self._worker: threading.Thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker.start()
         self._load_persistent_data()
         
     def _load_persistent_data(self):
@@ -242,14 +248,24 @@ class TelemetryCollector:
             data=data,
             milestone=milestone
         )
-        
-        # Send in background thread to avoid blocking
+        # Enqueue for background worker (non-blocking). Drop on backpressure.
         current_context = contextvars.copy_context()
-        thread = threading.Thread(
-            target=lambda: current_context.run(self._send_telemetry, record),
-            daemon=True
-        )
-        thread.start()
+        try:
+            self._queue.put_nowait((current_context, record))
+        except queue.Full:
+            logger.debug("Telemetry queue full; dropping %s", record.record_type)
+
+    def _worker_loop(self):
+        """Background worker that serializes telemetry sends."""
+        while True:
+            ctx, rec = self._queue.get()
+            try:
+                ctx.run(self._send_telemetry, rec)
+            except Exception:
+                logger.debug("Telemetry worker send failed", exc_info=True)
+            finally:
+                with contextlib.suppress(Exception):
+                    self._queue.task_done()
     
     def _send_telemetry(self, record: TelemetryRecord):
         """Send telemetry data to endpoint"""
