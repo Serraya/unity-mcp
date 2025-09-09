@@ -90,4 +90,13 @@ def register_read_console_tools(mcp: FastMCP):
 
         # Use centralized retry helper
         resp = send_command_with_retry("read_console", params_dict)
-        return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)} 
+        if isinstance(resp, dict) and resp.get("success") and not include_stacktrace:
+            # Strip stacktrace fields from returned lines if present
+            try:
+                lines = resp.get("data", {}).get("lines", [])
+                for line in lines:
+                    if isinstance(line, dict) and "stacktrace" in line:
+                        line.pop("stacktrace", None)
+            except Exception:
+                pass
+        return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}

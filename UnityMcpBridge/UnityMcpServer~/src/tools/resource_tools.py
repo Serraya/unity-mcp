@@ -324,25 +324,33 @@ def register_resource_tools(mcp: FastMCP) -> None:
             head_bytes = _coerce_int(head_bytes, minimum=1)
             tail_lines = _coerce_int(tail_lines, minimum=1)
 
-            # Mutually exclusive windowing options precedence:
-            # 1) head_bytes, 2) tail_lines, 3) start_line+line_count, else full text
-            if head_bytes and head_bytes > 0:
-                raw = p.read_bytes()[: head_bytes]
-                text = raw.decode("utf-8", errors="replace")
-            else:
-                text = p.read_text(encoding="utf-8")
-                if tail_lines is not None and tail_lines > 0:
-                    lines = text.splitlines()
-                    n = max(0, tail_lines)
-                    text = "\n".join(lines[-n:])
-                elif start_line is not None and line_count is not None and line_count >= 0:
-                    lines = text.splitlines()
-                    s = max(0, start_line - 1)
-                    e = min(len(lines), s + line_count)
-                    text = "\n".join(lines[s:e])
+            # Compute SHA over full file contents (metadata-only default)
+            full_bytes = p.read_bytes()
+            full_sha = hashlib.sha256(full_bytes).hexdigest()
 
-            sha = hashlib.sha256(text.encode("utf-8")).hexdigest()
-            return {"success": True, "data": {"text": text, "metadata": {"sha256": sha}}}
+            # Selection only when explicitly requested via windowing args or request text hints
+            selection_requested = bool(head_bytes or tail_lines or (start_line is not None and line_count is not None) or request)
+            if selection_requested:
+                # Mutually exclusive windowing options precedence:
+                # 1) head_bytes, 2) tail_lines, 3) start_line+line_count, else full text
+                if head_bytes and head_bytes > 0:
+                    raw = full_bytes[: head_bytes]
+                    text = raw.decode("utf-8", errors="replace")
+                else:
+                    text = full_bytes.decode("utf-8", errors="replace")
+                    if tail_lines is not None and tail_lines > 0:
+                        lines = text.splitlines()
+                        n = max(0, tail_lines)
+                        text = "\n".join(lines[-n:])
+                    elif start_line is not None and line_count is not None and line_count >= 0:
+                        lines = text.splitlines()
+                        s = max(0, start_line - 1)
+                        e = min(len(lines), s + line_count)
+                        text = "\n".join(lines[s:e])
+                return {"success": True, "data": {"text": text, "metadata": {"sha256": full_sha, "lengthBytes": len(full_bytes)}}}
+            else:
+                # Default: metadata only
+                return {"success": True, "data": {"metadata": {"sha256": full_sha, "lengthBytes": len(full_bytes)}}}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -380,8 +388,16 @@ def register_resource_tools(mcp: FastMCP) -> None:
             max_results_int = _coerce_int(max_results, default=200, minimum=1)
             lines = text.splitlines()
             for i, line in enumerate(lines, start=1):
-                if rx.search(line):
-                    results.append({"line": i, "text": line})
+                m = rx.search(line)
+                if m:
+                    start_col = m.start() + 1  # 1-based
+                    end_col = m.end() + 1      # 1-based, end exclusive
+                    results.append({
+                        "startLine": i,
+                        "startCol": start_col,
+                        "endLine": i,
+                        "endCol": end_col,
+                    })
                     if max_results_int and len(results) >= max_results_int:
                         break
 
