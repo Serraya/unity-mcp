@@ -27,8 +27,15 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     
     # Record server startup telemetry
     start_time = time.time()
+    start_clk = time.perf_counter()
+    try:
+        from pathlib import Path
+        ver_path = Path(__file__).parent / "server-version.txt"
+        server_version = ver_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        server_version = "unknown"
     record_telemetry(RecordType.STARTUP, {
-        "server_version": "3.0.2",
+        "server_version": server_version,
         "startup_time": start_time
     })
     
@@ -45,15 +52,23 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
             "connection_time_ms": (time.time() - start_time) * 1000
         })
         
-    except Exception as e:
-        logger.warning(f"Could not connect to Unity on startup: {str(e)}")
+    except ConnectionError as e:
+        logger.warning("Could not connect to Unity on startup: %s", e)
         _unity_connection = None
         
         # Record connection failure
         record_telemetry(RecordType.UNITY_CONNECTION, {
             "status": "failed",
             "error": str(e)[:200],
-            "connection_time_ms": (time.time() - start_time) * 1000
+            "connection_time_ms": (time.perf_counter() - start_clk) * 1000
+        })
+    except Exception as e:
+        logger.warning("Unexpected error connecting to Unity on startup: %s", e)
+        _unity_connection = None
+        record_telemetry(RecordType.UNITY_CONNECTION, {
+            "status": "failed",
+            "error": str(e)[:200],
+            "connection_time_ms": (time.perf_counter() - start_clk) * 1000
         })
         
     try:

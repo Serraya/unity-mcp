@@ -157,6 +157,7 @@ class TelemetryCollector:
         self.config = TelemetryConfig()
         self._customer_uuid: Optional[str] = None
         self._milestones: Dict[str, Dict[str, Any]] = {}
+        self._lock: threading.Lock = threading.Lock()
         self._load_persistent_data()
         
     def _load_persistent_data(self):
@@ -199,18 +200,16 @@ class TelemetryCollector:
         """Record a milestone event, returns True if this is the first occurrence"""
         if not self.config.enabled:
             return False
-            
         milestone_key = milestone.value
-        if milestone_key in self._milestones:
-            return False  # Already recorded
-            
-        milestone_data = {
-            "timestamp": time.time(),
-            "data": data or {}
-        }
-        
-        self._milestones[milestone_key] = milestone_data
-        self._save_milestones()
+        with self._lock:
+            if milestone_key in self._milestones:
+                return False  # Already recorded
+            milestone_data = {
+                "timestamp": time.time(),
+                "data": data or {},
+            }
+            self._milestones[milestone_key] = milestone_data
+            self._save_milestones()
         
         # Also send as telemetry record
         self.record(

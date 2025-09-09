@@ -12,6 +12,7 @@ namespace MCPForUnity.Editor.Helpers
     {
         private const string TELEMETRY_DISABLED_KEY = "MCPForUnity.TelemetryDisabled";
         private const string CUSTOMER_UUID_KEY = "MCPForUnity.CustomerUUID";
+        private static Action<Dictionary<string, object>> s_sender;
         
         /// <summary>
         /// Check if telemetry is enabled (can be disabled via Environment Variable or EditorPrefs)
@@ -34,7 +35,15 @@ namespace MCPForUnity.Editor.Helpers
                 {
                     return false;
                 }
-                
+
+                // Honor protocol-wide opt-out as well
+                var mcpDisable = Environment.GetEnvironmentVariable("MCP_DISABLE_TELEMETRY");
+                if (!string.IsNullOrEmpty(mcpDisable) &&
+                    (mcpDisable.Equals("true", StringComparison.OrdinalIgnoreCase) || mcpDisable == "1"))
+                {
+                    return false;
+                }
+
                 // Check EditorPrefs
                 return !UnityEditor.EditorPrefs.GetBool(TELEMETRY_DISABLED_KEY, false);
             }
@@ -111,6 +120,14 @@ namespace MCPForUnity.Editor.Helpers
         }
         
         /// <summary>
+        /// Allows the bridge to register a concrete sender for telemetry payloads.
+        /// </summary>
+        public static void RegisterTelemetrySender(Action<Dictionary<string, object>> sender)
+        {
+            s_sender = sender;
+        }
+
+        /// <summary>
         /// Record bridge startup event
         /// </summary>
         public static void RecordBridgeStartup()
@@ -162,15 +179,28 @@ namespace MCPForUnity.Editor.Helpers
         
         private static void SendTelemetryToPythonServer(Dictionary<string, object> telemetryData)
         {
-            // This would integrate with the existing bridge communication system
-            // For now, we'll just log it when debug is enabled
+            var sender = s_sender;
+            if (sender != null)
+            {
+                try
+                {
+                    sender(telemetryData);
+                    return;
+                }
+                catch (Exception e)
+                {
+                    if (IsDebugEnabled())
+                    {
+                        Debug.LogWarning($"Telemetry sender error (non-blocking): {e.Message}");
+                    }
+                }
+            }
+
+            // Fallback: log when debug is enabled
             if (IsDebugEnabled())
             {
                 Debug.Log($"<b><color=#2EA3FF>MCP-TELEMETRY</color></b>: {telemetryData["event_type"]}");
             }
-            
-            // TODO: Integrate with MCPForUnityBridge command system
-            // We would send this as a special telemetry command to the Python server
         }
         
         private static bool IsDebugEnabled()
