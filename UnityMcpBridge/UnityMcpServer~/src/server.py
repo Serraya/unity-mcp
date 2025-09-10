@@ -60,16 +60,18 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
         server_version = ver_path.read_text(encoding="utf-8").strip()
     except Exception:
         server_version = "unknown"
-    # Defer telemetry for first second to avoid interfering with stdio handshake
-    if (time.perf_counter() - start_clk) > 1.0:
-        record_telemetry(RecordType.STARTUP, {
-            "server_version": server_version,
-            "startup_time": start_time
-        })
-    
-    # Record first startup milestone
-    if (time.perf_counter() - start_clk) > 1.0:
-        record_milestone(MilestoneType.FIRST_STARTUP)
+    # Defer initial telemetry by 1s to avoid stdio handshake interference
+    import threading
+    def _emit_startup():
+        try:
+            record_telemetry(RecordType.STARTUP, {
+                "server_version": server_version,
+                "startup_time": start_time,
+            })
+            record_milestone(MilestoneType.FIRST_STARTUP)
+        except Exception:
+            logger.debug("Deferred startup telemetry failed", exc_info=True)
+    threading.Timer(1.0, _emit_startup).start()
     
     try:
         skip_connect = os.environ.get("UNITY_MCP_SKIP_STARTUP_CONNECT", "").lower() in ("1", "true", "yes", "on")
@@ -79,33 +81,42 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
             _unity_connection = get_unity_connection()
             logger.info("Connected to Unity on startup")
             
-            # Record successful Unity connection
-            if (time.perf_counter() - start_clk) > 1.0:
-                record_telemetry(RecordType.UNITY_CONNECTION, {
+            # Record successful Unity connection (deferred)
+            import threading as _t
+            _t.Timer(1.0, lambda: record_telemetry(
+                RecordType.UNITY_CONNECTION,
+                {
                     "status": "connected",
-                    "connection_time_ms": (time.time() - start_time) * 1000
-                })
+                    "connection_time_ms": (time.perf_counter() - start_clk) * 1000,
+                }
+            )).start()
             
     except ConnectionError as e:
         logger.warning("Could not connect to Unity on startup: %s", e)
         _unity_connection = None
         
-        # Record connection failure
-        if (time.perf_counter() - start_clk) > 1.0:
-            record_telemetry(RecordType.UNITY_CONNECTION, {
+        # Record connection failure (deferred)
+        import threading as _t
+        _t.Timer(1.0, lambda: record_telemetry(
+            RecordType.UNITY_CONNECTION,
+            {
                 "status": "failed",
                 "error": str(e)[:200],
-                "connection_time_ms": (time.perf_counter() - start_clk) * 1000
-            })
+                "connection_time_ms": (time.perf_counter() - start_clk) * 1000,
+            }
+        )).start()
     except Exception as e:
         logger.warning("Unexpected error connecting to Unity on startup: %s", e)
         _unity_connection = None
-        if (time.perf_counter() - start_clk) > 1.0:
-            record_telemetry(RecordType.UNITY_CONNECTION, {
+        import threading as _t
+        _t.Timer(1.0, lambda: record_telemetry(
+            RecordType.UNITY_CONNECTION,
+            {
                 "status": "failed",
                 "error": str(e)[:200],
-                "connection_time_ms": (time.perf_counter() - start_clk) * 1000
-            })
+                "connection_time_ms": (time.perf_counter() - start_clk) * 1000,
+            }
+        )).start()
         
     try:
         # Yield the connection object so it can be attached to the context

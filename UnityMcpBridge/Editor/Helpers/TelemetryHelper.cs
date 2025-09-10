@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 
 namespace MCPForUnity.Editor.Helpers
@@ -124,7 +125,12 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         public static void RegisterTelemetrySender(Action<Dictionary<string, object>> sender)
         {
-            s_sender = sender;
+            Interlocked.Exchange(ref s_sender, sender);
+        }
+
+        public static void UnregisterTelemetrySender()
+        {
+            Interlocked.Exchange(ref s_sender, null);
         }
 
         /// <summary>
@@ -179,7 +185,7 @@ namespace MCPForUnity.Editor.Helpers
         
         private static void SendTelemetryToPythonServer(Dictionary<string, object> telemetryData)
         {
-            var sender = s_sender;
+            var sender = Volatile.Read(ref s_sender);
             if (sender != null)
             {
                 try

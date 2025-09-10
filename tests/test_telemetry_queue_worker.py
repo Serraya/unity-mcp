@@ -45,9 +45,13 @@ def test_telemetry_queue_backpressure_and_single_worker(monkeypatch, caplog):
     # Force-enable telemetry regardless of env settings from conftest
     collector.config.enabled = True
 
+    # Wake existing worker once so it observes the new queue on the next loop
+    collector.record(telemetry.RecordType.TOOL_EXECUTION, {"i": -1})
     # Replace queue with tiny one to trigger backpressure quickly
     small_q = q.Queue(maxsize=2)
     collector._queue = small_q
+    # Give the worker a moment to switch queues
+    time.sleep(0.02)
 
     # Make sends slow to build backlog and exercise worker
     def slow_send(self, rec):

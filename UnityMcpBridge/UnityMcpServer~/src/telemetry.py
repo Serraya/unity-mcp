@@ -169,9 +169,10 @@ class TelemetryCollector:
         self._lock: threading.Lock = threading.Lock()
         # Bounded queue with single background worker (records only; no context propagation)
         self._queue: "queue.Queue[TelemetryRecord]" = queue.Queue(maxsize=1000)
+        # Load persistent data before starting worker so first events have UUID
+        self._load_persistent_data()
         self._worker: threading.Thread = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker.start()
-        self._load_persistent_data()
         
     def _load_persistent_data(self):
         """Load UUID and milestones from disk"""
@@ -307,8 +308,8 @@ class TelemetryCollector:
                     # Re-validate endpoint at send time to handle dynamic changes
                     endpoint = self.config._validated_endpoint(self.config.endpoint, self.config.default_endpoint)
                     response = client.post(endpoint, json=payload)
-                    if response.status_code == 200:
-                        logger.info(f"Telemetry sent: {record.record_type}")
+                    if 200 <= response.status_code < 300:
+                        logger.debug(f"Telemetry sent: {record.record_type}")
                     else:
                         logger.warning(f"Telemetry failed: HTTP {response.status_code}")
             else:
@@ -325,7 +326,7 @@ class TelemetryCollector:
                 try:
                     with urllib.request.urlopen(req, timeout=self.config.timeout) as resp:
                         if 200 <= resp.getcode() < 300:
-                            logger.info(f"Telemetry sent (urllib): {record.record_type}")
+                            logger.debug(f"Telemetry sent (urllib): {record.record_type}")
                         else:
                             logger.warning(f"Telemetry failed (urllib): HTTP {resp.getcode()}")
                 except urllib.error.URLError as ue:
