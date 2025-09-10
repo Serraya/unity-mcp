@@ -16,16 +16,46 @@ namespace MCPForUnity.Editor.Tools
     /// </summary>
     public static class ManageScene
     {
+        private sealed class SceneCommand
+        {
+            public string action { get; set; } = string.Empty;
+            public string name { get; set; } = string.Empty;
+            public string path { get; set; } = string.Empty;
+            public int? buildIndex { get; set; }
+        }
+
+        private static SceneCommand ToSceneCommand(JObject p)
+        {
+            if (p == null) return new SceneCommand();
+            int? BI(JToken t)
+            {
+                if (t == null || t.Type == JTokenType.Null) return null;
+                var s = t.ToString().Trim();
+                if (s.Length == 0) return null;
+                if (int.TryParse(s, out var i)) return i;
+                if (double.TryParse(s, out var d)) return (int)d;
+                return t.Type == JTokenType.Integer ? t.Value<int>() : (int?)null;
+            }
+            return new SceneCommand
+            {
+                action = (p["action"]?.ToString() ?? string.Empty).Trim().ToLowerInvariant(),
+                name = p["name"]?.ToString() ?? string.Empty,
+                path = p["path"]?.ToString() ?? string.Empty,
+                buildIndex = BI(p["buildIndex"] ?? p["build_index"])
+            };
+        }
+
         /// <summary>
         /// Main handler for scene management actions.
         /// </summary>
         public static object HandleCommand(JObject @params)
         {
             try { McpLog.Info("[ManageScene] HandleCommand: start", always: false); } catch { }
-            string action = @params["action"]?.ToString().ToLower();
-            string name = @params["name"]?.ToString();
-            string path = @params["path"]?.ToString(); // Relative to Assets/
-            int? buildIndex = @params["buildIndex"]?.ToObject<int?>();
+            var cmd = ToSceneCommand(@params);
+            string action = cmd.action;
+            string name = string.IsNullOrEmpty(cmd.name) ? null : cmd.name;
+            string path = string.IsNullOrEmpty(cmd.path) ? null : cmd.path; // Relative to Assets/
+            int? buildIndex = cmd.buildIndex;
             // bool loadAdditive = @params["loadAdditive"]?.ToObject<bool>() ?? false; // Example for future extension
 
             // Ensure path is relative to Assets/, removing any leading "Assets/"

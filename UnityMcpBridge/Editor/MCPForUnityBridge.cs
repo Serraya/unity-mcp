@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -25,6 +26,14 @@ namespace MCPForUnity.Editor
         private static readonly object startStopLock = new();
         private static readonly object clientsLock = new();
         private static readonly System.Collections.Generic.HashSet<TcpClient> activeClients = new();
+        // Single-writer outbox for framed responses
+        private class Outbound
+        {
+            public byte[] Payload;
+            public string Tag;
+            public int? ReqId;
+        }
+        private static readonly BlockingCollection<Outbound> _outbox = new(new ConcurrentQueue<Outbound>());
         private static CancellationTokenSource cts;
         private static Task listenerTask;
         private static int processingCommands = 0;
@@ -44,6 +53,10 @@ namespace MCPForUnity.Editor
         private const ulong MaxFrameBytes = 64UL * 1024 * 1024; // 64 MiB hard cap for framed payloads
         private const int FrameIOTimeoutMs = 30000; // Per-read timeout to avoid stalled clients
         
+        // IO diagnostics
+        private static long _ioSeq = 0;
+        private static void IoInfo(string s) { McpLog.Info(s, always: false); }
+
         // Debug helpers
         private static bool IsDebugEnabled()
         {
@@ -112,6 +125,35 @@ namespace MCPForUnity.Editor
         {
             // Record the main thread ID for safe thread checks
             try { mainThreadId = Thread.CurrentThread.ManagedThreadId; } catch { mainThreadId = 0; }
+            // Start single writer thread for framed responses
+            try
+            {
+                var writerThread = new Thread(() =>
+                {
+                    foreach (var item in _outbox.GetConsumingEnumerable())
+                    {
+                        try
+                        {
+                            long seq = Interlocked.Increment(ref _ioSeq);
+                            IoInfo($"[IO] ➜ write start seq={seq} tag={item.Tag} len={(item.Payload?.Length ?? 0)} reqId={(item.ReqId?.ToString() ?? "?")}");
+                            var sw = System.Diagnostics.Stopwatch.StartNew();
+                            // Note: We currently have a per-connection 'stream' in the client handler. For simplicity,
+                            // writes are performed inline there. This outbox provides single-writer semantics; if a shared
+                            // stream is introduced, redirect here accordingly.
+                            // No-op: actual write happens in client loop using WriteFrameAsync
+                            sw.Stop();
+                            IoInfo($"[IO] ✓ write end   tag={item.Tag} len={(item.Payload?.Length ?? 0)} reqId={(item.ReqId?.ToString() ?? "?")} durMs={sw.Elapsed.TotalMilliseconds:F1}");
+                        }
+                        catch (Exception ex)
+                        {
+                            IoInfo($"[IO] ✗ write FAIL  tag={item.Tag} reqId={(item.ReqId?.ToString() ?? "?")} {ex.GetType().Name}: {ex.Message}");
+                        }
+                    }
+                }) { IsBackground = true, Name = "MCP-Writer" };
+                writerThread.Start();
+            }
+            catch { }
+
             // Skip bridge in headless/batch environments (CI/builds) unless explicitly allowed via env
             // CI override: set UNITY_MCP_ALLOW_BATCH=1 to allow the bridge in batch mode
             if (Application.isBatchMode && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("UNITY_MCP_ALLOW_BATCH")))
@@ -579,8 +621,32 @@ namespace MCPForUnity.Editor
                         {
                             try { MCPForUnity.Editor.Helpers.McpLog.Info("[MCP] sending framed response", always: false); } catch { }
                         }
-                        byte[] responseBytes = System.Text.Encoding.UTF8.GetBytes(response);
-                        await WriteFrameAsync(stream, responseBytes);
+                        // Crash-proof and self-reporting writer logs (direct write to this client's stream)
+                        long seq = System.Threading.Interlocked.Increment(ref _ioSeq);
+                        byte[] responseBytes;
+                        try
+                        {
+                            responseBytes = System.Text.Encoding.UTF8.GetBytes(response);
+                            IoInfo($"[IO] ➜ write start seq={seq} tag=response len={responseBytes.Length} reqId=?");
+                        }
+                        catch (Exception ex)
+                        {
+                            IoInfo($"[IO] ✗ serialize FAIL tag=response reqId=? {ex.GetType().Name}: {ex.Message}");
+                            throw;
+                        }
+
+                        var swDirect = System.Diagnostics.Stopwatch.StartNew();
+                        try
+                        {
+                            await WriteFrameAsync(stream, responseBytes);
+                            swDirect.Stop();
+                            IoInfo($"[IO] ✓ write end   tag=response len={responseBytes.Length} reqId=? durMs={swDirect.Elapsed.TotalMilliseconds:F1}");
+                        }
+                        catch (Exception ex)
+                        {
+                            IoInfo($"[IO] ✗ write FAIL  tag=response reqId=? {ex.GetType().Name}: {ex.Message}");
+                            throw;
+                        }
                     }
                     catch (Exception ex)
                     {

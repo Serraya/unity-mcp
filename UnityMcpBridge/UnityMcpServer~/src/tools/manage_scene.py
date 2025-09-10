@@ -14,9 +14,9 @@ def register_manage_scene_tools(mcp: FastMCP):
     def manage_scene(
         ctx: Context,
         action: str,
-        name: str,
-        path: str,
-        build_index: Any,
+        name: str = "",
+        path: str = "",
+        build_index: Any = None,
     ) -> Dict[str, Any]:
         """Manages Unity scenes (load, save, create, get hierarchy, etc.).
 
@@ -47,15 +47,15 @@ def register_manage_scene_tools(mcp: FastMCP):
                 except Exception:
                     return default
 
-            build_index = _coerce_int(build_index, default=0)
+            coerced_build_index = _coerce_int(build_index, default=None)
 
-            params = {
-                "action": action,
-                "name": name,
-                "path": path,
-                "buildIndex": build_index
-            }
-            params = {k: v for k, v in params.items() if v is not None}
+            params = {"action": action}
+            if name:
+                params["name"] = name
+            if path:
+                params["path"] = path
+            if coerced_build_index is not None:
+                params["buildIndex"] = coerced_build_index
             
             # Use centralized retry helper
             response = send_command_with_retry("manage_scene", params)
