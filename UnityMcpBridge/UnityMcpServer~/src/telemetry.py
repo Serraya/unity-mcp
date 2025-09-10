@@ -5,7 +5,11 @@ Inspired by Onyx's telemetry implementation with Unity-specific adaptations
 
 import uuid
 import threading
-import contextvars
+"""
+Fire-and-forget telemetry sender with a single background worker.
+- No context/thread-local propagation to avoid re-entrancy into tool resolution.
+- Small network timeouts to prevent stalls.
+"""
 import json
 import time
 import os
@@ -98,8 +102,11 @@ class TelemetryConfig:
         self.uuid_file = self.data_dir / "customer_uuid.txt"
         self.milestones_file = self.data_dir / "milestones.json"
         
-        # Request timeout
-        self.timeout = 10.0
+        # Request timeout (small, fail fast). Override with UNITY_MCP_TELEMETRY_TIMEOUT
+        try:
+            self.timeout = float(os.environ.get("UNITY_MCP_TELEMETRY_TIMEOUT", "1.5"))
+        except Exception:
+            self.timeout = 1.5
         
         # Session tracking
         self.session_id = str(uuid.uuid4())
@@ -160,8 +167,8 @@ class TelemetryCollector:
         self._customer_uuid: Optional[str] = None
         self._milestones: Dict[str, Dict[str, Any]] = {}
         self._lock: threading.Lock = threading.Lock()
-        # Bounded queue with single background worker to avoid spawning a thread per event
-        self._queue: "queue.Queue[tuple[contextvars.Context, TelemetryRecord]]" = queue.Queue(maxsize=1000)
+        # Bounded queue with single background worker (records only; no context propagation)
+        self._queue: "queue.Queue[TelemetryRecord]" = queue.Queue(maxsize=1000)
         self._worker: threading.Thread = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker.start()
         self._load_persistent_data()
@@ -196,13 +203,12 @@ class TelemetryCollector:
             self._milestones = {}
     
     def _save_milestones(self):
-        """Save milestones to disk"""
+        """Save milestones to disk. Caller must hold self._lock."""
         try:
-            with self._lock:
-                self.config.milestones_file.write_text(
-                    json.dumps(self._milestones, indent=2),
-                    encoding="utf-8",
-                )
+            self.config.milestones_file.write_text(
+                json.dumps(self._milestones, indent=2),
+                encoding="utf-8",
+            )
         except OSError as e:
             logger.warning(f"Failed to save milestones: {e}", exc_info=True)
     
@@ -249,18 +255,18 @@ class TelemetryCollector:
             milestone=milestone
         )
         # Enqueue for background worker (non-blocking). Drop on backpressure.
-        current_context = contextvars.copy_context()
         try:
-            self._queue.put_nowait((current_context, record))
+            self._queue.put_nowait(record)
         except queue.Full:
             logger.debug("Telemetry queue full; dropping %s", record.record_type)
 
     def _worker_loop(self):
         """Background worker that serializes telemetry sends."""
         while True:
-            ctx, rec = self._queue.get()
+            rec = self._queue.get()
             try:
-                ctx.run(self._send_telemetry, rec)
+                # Run sender directly; do not reuse caller context/thread-locals
+                self._send_telemetry(rec)
             except Exception:
                 logger.debug("Telemetry worker send failed", exc_info=True)
             finally:
