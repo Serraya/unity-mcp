@@ -96,6 +96,15 @@ class TelemetryConfig:
             os.environ.get("UNITY_MCP_TELEMETRY_ENDPOINT", default_ep),
             default_ep,
         )
+        try:
+            logger.info(
+                "Telemetry configured: endpoint=%s (default=%s), timeout_env=%s",
+                self.endpoint,
+                default_ep,
+                os.environ.get("UNITY_MCP_TELEMETRY_TIMEOUT") or "<unset>"
+            )
+        except Exception:
+            pass
         
         # Local storage for UUID and milestones
         self.data_dir = self._get_data_directory()
@@ -107,6 +116,10 @@ class TelemetryConfig:
             self.timeout = float(os.environ.get("UNITY_MCP_TELEMETRY_TIMEOUT", "1.5"))
         except Exception:
             self.timeout = 1.5
+        try:
+            logger.info("Telemetry timeout=%.2fs", self.timeout)
+        except Exception:
+            pass
         
         # Session tracking
         self.session_id = str(uuid.uuid4())
@@ -151,6 +164,10 @@ class TelemetryConfig:
             # Basic sanity: require network location and path
             if not parsed.netloc:
                 raise ValueError("Missing netloc in endpoint")
+            # Reject localhost/loopback endpoints in production to avoid accidental local overrides
+            host = parsed.hostname or ""
+            if host in ("localhost", "127.0.0.1", "::1"):
+                raise ValueError("Localhost endpoints are not allowed for telemetry")
             return candidate
         except Exception as e:
             logger.debug(

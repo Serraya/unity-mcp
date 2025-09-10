@@ -29,6 +29,14 @@ try:
     _fh.setFormatter(logging.Formatter(config.log_format))
     _fh.setLevel(getattr(logging, config.log_level))
     logger.addHandler(_fh)
+    # Also route telemetry logger to the same rotating file and normal level
+    try:
+        tlog = logging.getLogger("unity-mcp-telemetry")
+        tlog.setLevel(getattr(logging, config.log_level))
+        tlog.addHandler(_fh)
+    except Exception:
+        # Never let logging setup break startup
+        pass
 except Exception:
     # Never let logging setup break startup
     pass
@@ -40,6 +48,15 @@ for noisy in ("httpx", "urllib3"):
         pass
 
 # Import telemetry only after logging is configured to ensure its logs use stderr and proper levels
+# Ensure a slightly higher telemetry timeout unless explicitly overridden by env
+try:
+
+
+    # Ensure generous timeout unless explicitly overridden by env
+    if not os.environ.get("UNITY_MCP_TELEMETRY_TIMEOUT"):
+        os.environ["UNITY_MCP_TELEMETRY_TIMEOUT"] = "5.0"
+except Exception:
+    pass
 from telemetry import record_telemetry, record_milestone, RecordType, MilestoneType
 
 # Global connection state
