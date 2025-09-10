@@ -12,7 +12,7 @@ def register_manage_scene_tools(mcp: FastMCP):
     @mcp.tool()
     @telemetry_tool("manage_scene")
     def manage_scene(
-        ctx: Any,
+        ctx: Context,
         action: str,
         name: str,
         path: str,

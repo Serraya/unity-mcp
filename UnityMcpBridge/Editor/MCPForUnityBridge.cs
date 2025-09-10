@@ -38,6 +38,7 @@ namespace MCPForUnity.Editor
             string,
             (string commandJson, TaskCompletionSource<string> tcs)
         > commandQueue = new();
+        private static int mainThreadId;
         private static int currentUnityPort = 6400; // Dynamic port, starts with default
         private static bool isAutoConnectMode = false;
         private const ulong MaxFrameBytes = 64UL * 1024 * 1024; // 64 MiB hard cap for framed payloads
@@ -109,6 +110,8 @@ namespace MCPForUnity.Editor
 
         static MCPForUnityBridge()
         {
+            // Record the main thread ID for safe thread checks
+            try { mainThreadId = Thread.CurrentThread.ManagedThreadId; } catch { mainThreadId = 0; }
             // Skip bridge in headless/batch environments (CI/builds) unless explicitly allowed via env
             // CI override: set UNITY_MCP_ALLOW_BATCH=1 to allow the bridge in batch mode
             if (Application.isBatchMode && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("UNITY_MCP_ALLOW_BATCH")))
@@ -539,7 +542,39 @@ namespace MCPForUnity.Editor
                             commandQueue[commandId] = (commandText, tcs);
                         }
 
-                        string response = await tcs.Task.ConfigureAwait(false);
+                        // Wait for the handler to produce a response, but do not block indefinitely
+                        string response;
+                        try
+                        {
+                            using var respCts = new CancellationTokenSource(FrameIOTimeoutMs);
+                            var completed = await Task.WhenAny(tcs.Task, Task.Delay(FrameIOTimeoutMs, respCts.Token)).ConfigureAwait(false);
+                            if (completed == tcs.Task)
+                            {
+                                // Got a result from the handler
+                                respCts.Cancel();
+                                response = tcs.Task.Result;
+                            }
+                            else
+                            {
+                                // Timeout: return a structured error so the client can recover
+                                var timeoutResponse = new
+                                {
+                                    status = "error",
+                                    error = $"Command processing timed out after {FrameIOTimeoutMs} ms",
+                                };
+                                response = JsonConvert.SerializeObject(timeoutResponse);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            var errorResponse = new
+                            {
+                                status = "error",
+                                error = ex.Message,
+                            };
+                            response = JsonConvert.SerializeObject(errorResponse);
+                        }
+
                         byte[] responseBytes = System.Text.Encoding.UTF8.GetBytes(response);
                         await WriteFrameAsync(stream, responseBytes);
                     }
@@ -816,6 +851,60 @@ namespace MCPForUnity.Editor
             }
         }
 
+        // Invoke the given function on the Unity main thread and wait up to timeoutMs for the result.
+        // Returns null on timeout or error; caller should provide a fallback error response.
+        private static object InvokeOnMainThreadWithTimeout(Func<object> func, int timeoutMs)
+        {
+            if (func == null) return null;
+            try
+            {
+                // If we are already on the main thread, execute directly to avoid deadlocks
+                try
+                {
+                    if (Thread.CurrentThread.ManagedThreadId == mainThreadId)
+                    {
+                        return func();
+                    }
+                }
+                catch { }
+
+                object result = null;
+                Exception captured = null;
+                var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                EditorApplication.delayCall += () =>
+                {
+                    try
+                    {
+                        result = func();
+                    }
+                    catch (Exception ex)
+                    {
+                        captured = ex;
+                    }
+                    finally
+                    {
+                        try { tcs.TrySetResult(true); } catch { }
+                    }
+                };
+
+                // Wait for completion with timeout (Editor thread will pump delayCall)
+                bool completed = tcs.Task.Wait(timeoutMs);
+                if (!completed)
+                {
+                    return null; // timeout
+                }
+                if (captured != null)
+                {
+                    return Response.Error($"Main thread handler error: {captured.Message}");
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                return Response.Error($"Failed to invoke on main thread: {ex.Message}");
+            }
+        }
+
         // Helper method to check if a string is valid JSON
         private static bool IsValidJson(string text)
         {
@@ -880,7 +969,8 @@ namespace MCPForUnity.Editor
                     // Maps the command type (tool name) to the corresponding handler's static HandleCommand method
                     // Assumes each handler class has a static method named 'HandleCommand' that takes JObject parameters
                     "manage_script" => ManageScript.HandleCommand(paramsObject),
-                    "manage_scene" => ManageScene.HandleCommand(paramsObject),
+                    // Run scene operations on the main thread to avoid deadlocks/hangs
+                    "manage_scene" => InvokeOnMainThreadWithTimeout(() => ManageScene.HandleCommand(paramsObject), FrameIOTimeoutMs) ?? Response.Error("manage_scene timed out on main thread"),
                     "manage_editor" => ManageEditor.HandleCommand(paramsObject),
                     "manage_gameobject" => ManageGameObject.HandleCommand(paramsObject),
                     "manage_asset" => ManageAsset.HandleCommand(paramsObject),

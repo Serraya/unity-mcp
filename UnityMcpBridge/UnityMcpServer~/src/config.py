@@ -36,7 +36,7 @@ class ServerConfig:
     
     # Telemetry settings
     telemetry_enabled: bool = True
-    telemetry_endpoint: str = "https://api-prod.coplay.dev/telemetry/events"
+    telemetry_endpoint: str = "https://unity-mcp-telemetry-a6uvvbgbsa-uc.a.run.app/telemetry/events"
 
 # Create a global config instance
 config = ServerConfig() 

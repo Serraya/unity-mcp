@@ -1,5 +1,6 @@
 from mcp.server.fastmcp import FastMCP, Context, Image
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
@@ -17,6 +18,20 @@ logging.basicConfig(
     force=True    # Ensure our handler replaces any prior stdout handlers
 )
 logger = logging.getLogger("mcp-for-unity-server")
+
+# Also write logs to a rotating file so logs are available when launched via stdio
+try:
+    import os as _os
+    _log_dir = _os.path.join(_os.path.expanduser("~/Library/Application Support/UnityMCP"), "Logs")
+    _os.makedirs(_log_dir, exist_ok=True)
+    _file_path = _os.path.join(_log_dir, "unity_mcp_server.log")
+    _fh = RotatingFileHandler(_file_path, maxBytes=512*1024, backupCount=2, encoding="utf-8")
+    _fh.setFormatter(logging.Formatter(config.log_format))
+    _fh.setLevel(getattr(logging, config.log_level))
+    logger.addHandler(_fh)
+except Exception:
+    # Never let logging setup break startup
+    pass
 # Quieten noisy third-party loggers to avoid clutter during stdio handshake
 for noisy in ("httpx", "urllib3"):
     try:
