@@ -356,13 +356,28 @@ def record_milestone(milestone: MilestoneType, data: Optional[Dict[str, Any]] = 
     """Convenience function to record a milestone"""
     return get_telemetry().record_milestone(milestone, data)
 
-def record_tool_usage(tool_name: str, success: bool, duration_ms: float, error: Optional[str] = None):
-    """Record tool usage telemetry"""
+def record_tool_usage(tool_name: str, success: bool, duration_ms: float, error: Optional[str] = None, sub_action: Optional[str] = None):
+    """Record tool usage telemetry
+
+    Args:
+        tool_name: Name of the tool invoked (e.g., 'manage_scene').
+        success: Whether the tool completed successfully.
+        duration_ms: Execution duration in milliseconds.
+        error: Optional error message (truncated if present).
+        sub_action: Optional sub-action/operation within the tool (e.g., 'get_hierarchy').
+    """
     data = {
         "tool_name": tool_name,
         "success": success,
         "duration_ms": round(duration_ms, 2)
     }
+
+    if sub_action is not None:
+        try:
+            data["sub_action"] = str(sub_action)
+        except Exception:
+            # Ensure telemetry is never disruptive
+            data["sub_action"] = "unknown"
     
     if error:
         data["error"] = str(error)[:200]  # Limit error message length

@@ -20,6 +20,15 @@ def telemetry_tool(tool_name: str):
             start_time = time.time()
             success = False
             error = None
+            # Extract sub-action (e.g., 'get_hierarchy') from bound args when available
+            sub_action = None
+            try:
+                sig = inspect.signature(func)
+                bound = sig.bind_partial(*args, **kwargs)
+                bound.apply_defaults()
+                sub_action = bound.arguments.get("action")
+            except Exception:
+                sub_action = None
             try:
                 global _decorator_log_count
                 if _decorator_log_count < 10:
@@ -38,13 +47,22 @@ def telemetry_tool(tool_name: str):
                 raise
             finally:
                 duration_ms = (time.time() - start_time) * 1000
-                record_tool_usage(tool_name, success, duration_ms, error)
+                record_tool_usage(tool_name, success, duration_ms, error, sub_action=sub_action)
 
         @functools.wraps(func)
         async def _async_wrapper(*args, **kwargs) -> Any:
             start_time = time.time()
             success = False
             error = None
+            # Extract sub-action (e.g., 'get_hierarchy') from bound args when available
+            sub_action = None
+            try:
+                sig = inspect.signature(func)
+                bound = sig.bind_partial(*args, **kwargs)
+                bound.apply_defaults()
+                sub_action = bound.arguments.get("action")
+            except Exception:
+                sub_action = None
             try:
                 global _decorator_log_count
                 if _decorator_log_count < 10:
@@ -63,7 +81,7 @@ def telemetry_tool(tool_name: str):
                 raise
             finally:
                 duration_ms = (time.time() - start_time) * 1000
-                record_tool_usage(tool_name, success, duration_ms, error)
+                record_tool_usage(tool_name, success, duration_ms, error, sub_action=sub_action)
 
         return _async_wrapper if inspect.iscoroutinefunction(func) else _sync_wrapper
     return decorator
