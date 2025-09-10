@@ -114,11 +114,12 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
         
         # Record connection failure (deferred)
         import threading as _t
+        _err_msg = str(e)[:200]
         _t.Timer(1.0, lambda: record_telemetry(
             RecordType.UNITY_CONNECTION,
             {
                 "status": "failed",
-                "error": str(e)[:200],
+                "error": _err_msg,
                 "connection_time_ms": (time.perf_counter() - start_clk) * 1000,
             }
         )).start()
@@ -126,11 +127,12 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
         logger.warning("Unexpected error connecting to Unity on startup: %s", e)
         _unity_connection = None
         import threading as _t
+        _err_msg = str(e)[:200]
         _t.Timer(1.0, lambda: record_telemetry(
             RecordType.UNITY_CONNECTION,
             {
                 "status": "failed",
-                "error": str(e)[:200],
+                "error": _err_msg,
                 "connection_time_ms": (time.perf_counter() - start_clk) * 1000,
             }
         )).start()
