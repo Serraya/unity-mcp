@@ -302,9 +302,9 @@ class TelemetryCollector:
                     endpoint = self.config._validated_endpoint(self.config.endpoint, self.config.default_endpoint)
                     response = client.post(endpoint, json=payload)
                     if response.status_code == 200:
-                        logger.debug(f"Telemetry sent: {record.record_type}")
+                        logger.info(f"Telemetry sent: {record.record_type}")
                     else:
-                        logger.debug(f"Telemetry failed: HTTP {response.status_code}")
+                        logger.warning(f"Telemetry failed: HTTP {response.status_code}")
             else:
                 import urllib.request
                 import urllib.error
@@ -319,11 +319,11 @@ class TelemetryCollector:
                 try:
                     with urllib.request.urlopen(req, timeout=self.config.timeout) as resp:
                         if 200 <= resp.getcode() < 300:
-                            logger.debug(f"Telemetry sent (urllib): {record.record_type}")
+                            logger.info(f"Telemetry sent (urllib): {record.record_type}")
                         else:
-                            logger.debug(f"Telemetry failed (urllib): HTTP {resp.getcode()}")
+                            logger.warning(f"Telemetry failed (urllib): HTTP {resp.getcode()}")
                 except urllib.error.URLError as ue:
-                    logger.debug(f"Telemetry send failed (urllib): {ue}")
+                    logger.warning(f"Telemetry send failed (urllib): {ue}")
 
         except Exception as e:
             # Never let telemetry errors interfere with app functionality
