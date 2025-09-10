@@ -575,6 +575,10 @@ namespace MCPForUnity.Editor
                             response = JsonConvert.SerializeObject(errorResponse);
                         }
 
+                        if (IsDebugEnabled())
+                        {
+                            try { MCPForUnity.Editor.Helpers.McpLog.Info("[MCP] sending framed response", always: false); } catch { }
+                        }
                         byte[] responseBytes = System.Text.Encoding.UTF8.GetBytes(response);
                         await WriteFrameAsync(stream, responseBytes);
                     }
@@ -858,6 +862,12 @@ namespace MCPForUnity.Editor
             if (func == null) return null;
             try
             {
+                // If mainThreadId is unknown, assume we're on main thread to avoid blocking the editor.
+                if (mainThreadId == 0)
+                {
+                    try { return func(); }
+                    catch (Exception ex) { throw new InvalidOperationException($"Main thread handler error: {ex.Message}", ex); }
+                }
                 // If we are already on the main thread, execute directly to avoid deadlocks
                 try
                 {
@@ -895,13 +905,13 @@ namespace MCPForUnity.Editor
                 }
                 if (captured != null)
                 {
-                    return Response.Error($"Main thread handler error: {captured.Message}");
+                    throw new InvalidOperationException($"Main thread handler error: {captured.Message}", captured);
                 }
                 return result;
             }
             catch (Exception ex)
             {
-                return Response.Error($"Failed to invoke on main thread: {ex.Message}");
+                throw new InvalidOperationException($"Failed to invoke on main thread: {ex.Message}", ex);
             }
         }
 
@@ -969,8 +979,9 @@ namespace MCPForUnity.Editor
                     // Maps the command type (tool name) to the corresponding handler's static HandleCommand method
                     // Assumes each handler class has a static method named 'HandleCommand' that takes JObject parameters
                     "manage_script" => ManageScript.HandleCommand(paramsObject),
-                    // Run scene operations on the main thread to avoid deadlocks/hangs
-                    "manage_scene" => InvokeOnMainThreadWithTimeout(() => ManageScene.HandleCommand(paramsObject), FrameIOTimeoutMs) ?? Response.Error("manage_scene timed out on main thread"),
+                    // Run scene operations on the main thread to avoid deadlocks/hangs (with diagnostics under debug flag)
+                    "manage_scene" => HandleManageScene(paramsObject)
+                        ?? throw new TimeoutException($"manage_scene timed out after {FrameIOTimeoutMs} ms on main thread"),
                     "manage_editor" => ManageEditor.HandleCommand(paramsObject),
                     "manage_gameobject" => ManageGameObject.HandleCommand(paramsObject),
                     "manage_asset" => ManageAsset.HandleCommand(paramsObject),
@@ -1005,6 +1016,23 @@ namespace MCPForUnity.Editor
                         : "No parameters", // Summarize parameters for context
                 };
                 return JsonConvert.SerializeObject(response);
+            }
+        }
+
+        private static object HandleManageScene(JObject paramsObject)
+        {
+            try
+            {
+                if (IsDebugEnabled()) Debug.Log("[MCP] manage_scene: dispatching to main thread");
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var r = InvokeOnMainThreadWithTimeout(() => ManageScene.HandleCommand(paramsObject), FrameIOTimeoutMs);
+                sw.Stop();
+                if (IsDebugEnabled()) Debug.Log($"[MCP] manage_scene: completed in {sw.ElapsedMilliseconds} ms");
+                return r ?? Response.Error("manage_scene returned null (timeout or error)");
+            }
+            catch (Exception ex)
+            {
+                return Response.Error($"manage_scene dispatch error: {ex.Message}");
             }
         }
 
