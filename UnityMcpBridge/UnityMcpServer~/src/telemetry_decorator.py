@@ -36,18 +36,25 @@ def telemetry_tool(tool_name: str):
                     _decorator_log_count += 1
                 result = func(*args, **kwargs)
                 success = True
-                if tool_name == "manage_script" and kwargs.get("action") == "create":
-                    record_milestone(MilestoneType.FIRST_SCRIPT_CREATION)
-                elif tool_name.startswith("manage_scene"):
-                    record_milestone(MilestoneType.FIRST_SCENE_MODIFICATION)
-                record_milestone(MilestoneType.FIRST_TOOL_USAGE)
+                action_val = sub_action or kwargs.get("action")
+                try:
+                    if tool_name == "manage_script" and action_val == "create":
+                        record_milestone(MilestoneType.FIRST_SCRIPT_CREATION)
+                    elif tool_name.startswith("manage_scene"):
+                        record_milestone(MilestoneType.FIRST_SCENE_MODIFICATION)
+                    record_milestone(MilestoneType.FIRST_TOOL_USAGE)
+                except Exception:
+                    _log.debug("milestone emit failed", exc_info=True)
                 return result
             except Exception as e:
                 error = str(e)
                 raise
             finally:
                 duration_ms = (time.time() - start_time) * 1000
-                record_tool_usage(tool_name, success, duration_ms, error, sub_action=sub_action)
+                try:
+                    record_tool_usage(tool_name, success, duration_ms, error, sub_action=sub_action)
+                except Exception:
+                    _log.debug("record_tool_usage failed", exc_info=True)
 
         @functools.wraps(func)
         async def _async_wrapper(*args, **kwargs) -> Any:
@@ -70,18 +77,25 @@ def telemetry_tool(tool_name: str):
                     _decorator_log_count += 1
                 result = await func(*args, **kwargs)
                 success = True
-                if tool_name == "manage_script" and kwargs.get("action") == "create":
-                    record_milestone(MilestoneType.FIRST_SCRIPT_CREATION)
-                elif tool_name.startswith("manage_scene"):
-                    record_milestone(MilestoneType.FIRST_SCENE_MODIFICATION)
-                record_milestone(MilestoneType.FIRST_TOOL_USAGE)
+                action_val = sub_action or kwargs.get("action")
+                try:
+                    if tool_name == "manage_script" and action_val == "create":
+                        record_milestone(MilestoneType.FIRST_SCRIPT_CREATION)
+                    elif tool_name.startswith("manage_scene"):
+                        record_milestone(MilestoneType.FIRST_SCENE_MODIFICATION)
+                    record_milestone(MilestoneType.FIRST_TOOL_USAGE)
+                except Exception:
+                    _log.debug("milestone emit failed", exc_info=True)
                 return result
             except Exception as e:
                 error = str(e)
                 raise
             finally:
                 duration_ms = (time.time() - start_time) * 1000
-                record_tool_usage(tool_name, success, duration_ms, error, sub_action=sub_action)
+                try:
+                    record_tool_usage(tool_name, success, duration_ms, error, sub_action=sub_action)
+                except Exception:
+                    _log.debug("record_tool_usage failed", exc_info=True)
 
         return _async_wrapper if inspect.iscoroutinefunction(func) else _sync_wrapper
     return decorator
