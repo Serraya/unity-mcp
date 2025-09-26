@@ -15,6 +15,7 @@ using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Tools;
 using MCPForUnity.Editor.Tools.MenuItems;
+using MCPForUnity.Editor.Tools.Prefabs;
 
 namespace MCPForUnity.Editor
 {
@@ -1040,7 +1041,26 @@ namespace MCPForUnity.Editor
                 // Use JObject for parameters as the new handlers likely expect this
                 JObject paramsObject = command.@params ?? new JObject();
 
-                object result = CommandRegistry.GetHandler(command.type)(paramsObject);
+                // Route command based on the new tool structure from the refactor plan
+                object result = command.type switch
+                {
+                    // Maps the command type (tool name) to the corresponding handler's static HandleCommand method
+                    // Assumes each handler class has a static method named 'HandleCommand' that takes JObject parameters
+                    "manage_script" => ManageScript.HandleCommand(paramsObject),
+                    // Run scene operations on the main thread to avoid deadlocks/hangs (with diagnostics under debug flag)
+                    "manage_scene" => HandleManageScene(paramsObject)
+                        ?? throw new TimeoutException($"manage_scene timed out after {FrameIOTimeoutMs} ms on main thread"),
+                    "manage_editor" => ManageEditor.HandleCommand(paramsObject),
+                    "manage_gameobject" => ManageGameObject.HandleCommand(paramsObject),
+                    "manage_asset" => ManageAsset.HandleCommand(paramsObject),
+                    "manage_shader" => ManageShader.HandleCommand(paramsObject),
+                    "read_console" => ReadConsole.HandleCommand(paramsObject),
+                    "manage_menu_item" => ManageMenuItem.HandleCommand(paramsObject),
+                    "manage_prefabs" => ManagePrefabs.HandleCommand(paramsObject),
+                    _ => throw new ArgumentException(
+                        $"Unknown or unsupported command type: {command.type}"
+                    ),
+                };
 
                 // Standard success response format
                 var response = new { status = "success", result };
