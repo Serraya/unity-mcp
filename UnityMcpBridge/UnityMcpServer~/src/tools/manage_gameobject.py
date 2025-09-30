@@ -71,10 +71,10 @@ def register_manage_gameobject_tools(mcp: FastMCP):
         try:
             # Validate parameter usage to prevent silent failures
             if action == "find":
-                if name is not None and search_term is None:
+                if name is not None:
                     return {
                         "success": False,
-                        "message": "For 'find' action, use 'search_term' parameter, not 'name'. Example: search_term='Player', search_method='by_name'"
+                        "message": "For 'find' action, use 'search_term' parameter, not 'name'. Remove 'name' parameter. Example: search_term='Player', search_method='by_name'"
                     }
                 if search_term is None:
                     return {
