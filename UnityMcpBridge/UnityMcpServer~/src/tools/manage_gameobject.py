@@ -9,11 +9,11 @@ from unity_connection import send_command_with_retry
 def register_manage_gameobject_tools(mcp: FastMCP):
     """Register all GameObject management tools with the MCP server."""
 
-    @mcp.tool(name="manage_gameobject", description="Manage GameObjects. Note: for 'get_components', the `data` field contains a dictionary of component names and their serialized properties.")
+    @mcp.tool(name="manage_gameobject", description="Manage GameObjects. Note: for 'get_components', the `data` field contains a dictionary of component names and their serialized properties. For 'get_component', specify 'component_name' to retrieve only that component's serialized data.")
     @telemetry_tool("manage_gameobject")
     def manage_gameobject(
         ctx: Context,
-        action: Annotated[Literal["create", "modify", "delete", "find", "add_component", "remove_component", "set_component_property", "get_components"], "Perform CRUD operations on GameObjects and components."],
+        action: Annotated[Literal["create", "modify", "delete", "find", "add_component", "remove_component", "set_component_property", "get_components", "get_component"], "Perform CRUD operations on GameObjects and components."],
         target: Annotated[str,
                           "GameObject identifier by name or path for modify/delete/component actions"] | None = None,
         search_method: Annotated[Literal["by_id", "by_name", "by_path", "by_tag", "by_layer", "by_component"],
