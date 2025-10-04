@@ -20,10 +20,9 @@ Version 5 introduces a new package structure. The package is now installed from 
 ### Step 2: Install from the New Path
 
 1. In the Package Manager, click the **+** button in the top-left corner
-2. Select **Add package from disk...**
-3. Navigate to the `MCPForUnity` folder (NOT the old `UnityMcpBridge` folder)
-4. Select the `package.json` file inside the `MCPForUnity` folder
-5. Click **Open** to install the package
+2. Select **Add package from git URL...**
+3. Enter the following URL: `https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity`
+4. Click **Add** to install the package
 
 ![Installing from the new MCPForUnity path](screenshots/v5_02_install.png)
 

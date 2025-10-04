@@ -358,3 +358,7 @@ MIT License. See [LICENSE](LICENSE) file.
     <img src="logo.png" alt="Coplay Logo" width="100%">
   </a>
 </p>
+
+## Disclaimer
+
+This project is a free and open-source tool for the Unity Editor, and is not affiliated with Unity Technologies.
