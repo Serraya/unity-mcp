@@ -115,9 +115,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cd MCPForUnity/UnityMcpServer~
-          zip -r ../../mcp-for-unity-server-v${NEW_VERSION}.zip .
-          cd ../..
+          cd MCPForUnity
+          zip -r ../mcp-for-unity-server-v${NEW_VERSION}.zip UnityMcpServer~
+          cd ..
           ls -lh mcp-for-unity-server-v${NEW_VERSION}.zip
           echo "Server package created: mcp-for-unity-server-v${NEW_VERSION}.zip"
 
