@@ -3,7 +3,7 @@
 | [English](README.md) | [简体中文](README-zh.md) |
 |----------------------|---------------------------------|
 
-#### Proudly sponsored and maintained by [Coplay](https://www.coplay.dev/?ref=unity-mcp) -- the best AI assistant for Unity. [Read the backstory here.](https://www.coplay.dev/blog/coplay-and-open-source-unity-mcp-join-forces)
+#### Proudly sponsored and maintained by [Coplay](https://www.coplay.dev/?ref=unity-mcp) -- the best AI assistant for Unity.
 
 [![Discord](https://img.shields.io/badge/discord-join-red.svg?logo=discord&logoColor=white)](https://discord.gg/y4p8KfzrN4)
 [![](https://img.shields.io/badge/Website-Visit-purple)](https://www.coplay.dev/?ref=unity-mcp)
@@ -353,7 +353,7 @@ MIT License. See [LICENSE](LICENSE) file.
 
 ## Unity AI Tools by Coplay
 
-Coplay has built 2 AI tools for Unity
+Coplay offers 2 AI tools for Unity
 - **MCP for Unity** is available freely under the MIT license.
 - **Coplay** is a premium Unity AI assistant that sits within Unity and is more than the MCP for Unity.
 
