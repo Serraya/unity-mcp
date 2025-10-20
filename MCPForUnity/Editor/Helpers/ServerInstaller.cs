@@ -65,6 +65,7 @@ namespace MCPForUnity.Editor.Helpers
                     // Copy the entire UnityMcpServer folder (parent of src)
                     string embeddedRoot = Path.GetDirectoryName(embeddedSrc) ?? embeddedSrc; // go up from src to UnityMcpServer
                     CopyDirectoryRecursive(embeddedRoot, destRoot);
+
                     // Write/refresh version file
                     try { File.WriteAllText(Path.Combine(destSrc, VersionFileName), embeddedVer ?? "unknown"); } catch { }
                     McpLog.Info($"Installed/updated server to {destRoot} (version {embeddedVer}).");
@@ -410,6 +411,7 @@ namespace MCPForUnity.Editor.Helpers
         }
 
         private static readonly string[] _skipDirs = { ".venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".git" };
+
         private static void CopyDirectoryRecursive(string sourceDir, string destinationDir)
         {
             Directory.CreateDirectory(destinationDir);
