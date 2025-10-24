@@ -63,6 +63,9 @@ namespace MCPForUnity.Editor.Tools
             // Common parameters
             string path = @params["path"]?.ToString();
 
+            // Coerce string JSON to JObject for 'properties' if provided as a JSON string
+            JsonUtil.CoerceJsonStringParameter(@params, "properties");
+
             try
             {
                 switch (action)

@@ -66,6 +66,9 @@ namespace MCPForUnity.Editor.Tools
             bool includeNonPublicSerialized = @params["includeNonPublicSerialized"]?.ToObject<bool>() ?? true; // Default to true
             // --- End add parameter ---
 
+            // Coerce string JSON to JObject for 'componentProperties' if provided as a JSON string
+            JsonUtil.CoerceJsonStringParameter(@params, "componentProperties");
+
             // --- Prefab Redirection Check ---
             string targetPath =
                 targetToken?.Type == JTokenType.String ? targetToken.ToString() : null;
