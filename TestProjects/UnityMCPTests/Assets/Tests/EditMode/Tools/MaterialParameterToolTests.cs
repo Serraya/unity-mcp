@@ -96,25 +96,13 @@ namespace MCPForUnityTests.Editor.Tools
             }
         }
 
-        private void CreateTestMaterial()
+        [Test]
+        public void AssignMaterial_ToSphere_UsingComponentPropertiesObject_Succeeds()
         {
-            var createParams = new JObject
-            {
-                ["action"] = "create",
-                ["path"] = _matPath,
-                ["assetType"] = "Material",
-                ["properties"] = new JObject
-                {
-                    ["shader"] = "Universal Render Pipeline/Lit",
-                    ["color"] = new JArray(0f, 0f, 1f, 1f)
-                }
-            };
-            var result = ToJObject(ManageAsset.HandleCommand(createParams));
-            Assert.IsTrue(result.Value<bool>("success"), result.Value<string>("error"));
-        }
+            // Ensure material exists first
+            CreateMaterial_WithObjectProperties_SucceedsAndSetsColor();
 
-        private void CreateSphere()
-        {
+            // Create a sphere via handler
             var createGo = new JObject
             {
                 ["action"] = "create",
@@ -123,18 +111,9 @@ namespace MCPForUnityTests.Editor.Tools
             };
             var createGoResult = ToJObject(ManageGameObject.HandleCommand(createGo));
             Assert.IsTrue(createGoResult.Value<bool>("success"), createGoResult.Value<string>("error"));
+
             _sphere = GameObject.Find("ToolTestSphere");
             Assert.IsNotNull(_sphere, "Sphere should be created.");
-        }
-
-        [Test]
-        public void AssignMaterial_ToSphere_UsingComponentPropertiesObject_Succeeds()
-        {
-            CreateTestMaterial();
-            CreateSphere();
-
-            // Create a sphere via handler
-            
 
             // Assign material via object-typed componentProperties
             var modifyParams = new JObject
@@ -163,20 +142,8 @@ namespace MCPForUnityTests.Editor.Tools
         [Test]
         public void ReadRendererData_DoesNotInstantiateMaterial_AndIncludesSharedMaterial()
         {
-            CreateTestMaterial();
-            CreateSphere();
-            var modifyParams = new JObject
-            {
-                ["action"] = "modify",
-                ["target"] = "ToolTestSphere",
-                ["searchMethod"] = "by_name",
-                ["componentProperties"] = new JObject
-                {
-                    ["MeshRenderer"] = new JObject { ["sharedMaterial"] = _matPath }
-                }
-            };
-            var modifyResult = ToJObject(ManageGameObject.HandleCommand(modifyParams));
-            Assert.IsTrue(modifyResult.Value<bool>("success"), modifyResult.Value<string>("error"));
+            // Prepare object and assignment
+            AssignMaterial_ToSphere_UsingComponentPropertiesObject_Succeeds();
 
             var renderer = _sphere.GetComponent<MeshRenderer>();
             int beforeId = renderer.sharedMaterial != null ? renderer.sharedMaterial.GetInstanceID() : 0;

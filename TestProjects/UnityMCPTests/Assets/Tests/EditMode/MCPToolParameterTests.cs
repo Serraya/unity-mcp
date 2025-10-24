@@ -18,24 +18,21 @@ namespace Tests.EditMode
     /// </summary>
     public class MCPToolParameterTests
     {
-        private const string TempDir = "Assets/Temp/MCPToolParameterTests";
-
-        [SetUp]
-        public void SetUp()
+        [Test]
+        public void Test_ManageAsset_ShouldAcceptJSONProperties()
         {
+            // Arrange: create temp folder
+            const string tempDir = "Assets/Temp/MCPToolParameterTests";
             if (!AssetDatabase.IsValidFolder("Assets/Temp"))
             {
                 AssetDatabase.CreateFolder("Assets", "Temp");
             }
-            if (!AssetDatabase.IsValidFolder(TempDir))
+            if (!AssetDatabase.IsValidFolder(tempDir))
             {
                 AssetDatabase.CreateFolder("Assets/Temp", "MCPToolParameterTests");
             }
-        }
-        [Test]
-        public void Test_ManageAsset_ShouldAcceptJSONProperties()
-        {
-            var matPath = $"{TempDir}/JsonMat_{Guid.NewGuid().ToString("N")}.mat";
+
+            var matPath = $"{tempDir}/JsonMat_{Guid.NewGuid().ToString("N")}.mat";
 
             // Build params with properties as a JSON string (to be coerced)
             var p = new JObject
@@ -73,7 +70,10 @@ namespace Tests.EditMode
         [Test]
         public void Test_ManageGameObject_ShouldAcceptJSONComponentProperties()
         {
-            var matPath = $"{TempDir}/JsonMat_{Guid.NewGuid().ToString("N")}.mat";
+            const string tempDir = "Assets/Temp/MCPToolParameterTests";
+            if (!AssetDatabase.IsValidFolder("Assets/Temp")) AssetDatabase.CreateFolder("Assets", "Temp");
+            if (!AssetDatabase.IsValidFolder(tempDir)) AssetDatabase.CreateFolder("Assets/Temp", "MCPToolParameterTests");
+            var matPath = $"{tempDir}/JsonMat_{Guid.NewGuid().ToString("N")}.mat";
 
             // Create a material first (object-typed properties)
             var createMat = new JObject
@@ -121,7 +121,10 @@ namespace Tests.EditMode
         [Test]
         public void Test_JSONParsing_ShouldWorkInMCPTools()
         {
-            var matPath = $"{TempDir}/JsonMat_{Guid.NewGuid().ToString("N")}.mat";
+            const string tempDir = "Assets/Temp/MCPToolParameterTests";
+            if (!AssetDatabase.IsValidFolder("Assets/Temp")) AssetDatabase.CreateFolder("Assets", "Temp");
+            if (!AssetDatabase.IsValidFolder(tempDir)) AssetDatabase.CreateFolder("Assets/Temp", "MCPToolParameterTests");
+            var matPath = $"{tempDir}/JsonMat_{Guid.NewGuid().ToString("N")}.mat";
 
             // manage_asset with JSON string properties (coercion path)
             var createMat = new JObject
