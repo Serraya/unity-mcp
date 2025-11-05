@@ -44,11 +44,11 @@ class RunTestsResponse(MCPResponse):
 )
 async def run_tests(
     ctx: Context,
-    mode: Annotated[Literal["edit", "play"], "Unity test mode to run"] = "edit",
-    timeout_seconds: Annotated[int | str | None, "Optional timeout in seconds for the Unity test run (string, e.g. '30')"] = None,
-) -> dict[str, Any]:
-    # Get active instance from session state
-    # Removed session_state import
+    mode: Annotated[Literal["EditMode", "PlayMode"], Field(
+        description="Unity test mode to run")] = "EditMode",
+    timeout_seconds: Annotated[int | str, Field(
+        description="Optional timeout in seconds for the Unity test run (string, e.g. '30')")] | None = None,
+) -> RunTestsResponse:
     unity_instance = get_unity_instance_from_context(ctx)
 
     # Coerce timeout defensively (string/float -> int)

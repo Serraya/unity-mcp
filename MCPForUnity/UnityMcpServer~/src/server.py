@@ -172,23 +172,36 @@ mcp = FastMCP(
     name="mcp-for-unity-server",
     lifespan=server_lifespan,
     instructions="""
-This server provides tools to interact with the Unity Game Engine Editor.\n\n
-Available tools:\n
-- `manage_editor`: Controls editor state and queries info.\n
-- `execute_menu_item`: Executes, lists and checks for the existence of Unity Editor menu items.\n
-- `read_console`: Reads or clears Unity console messages, with filtering options.\n
-- `manage_scene`: Manages scenes.\n
-- `manage_gameobject`: Manages GameObjects in the scene.\n
-- `manage_script`: Manages C# script files.\n
-- `manage_asset`: Manages prefabs and assets.\n
-- `manage_shader`: Manages shaders.\n\n
-- Tips:\n
-- Create prefabs for reusable GameObjects.\n
-- Always include a camera and main light in your scenes.\n
-- Unless specified otherwise, paths are relative to the project's `Assets/` folder.\n
-- After creating or modifying scripts with `manage_script`, allow Unity to recompile; use `read_console` to check for compile errors.\n
-- Use `execute_menu_item` for interacting with Unity systems and third party tools like a user would.\n
+This server provides tools to interact with the Unity Game Engine Editor.
 
+Important Workflows:
+
+Resources vs Tools:
+- Use RESOURCES to read editor state (editor_state, project_info, project_tags, tests, etc)
+- Use TOOLS to perform actions and mutations (manage_editor for play mode control, tag/layer management, etc)
+- Always check related resources before modifying the engine state with tools
+
+Script Management:
+- After creating or modifying scripts (by your own tools or the `manage_script` tool) use `read_console` to check for compilation errors before proceeding
+- Only after successful compilation can new components/types be used
+- You can poll the `editor_state` resource's `isCompiling` field to check if the domain reload is complete
+
+Scene Setup:
+- Always include a Camera and main Light (Directional Light) in new scenes
+- Create prefabs with `manage_asset` for reusable GameObjects
+- Use `manage_scene` to load, save, and query scene information
+
+Path Conventions:
+- Unless specified otherwise, all paths are relative to the project's `Assets/` folder
+- Use forward slashes (/) in paths for cross-platform compatibility
+
+Console Monitoring:
+- Check `read_console` regularly to catch errors, warnings, and compilation status
+- Filter by log type (Error, Warning, Log) to focus on specific issues
+
+Menu Items:
+- Use `execute_menu_item` when you have read the menu items resource
+- This lets you interact with Unity's menu system and third-party tools
 """
 )
 
