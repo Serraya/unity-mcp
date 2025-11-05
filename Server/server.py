@@ -108,14 +108,12 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
             instances = _unity_connection_pool.discover_all_instances()
 
             if instances:
-                logger.info(
-                    f"Discovered {len(instances)} Unity instance(s): {[i.id for i in instances]}")
+                logger.info(f"Discovered {len(instances)} Unity instance(s): {[i.id for i in instances]}")
 
                 # Try to connect to default instance
                 try:
                     _unity_connection_pool.get_connection()
-                    logger.info(
-                        "Connected to default Unity instance on startup")
+                    logger.info("Connected to default Unity instance on startup")
 
                     # Record successful Unity connection (deferred)
                     import threading as _t
@@ -128,8 +126,7 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
                         }
                     )).start()
                 except Exception as e:
-                    logger.warning(
-                        "Could not connect to default Unity instance: %s", e)
+                    logger.warning("Could not connect to default Unity instance: %s", e)
             else:
                 logger.warning("No Unity instances found on startup")
 
@@ -179,10 +176,15 @@ This server provides tools to interact with the Unity Game Engine Editor.
 
 Important Workflows:
 
+Resources vs Tools:
+- Use RESOURCES to read editor state (editor_state, project_info, project_tags, tests, etc)
+- Use TOOLS to perform actions and mutations (manage_editor for play mode control, tag/layer management, etc)
+- Always check related resources before modifying the engine state with tools
+
 Script Management:
-1. After creating or modifying scripts with `manage_script`
-2. Use `read_console` to check for compilation errors before proceeding
-3. Only after successful compilation can new components/types be used
+- After creating or modifying scripts (by your own tools or the `manage_script` tool) use `read_console` to check for compilation errors before proceeding
+- Only after successful compilation can new components/types be used
+- You can poll the `editor_state` resource's `isCompiling` field to check if the domain reload is complete
 
 Scene Setup:
 - Always include a Camera and main Light (Directional Light) in new scenes
@@ -248,8 +250,7 @@ Examples:
     # Set environment variable if --default-instance is provided
     if args.default_instance:
         os.environ["UNITY_MCP_DEFAULT_INSTANCE"] = args.default_instance
-        logger.info(
-            f"Using default Unity instance from command-line: {args.default_instance}")
+        logger.info(f"Using default Unity instance from command-line: {args.default_instance}")
 
     mcp.run(transport='stdio')
 

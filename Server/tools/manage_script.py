@@ -311,7 +311,12 @@ def apply_text_edits(
         "options": opts,
     }
     params = {k: v for k, v in params.items() if v is not None}
-    resp = unity_connection.send_command_with_retry("manage_script", params, instance_id=unity_instance)
+    resp = send_with_unity_instance(
+        unity_connection.send_command_with_retry,
+        unity_instance,
+        "manage_script",
+        params,
+    )
     if isinstance(resp, dict):
         data = resp.setdefault("data", {})
         data.setdefault("normalizedEdits", normalized_edits)
@@ -395,7 +400,12 @@ def create_script(
             contents.encode("utf-8")).decode("utf-8")
         params["contentsEncoded"] = True
     params = {k: v for k, v in params.items() if v is not None}
-    resp = unity_connection.send_command_with_retry("manage_script", params, instance_id=unity_instance)
+    resp = send_with_unity_instance(
+        unity_connection.send_command_with_retry,
+        unity_instance,
+        "manage_script",
+        params,
+    )
     return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
 
 
@@ -411,7 +421,12 @@ def delete_script(
     if not directory or directory.split("/")[0].lower() != "assets":
         return {"success": False, "code": "path_outside_assets", "message": "URI must resolve under 'Assets/'."}
     params = {"action": "delete", "name": name, "path": directory}
-    resp = unity_connection.send_command_with_retry("manage_script", params, instance_id=unity_instance)
+    resp = send_with_unity_instance(
+        unity_connection.send_command_with_retry,
+        unity_instance,
+        "manage_script",
+        params,
+    )
     return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
 
 
@@ -437,7 +452,12 @@ def validate_script(
         "path": directory,
         "level": level,
     }
-    resp = unity_connection.send_command_with_retry("manage_script", params, instance_id=unity_instance)
+    resp = send_with_unity_instance(
+        unity_connection.send_command_with_retry,
+        unity_instance,
+        "manage_script",
+        params,
+    )
     if isinstance(resp, dict) and resp.get("success"):
         diags = resp.get("data", {}).get("diagnostics", []) or []
         warnings = sum(1 for d in diags if str(
@@ -559,7 +579,12 @@ def get_sha(
     try:
         name, directory = _split_uri(uri)
         params = {"action": "get_sha", "name": name, "path": directory}
-        resp = unity_connection.send_command_with_retry("manage_script", params, instance_id=unity_instance)
+        resp = send_with_unity_instance(
+            unity_connection.send_command_with_retry,
+            unity_instance,
+            "manage_script",
+            params,
+        )
         if isinstance(resp, dict) and resp.get("success"):
             data = resp.get("data", {})
             minimal = {"sha256": data.get(

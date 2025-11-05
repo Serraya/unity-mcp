@@ -49,7 +49,6 @@ def register_all_resources(mcp: FastMCP):
         has_query_params = '{?' in uri
 
         if has_query_params:
-            # Register template with query parameter support
             wrapped_template = telemetry_resource(resource_name)(func)
             wrapped_template = mcp.resource(
                 uri=uri,
@@ -61,7 +60,6 @@ def register_all_resources(mcp: FastMCP):
             registered_count += 1
             resource_info['func'] = wrapped_template
         else:
-            # No query parameters, register as-is
             wrapped = telemetry_resource(resource_name)(func)
             wrapped = mcp.resource(
                 uri=uri,

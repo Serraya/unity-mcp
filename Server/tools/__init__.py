@@ -147,7 +147,6 @@ def with_unity_instance(
                             await result
                     except Exception:
                         pass
-                # Inject kwarg only if function accepts it or downstream ignores extras
                 kwargs.setdefault(kwarg_name, inst)
                 return await fn(ctx, *args, **kwargs)
         else:
@@ -162,7 +161,6 @@ def with_unity_instance(
                                 loop = asyncio.get_running_loop()
                                 loop.create_task(result)
                             except RuntimeError:
-                                # No running event loop; skip awaiting to avoid warnings
                                 pass
                     except Exception:
                         pass

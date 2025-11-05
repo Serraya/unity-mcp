@@ -66,7 +66,8 @@ def manage_gameobject(
     includeNonPublicSerialized: Annotated[bool | str,
                                           "Controls whether serialization of private [SerializeField] fields is included (accepts true/false or 'true'/'false')"] | None = None,
 ) -> dict[str, Any]:
-    # Get active instance from session-scoped middleware state
+    # Get active instance from session state
+    # Removed session_state import
     unity_instance = get_unity_instance_from_context(ctx)
 
     # Coercers to tolerate stringified booleans and vectors
