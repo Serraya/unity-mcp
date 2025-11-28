@@ -143,9 +143,14 @@ MCP for Unity 使用两个组件连接您的工具：
 3. 点击 `+` -> `Add package from git URL...`。
 4. 输入：
     ```
-    https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#v8.1.0
+    https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity
     ```
 5. 点击 `Add`。
+
+**需要锁定版本？** 使用带标签的 URL（更新时需卸载并重新安装）：
+```
+https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#v8.0.0
+```
 
 #### 通过 OpenUPM 安装
 

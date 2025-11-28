@@ -144,9 +144,14 @@ MCP for Unity connects your tools using two components:
 3. Click `+` -> `Add package from git URL...`.
 4. Enter:
     ```
-    https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#v8.1.0
+    https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity
     ```
 5. Click `Add`.
+
+**Need a fixed version?** Use a tagged URL instead (updates require uninstalling and re-installing):
+```
+https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#v8.0.0
+```
 
 #### To install via OpenUPM
 
