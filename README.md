@@ -41,8 +41,6 @@ MCP for Unity acts as a bridge, allowing AI assistants (like Claude, Cursor) to 
 
   Your LLM can use functions like:
 
-* `execute_custom_tool`: Execute a project-scoped custom tool registered by Unity.
-* `execute_menu_item`: Executes Unity Editor menu items (e.g., "File/Save Project").
 * `manage_asset`: Performs asset operations (import, create, modify, delete, etc.).
 * `manage_editor`: Controls and queries the editor's state and settings.
 * `manage_gameobject`: Manages GameObjects: create, modify, delete, find, and component operations.
@@ -53,6 +51,8 @@ MCP for Unity acts as a bridge, allowing AI assistants (like Claude, Cursor) to 
 * `manage_shader`: Performs shader CRUD operations (create, read, modify, delete).
 * `read_console`: Gets messages from or clears the console.
 * `run_tests`: Runs tests in the Unity Editor.
+* `execute_custom_tool`: Execute a project-scoped custom tool registered by Unity.
+* `execute_menu_item`: Executes Unity Editor menu items (e.g., "File/Save Project").
 * `set_active_instance`: Routes subsequent tool calls to a specific Unity instance (when multiple are running). Requires the exact `Name@hash` from `unity_instances`.
 * `apply_text_edits`: Precise text edits with precondition hashes and atomic multi-edit batches.
 * `script_apply_edits`: Structured C# method/class edits (insert/replace/delete) with safer boundaries.
