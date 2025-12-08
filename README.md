@@ -149,9 +149,9 @@ MCP for Unity connects your tools using two components:
     ```
 5. Click `Add`.
 
-**Need a fixed version?** Use a tagged URL instead (updates require uninstalling and re-installing):
+**Need a stable/fixed version?** Use a tagged URL instead (updates require uninstalling and re-installing):
 ```
-https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#v8.0.0
+https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#v8.2.1
 ```
 
 #### To install via OpenUPM
@@ -188,11 +188,12 @@ Connect your MCP Client (Claude, Cursor, etc.) to the HTTP server from Step 2 (a
 
 For **Claude Desktop** Users, try using our manually scrapped Unity_Skills by downloading and uploading the claude_skill_unity.zip following this [link](https://www.claude.com/blog/skills).
 
-**Option A: Auto-Setup (Recommended for Claude/Cursor/VSC Copilot)**
+**Option A: Configure Buttons (Recommended for Claude/Cursor/VSC Copilot)**
 
 1. In Unity, go to `Window > MCP for Unity`.
-2. Click `Auto-Setup`.
-3. Look for a green status indicator 🟢 and "Connected ✓". *(This writes the HTTP `url` pointing at the server you launched in Step 2.)* 
+2. Select your Client/IDE from the dropdown.
+3. Click the `Configure` Button.  (Or the `Configure All Detected Clients` button will try to configure every client it finds, but takes longer.)
+4. Look for a green status indicator 🟢 and "Connected ✓". *(This writes the HTTP `url` pointing at the server you launched in Step 2.)* 
 
 <details><summary><strong>Client-specific troubleshooting</strong></summary>
 
