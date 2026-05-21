@@ -481,7 +481,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     try
                     {
                         var ep = client.Client?.RemoteEndPoint?.ToString() ?? "unknown";
-                        McpLog.Info($"Client connected {ep} (active clients: {clientCount})");
+                        if (IsDebugEnabled()) McpLog.Info($"Client connected {ep} (active clients: {clientCount})", always: false);
                     }
                     catch { }
                     try
@@ -517,7 +517,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     }
                     if (staleClients.Length > 0)
                     {
-                        McpLog.Info($"Closing {staleClients.Length} stale client(s) after new connection");
+                        if (IsDebugEnabled()) McpLog.Info($"Closing {staleClients.Length} stale client(s) after new connection", always: false);
                         foreach (var stale in staleClients)
                         {
                             try { stale.Close(); } catch { }
@@ -628,11 +628,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                         catch (Exception ex)
                         {
                             string msg = ex.Message ?? string.Empty;
-                            bool isBenign =
-                                msg.IndexOf("Connection closed before reading expected bytes", StringComparison.OrdinalIgnoreCase) >= 0
-                                || msg.IndexOf("Read timed out", StringComparison.OrdinalIgnoreCase) >= 0
-                                || ex is IOException;
-                            if (isBenign)
+                            if (IsBenignClientDisconnect(ex))
                             {
                                 if (IsDebugEnabled()) McpLog.Info($"Client handler: {msg}", always: false);
                             }
@@ -649,9 +645,27 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     lock (clientsLock) { activeClients.Remove(client); }
                     int remaining;
                     lock (clientsLock) { remaining = activeClients.Count; }
-                    McpLog.Info($"Client handler exited (remaining clients: {remaining})");
+                    if (IsDebugEnabled()) McpLog.Info($"Client handler exited (remaining clients: {remaining})", always: false);
                 }
             }
+        }
+
+        private static bool IsBenignClientDisconnect(Exception ex)
+        {
+            if (ex is OperationCanceledException
+                || ex is ObjectDisposedException
+                || ex is IOException
+                || ex is SocketException)
+            {
+                return true;
+            }
+
+            string msg = ex.Message ?? string.Empty;
+            return msg.IndexOf("Connection closed before reading expected bytes", StringComparison.OrdinalIgnoreCase) >= 0
+                || msg.IndexOf("Read timed out", StringComparison.OrdinalIgnoreCase) >= 0
+                || msg.IndexOf("Cannot access a disposed object", StringComparison.OrdinalIgnoreCase) >= 0
+                || (msg.IndexOf("closed", StringComparison.OrdinalIgnoreCase) >= 0
+                    && msg.IndexOf("socket", StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
         private static async Task<byte[]> ReadExactAsync(NetworkStream stream, int count, int timeoutMs, CancellationToken cancel = default)
