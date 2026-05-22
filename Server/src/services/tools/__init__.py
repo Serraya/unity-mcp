@@ -195,6 +195,10 @@ async def sync_tool_visibility_from_unity(
                                 type=p.get("type", "string"),
                                 required=p.get("required", True),
                                 default_value=p.get("default_value"),
+                                enum_values=p.get("enum_values") or p.get("enum") or [],
+                                aliases=p.get("aliases") or [],
+                                nullable=p.get("nullable", False),
+                                items_type=p.get("items_type"),
                             )
                             for p in td.get("parameters", [])
                         ]

@@ -184,7 +184,11 @@ class TestToolParameterModel:
             description="Number of items",
             type="integer",
             required=False,
-            default_value="10"
+            default_value="10",
+            enum_values=["1", "10"],
+            aliases=["item_count"],
+            nullable=True,
+            items_type="string",
         )
 
         assert param.name == "count"
@@ -192,6 +196,10 @@ class TestToolParameterModel:
         assert param.type == "integer"
         assert param.required is False
         assert param.default_value == "10"
+        assert param.enum_values == ["1", "10"]
+        assert param.aliases == ["item_count"]
+        assert param.nullable is True
+        assert param.items_type == "string"
 
     def test_tool_parameter_type_defaults_to_string(self):
         """Test that parameter type defaults to 'string'."""
@@ -202,6 +210,15 @@ class TestToolParameterModel:
         """Test that required defaults to True."""
         param = ToolParameterModel(name="mandatory")
         assert param.required is True
+
+    def test_tool_parameter_schema_metadata_defaults(self):
+        """Test custom tool schema metadata defaults."""
+        param = ToolParameterModel(name="input")
+
+        assert param.enum_values == []
+        assert param.aliases == []
+        assert param.nullable is False
+        assert param.items_type is None
 
     def test_tool_parameter_various_types(self):
         """Test ToolParameterModel with various type specifications."""
