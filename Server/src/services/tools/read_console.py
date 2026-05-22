@@ -16,12 +16,13 @@ from transport.legacy.unity_connection import async_send_command_with_retry
 def _strip_stacktrace_from_list(items: list) -> None:
     """Remove stacktrace fields from a list of log entries."""
     for item in items:
-        if isinstance(item, dict) and "stacktrace" in item:
+        if isinstance(item, dict):
             item.pop("stacktrace", None)
+            item.pop("stackTrace", None)
 
 
 @mcp_for_unity_tool(
-    description="Gets messages from or clears the Unity Editor console. Defaults to 10 most recent entries. Use page_size/cursor for paging. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5'). The 'get' action is read-only; 'clear' modifies ephemeral UI state (not project data).",
+    description="Gets messages from or clears the Unity Editor console. Defaults to 10 most recent error/warning entries. Pass types=['all'] to include logs. Use page_size/cursor for paging. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5'). The 'get' action is read-only; 'clear' modifies ephemeral UI state (not project data).",
     annotations=ToolAnnotations(
         title="Read Console",
     ),
@@ -44,6 +45,10 @@ async def read_console(
                               'json'], "Output format"] | None = None,
     include_stacktrace: Annotated[bool | str,
                                   "Include stack traces in output (accepts true/false or 'true'/'false')"] | None = None,
+    max_stack_frames: Annotated[int | str,
+                                "Maximum stack frames to include when include_stacktrace is true. Unity defaults apply when omitted."] | None = None,
+    max_stack_chars: Annotated[int | str,
+                               "Maximum stack trace characters to include when include_stacktrace is true. Unity defaults apply when omitted."] | None = None,
 ) -> dict[str, Any]:
     # Get active instance from session state
     # Removed session_state import
@@ -84,7 +89,7 @@ async def read_console(
             normalized_types.append(normalized)
         types = normalized_types
     else:
-        types = ['error', 'warning', 'log']
+        types = ['error', 'warning']
     
     format = format if format is not None else 'plain'
     # Coerce booleans defensively (strings like 'true'/'false')
@@ -92,6 +97,8 @@ async def read_console(
     include_stacktrace = coerce_bool(include_stacktrace, default=False)
     coerced_page_size = coerce_int(page_size, default=None)
     coerced_cursor = coerce_int(cursor, default=None)
+    coerced_max_stack_frames = coerce_int(max_stack_frames, default=None)
+    coerced_max_stack_chars = coerce_int(max_stack_chars, default=None)
 
     # Normalize action if it's a string
     if isinstance(action, str):
@@ -119,7 +126,9 @@ async def read_console(
         "pageSize": coerced_page_size,
         "cursor": coerced_cursor,
         "format": format.lower() if isinstance(format, str) else format,
-        "includeStacktrace": include_stacktrace
+        "includeStacktrace": include_stacktrace,
+        "maxStackFrames": coerced_max_stack_frames,
+        "maxStackChars": coerced_max_stack_chars
     }
 
     # Remove None values unless it's 'count' (as None might mean 'all')

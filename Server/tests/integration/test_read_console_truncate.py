@@ -26,7 +26,7 @@ async def test_read_console_full_default(monkeypatch):
         captured["params"] = params
         return {
             "success": True,
-            "data": {"lines": [{"level": "error", "message": "oops", "stacktrace": "trace", "time": "t"}]},
+            "data": {"lines": [{"level": "error", "message": "oops", "stacktrace": "trace", "stackTrace": "trace", "time": "t"}]},
         }
 
     # Patch the send_command_with_retry function in the tools module
@@ -44,6 +44,7 @@ async def test_read_console_full_default(monkeypatch):
     }
     assert captured["params"]["count"] == 10
     assert captured["params"]["includeStacktrace"] is False
+    assert captured["params"]["types"] == ["error", "warning"]
 
 
 @pytest.mark.asyncio
@@ -57,7 +58,7 @@ async def test_read_console_truncated(monkeypatch):
         captured["params"] = params
         return {
             "success": True,
-            "data": {"lines": [{"level": "error", "message": "oops", "stacktrace": "trace"}]},
+            "data": {"lines": [{"level": "error", "message": "oops", "stacktrace": "trace", "stackTrace": "trace"}]},
         }
 
     # Patch the send_command_with_retry function in the tools module
@@ -102,6 +103,43 @@ async def test_read_console_default_count(monkeypatch):
     assert resp["success"] is True
     # Verify that the default count of 10 was used
     assert captured["params"]["count"] == 10
+    assert captured["params"]["types"] == ["error", "warning"]
+
+
+@pytest.mark.asyncio
+async def test_read_console_forwards_stack_limits(monkeypatch):
+    """Test that read_console forwards stack trace limits to Unity."""
+    tools = setup_console_tools()
+    read_console = tools["read_console"]
+
+    captured = {}
+
+    async def fake_send_with_unity_instance(_send_fn, _unity_instance, _command_type, params, **_kwargs):
+        captured["params"] = params
+        return {
+            "success": True,
+            "data": {"lines": [{"level": "error", "message": "test error", "stackTrace": "frame"}]},
+        }
+
+    import services.tools.read_console as read_console_mod
+    monkeypatch.setattr(
+        read_console_mod,
+        "send_with_unity_instance",
+        fake_send_with_unity_instance,
+    )
+
+    resp = await read_console(
+        ctx=DummyContext(),
+        action="get",
+        include_stacktrace=True,
+        max_stack_frames="5",
+        max_stack_chars="5000",
+    )
+
+    assert resp["success"] is True
+    assert captured["params"]["includeStacktrace"] is True
+    assert captured["params"]["maxStackFrames"] == 5
+    assert captured["params"]["maxStackChars"] == 5000
 
 
 @pytest.mark.asyncio
