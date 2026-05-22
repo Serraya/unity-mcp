@@ -32,6 +32,10 @@ namespace MCPForUnity.Editor.Services
         public string Type { get; set; }  // "string", "int", "bool", "float", etc.
         public bool Required { get; set; }
         public string DefaultValue { get; set; }
+        public List<string> EnumValues { get; set; }
+        public List<string> Aliases { get; set; }
+        public bool Nullable { get; set; }
+        public string ItemsType { get; set; }
     }
 
     /// <summary>
