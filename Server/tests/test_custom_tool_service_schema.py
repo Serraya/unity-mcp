@@ -42,6 +42,63 @@ def _annotated_parts(annotation):
     return inner, field_info
 
 
+def test_normalize_response_treats_mcp_status_error_as_failure():
+    service = CustomToolService(_RecordingMcp())
+
+    result = service._normalize_response({
+        "ok": False,
+        "_mcp_status": "error",
+        "error_code": "MISSING_JOB_ID",
+        "message": "job_id is required for status.",
+    })
+
+    assert result.success is False
+    assert result.message == "job_id is required for status."
+    assert result.error == "job_id is required for status."
+    assert result.data["error_code"] == "MISSING_JOB_ID"
+
+
+@pytest.mark.asyncio
+async def test_poll_until_complete_carries_job_id_from_pending_response(monkeypatch):
+    service = CustomToolService(_RecordingMcp())
+    seen_params = []
+
+    async def fake_send_with_unity_instance(_send_fn, _unity_instance, _tool_name, params, user_id=None):  # noqa: ARG001
+        seen_params.append(dict(params))
+        return {
+            "ok": True,
+            "_mcp_status": "complete",
+            "message": "Capture complete.",
+        }
+
+    monkeypatch.setattr(
+        "services.custom_tool_service.send_with_unity_instance",
+        fake_send_with_unity_instance,
+    )
+
+    result = await service._poll_until_complete(
+        "uitk_capture_game_view",
+        "sample-project@abcdef12",
+        {"action": "capture", "width": 393, "height": 852},
+        {
+            "ok": True,
+            "_mcp_status": "pending",
+            "_mcp_poll_interval": 0.1,
+            "job_id": "capture-job-1",
+        },
+        "status",
+        max_poll_seconds=1,
+    )
+
+    assert result.success is True
+    assert seen_params == [{
+        "action": "status",
+        "width": 393,
+        "height": 852,
+        "job_id": "capture-job-1",
+    }]
+
+
 @pytest.mark.asyncio
 async def test_global_custom_tool_exposes_parameter_signature():
     mcp = _RecordingMcp()
