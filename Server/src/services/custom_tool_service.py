@@ -200,6 +200,7 @@ class CustomToolService:
         timeout = max_poll_seconds if max_poll_seconds > 0 else _MAX_POLL_SECONDS
         deadline = time.time() + timeout
         response = initial_response
+        self._copy_poll_identifiers(poll_params, response)
 
         while True:
             status, poll_interval = self._interpret_status(response)
@@ -224,6 +225,7 @@ class CustomToolService:
                     poll_params,
                     user_id=user_id,
                 )
+                self._copy_poll_identifiers(poll_params, response)
             except Exception as exc:  # pragma: no cover - network/domain reload variability
                 logger.debug(f"Polling {tool_name} failed, will retry: {exc}")
                 # Back off modestly but stay responsive.
@@ -265,39 +267,46 @@ class CustomToolService:
 
         return "final", _DEFAULT_POLL_INTERVAL
 
+    def _copy_poll_identifiers(self, poll_params: dict[str, object], response) -> None:
+        if isinstance(response, MCPResponse):
+            response = response.data
+        if not isinstance(response, dict):
+            return
+
+        candidates = [response]
+        data = response.get("data")
+        if isinstance(data, dict):
+            candidates.append(data)
+
+        for payload in candidates:
+            for source_key in ("job_id", "jobId"):
+                value = payload.get(source_key)
+                if value is not None and "job_id" not in poll_params and "jobId" not in poll_params:
+                    poll_params["job_id"] = value
+                    return
+
     def _normalize_response(self, response) -> MCPResponse:
         if isinstance(response, MCPResponse):
             return response
         if isinstance(response, dict):
+            status = response.get("_mcp_status")
+            success = response.get("success", status != "error")
+            message = response.get("message")
+            error = response.get("error")
+            if status == "error":
+                success = False
+                if error is None and message is not None:
+                    error = message
+
             return MCPResponse(
-                success=response.get("success", True),
-                message=response.get("message"),
-                error=response.get("error"),
+                success=success,
+                message=message,
+                error=error,
                 data=response.get(
                     "data", response) if "data" not in response else response["data"],
             )
 
-        success = True
-        message = None
-        error = None
-        data = None
-
-        if isinstance(response, dict):
-            success = response.get("success", True)
-            if "_mcp_status" in response and response["_mcp_status"] == "error":
-                success = False
-            message = str(response.get("message")) if response.get(
-                "message") else None
-            error = str(response.get("error")) if response.get(
-                "error") else None
-            data = response.get("data")
-            if "success" not in response and "_mcp_status" not in response:
-                data = response
-        else:
-            success = False
-            message = str(response)
-
-        return MCPResponse(success=success, message=message, error=error, data=data)
+        return MCPResponse(success=False, message=str(response))
 
     def _safe_response(self, response):
         if isinstance(response, dict):
