@@ -5,6 +5,10 @@
 .codeiumignore
 .kiro
 
+# Local private notes
+.private/
+docs/serraya-fork-backlog.md
+
 # Local worktrees for parallel feature work
 .worktrees/
 

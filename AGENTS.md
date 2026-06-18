@@ -70,6 +70,7 @@ Skip this ceremony only for tiny mechanical edits such as typo fixes or local co
 ## Repository Boundaries
 
 - Keep MCP fork changes separate from consumer app changes.
+- Local private notes may exist under `.private/`. That directory is intentionally git-ignored for internal project names, local todo, and consumer-app context; never stage, commit, or push it.
 - Do not update consumer app `.mcp.json`, Codex config, `Packages/manifest.json`, or lockfiles unless the user asks to repin that app.
 - Do not create commits unless explicitly requested.
 - Do not revert user changes. If unrelated dirty files exist, leave them alone.
