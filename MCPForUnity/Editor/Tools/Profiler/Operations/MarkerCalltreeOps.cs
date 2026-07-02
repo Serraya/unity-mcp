@@ -23,15 +23,15 @@ namespace MCPForUnity.Editor.Tools.Profiler
             {
                 return GetMarkerCalltreeImpl(@params);
             }
+            catch (EntryPointNotFoundException ex)
+            {
+                return ProfilerApiUnavailable(ex);
+            }
             catch (TypeLoadException ex)
             {
                 return ProfilerApiUnavailable(ex);
             }
             catch (MissingMemberException ex)
-            {
-                return ProfilerApiUnavailable(ex);
-            }
-            catch (EntryPointNotFoundException ex)
             {
                 return ProfilerApiUnavailable(ex);
             }
