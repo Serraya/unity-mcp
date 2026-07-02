@@ -12,7 +12,7 @@ description: "Gets messages from or clears the Unity Editor console."
 
 ## Description
 
-Gets messages from or clears the Unity Editor console. Defaults to 10 most recent entries. Use page_size/cursor for paging. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5'). The 'get' action is read-only; 'clear' modifies ephemeral UI state (not project data).
+Gets messages from or clears the Unity Editor console. Defaults to 10 most recent error/warning entries. Pass types=['all'] to include logs. Use page_size/cursor for paging. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5'). The 'get' action is read-only; 'clear' modifies ephemeral UI state (not project data).
 
 ## Parameters
 
@@ -26,6 +26,8 @@ Gets messages from or clears the Unity Editor console. Defaults to 10 most recen
 | `cursor` | `int \| str \| None` | — | Opaque cursor for paging (0-based offset). Defaults to 0. |
 | `format` | `Literal['plain', 'detailed', 'json'] \| None` | — | Output format |
 | `include_stacktrace` | `bool \| str \| None` | — | Include stack traces in output (accepts true/false or 'true'/'false') |
+| `max_stack_frames` | `int \| str \| None` | — | Maximum stack frames to include when include_stacktrace is true. Unity defaults apply when omitted. |
+| `max_stack_chars` | `int \| str \| None` | — | Maximum stack trace characters to include when include_stacktrace is true. Unity defaults apply when omitted. |
 
 ## Returns
 
