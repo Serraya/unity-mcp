@@ -556,11 +556,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                             ["description"] = p.Description,
                             ["type"] = p.Type,
                             ["required"] = p.Required,
-                            ["default_value"] = p.DefaultValue,
-                            ["enum_values"] = p.EnumValues != null ? new JArray(p.EnumValues) : new JArray(),
-                            ["aliases"] = p.Aliases != null ? new JArray(p.Aliases) : new JArray(),
-                            ["nullable"] = p.Nullable,
-                            ["items_type"] = p.ItemsType
+                            ["default_value"] = p.DefaultValue
                         });
                     }
                 }

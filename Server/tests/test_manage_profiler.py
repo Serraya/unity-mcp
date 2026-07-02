@@ -48,7 +48,7 @@ def mock_unity(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_profiler_actions_count():
-    assert len(ALL_ACTIONS) == 15
+    assert len(ALL_ACTIONS) == 14
 
 
 def test_no_duplicate_actions():
@@ -61,7 +61,7 @@ def test_session_actions():
 
 
 def test_counter_actions():
-    expected = {"get_frame_timing", "get_counters", "get_object_memory", "get_marker_calltree"}
+    expected = {"get_frame_timing", "get_counters", "get_object_memory"}
     assert set(COUNTER_ACTIONS) == expected
 
 
@@ -113,7 +113,7 @@ def test_empty_action_returns_error(mock_unity):
 @pytest.mark.parametrize("action_name", [
     "ping",
     "profiler_start", "profiler_stop", "profiler_status", "profiler_set_areas",
-    "get_frame_timing", "get_counters", "get_object_memory", "get_marker_calltree",
+    "get_frame_timing", "get_counters", "get_object_memory",
     "memory_take_snapshot", "memory_list_snapshots", "memory_compare_snapshots",
     "frame_debugger_enable", "frame_debugger_disable", "frame_debugger_get_events",
 ])
@@ -195,54 +195,6 @@ def test_get_object_memory_forwards_path(mock_unity):
     )
     assert result["success"] is True
     assert mock_unity["params"]["object_path"] == "/Player/Mesh"
-
-
-def test_get_marker_calltree_forwards_all_params(mock_unity):
-    result = asyncio.run(
-        manage_profiler(
-            SimpleNamespace(),
-            action="get_marker_calltree",
-            frame_index=1379,
-            marker_filter="Panel.PerformPick",
-            thread_name="Main Thread",
-            thread_index=0,
-            match_mode="contains",
-            max_depth=8,
-            max_rows=200,
-            include_parents=True,
-            include_children=True,
-        )
-    )
-    assert result["success"] is True
-    assert mock_unity["params"] == {
-        "action": "get_marker_calltree",
-        "frame_index": 1379,
-        "marker_filter": "Panel.PerformPick",
-        "thread_name": "Main Thread",
-        "thread_index": 0,
-        "match_mode": "contains",
-        "max_depth": 8,
-        "max_rows": 200,
-        "include_parents": True,
-        "include_children": True,
-    }
-
-
-def test_get_marker_calltree_omits_none_params(mock_unity):
-    result = asyncio.run(
-        manage_profiler(
-            SimpleNamespace(),
-            action="get_marker_calltree",
-            frame_index=1379,
-            marker_filter="Panel.PerformPick",
-        )
-    )
-    assert result["success"] is True
-    assert mock_unity["params"] == {
-        "action": "get_marker_calltree",
-        "frame_index": 1379,
-        "marker_filter": "Panel.PerformPick",
-    }
 
 
 def test_memory_take_snapshot_forwards_path(mock_unity):

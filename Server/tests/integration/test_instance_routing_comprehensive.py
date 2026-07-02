@@ -72,8 +72,8 @@ class TestInstanceRoutingBasics:
         assert await middleware.get_active_instance(ctx) == "Project@xyz"
 
     @pytest.mark.asyncio
-    async def test_middleware_fallback_to_session_id_before_global(self):
-        """When no client id exists, session id should isolate local clients before global fallback."""
+    async def test_middleware_fallback_to_global(self):
+        """When no session/client id, should use 'global' key."""
         middleware = UnityInstanceMiddleware()
 
         ctx = Mock(spec=Context)
@@ -82,15 +82,6 @@ class TestInstanceRoutingBasics:
         ctx.get_state = AsyncMock(return_value=None)
 
         await middleware.set_active_instance(ctx, "Project@global")
-        assert await middleware.get_active_instance(ctx) == "Project@global"
-
-        ctx_with_session = Mock(spec=Context)
-        ctx_with_session.session_id = "session-1"
-        ctx_with_session.client_id = None
-        ctx_with_session.get_state = AsyncMock(return_value=None)
-
-        await middleware.set_active_instance(ctx_with_session, "Project@session")
-        assert await middleware.get_active_instance(ctx_with_session) == "Project@session"
         assert await middleware.get_active_instance(ctx) == "Project@global"
 
 

@@ -20,10 +20,6 @@ class ToolParameterModel(BaseModel):
     type: str = Field(default="string")
     required: bool = Field(default=True)
     default_value: str | None = None
-    enum_values: list[str] = Field(default_factory=list)
-    aliases: list[str] = Field(default_factory=list)
-    nullable: bool = Field(default=False)
-    items_type: str | None = None
 
 
 class ToolDefinitionModel(BaseModel):

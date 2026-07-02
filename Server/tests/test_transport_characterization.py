@@ -124,7 +124,7 @@ class TestUnityInstanceMiddlewareSessionManagement:
     async def test_middleware_uses_client_id_over_session_id(self):
         """
         Current behavior: get_session_key() prioritizes client_id for stability,
-        falling back to session_id when unavailable.
+        falling back to 'global' when unavailable.
         """
         middleware = UnityInstanceMiddleware()
 
@@ -136,53 +136,16 @@ class TestUnityInstanceMiddlewareSessionManagement:
         assert key == "stable-client-id"
 
     @pytest.mark.asyncio
-    async def test_middleware_falls_back_to_session_id_before_global_key(self):
+    async def test_middleware_falls_back_to_global_key(self):
         """
-        Current behavior: When client_id is None/missing, use session_id before
-        falling back to the shared 'global' key. This keeps multiple local MCP
-        clients from overwriting each other's selected Unity instance.
+        Current behavior: When client_id is None/missing, use 'global' key.
+        This allows single-user local mode to work without session tracking.
         """
         middleware = UnityInstanceMiddleware()
 
         ctx = Mock()
         ctx.client_id = None
         ctx.session_id = "session-id"
-        ctx.get_state = AsyncMock(return_value=None)
-
-        key = await middleware.get_session_key(ctx)
-        assert key == "session:session-id"
-
-    @pytest.mark.asyncio
-    async def test_middleware_uses_request_context_session_id(self):
-        """
-        Current behavior: FastMCP may expose session identity on request_context
-        instead of the direct context object.
-        """
-        middleware = UnityInstanceMiddleware()
-
-        ctx = Mock()
-        ctx.client_id = None
-        ctx.session_id = None
-        ctx.request_context = Mock()
-        ctx.request_context.client_id = None
-        ctx.request_context.session_id = "request-session-id"
-        ctx.get_state = AsyncMock(return_value=None)
-
-        key = await middleware.get_session_key(ctx)
-        assert key == "session:request-session-id"
-
-    @pytest.mark.asyncio
-    async def test_middleware_only_falls_back_to_global_without_any_session_identity(self):
-        """
-        Current behavior: The shared global key is only used when the context
-        has no client_id, no session_id, and no remote-hosted user id.
-        """
-        middleware = UnityInstanceMiddleware()
-
-        ctx = Mock()
-        ctx.client_id = None
-        ctx.session_id = None
-        ctx.request_context = None
         ctx.get_state = AsyncMock(return_value=None)
 
         key = await middleware.get_session_key(ctx)
@@ -1500,7 +1463,7 @@ class TestTransportEdgeCases:
     async def test_middleware_handles_client_id_false_but_not_none(self):
         """
         Current behavior: get_session_key checks isinstance(client_id, str) AND len,
-        so falsy client ids fall through to session_id.
+        so falsy non-string values fall through to 'global'.
         """
         middleware = UnityInstanceMiddleware()
 
@@ -1510,7 +1473,7 @@ class TestTransportEdgeCases:
         ctx.get_state = AsyncMock(return_value=None)
 
         key = await middleware.get_session_key(ctx)
-        assert key == "session:session-id"  # Empty string doesn't pass isinstance+truthy check
+        assert key == "global"  # Empty string doesn't pass isinstance+truthy check
 
     def test_plugin_hub_encoding_is_json(self):
         """

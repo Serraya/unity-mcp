@@ -74,19 +74,9 @@ class UnityInstanceMiddleware(Middleware):
 
         Prioritizes client_id for stability.
         In remote-hosted mode, falls back to user_id for session isolation.
-        Falls back to FastMCP session_id when client_id and user_id are unavailable.
         Otherwise falls back to 'global' (assuming single-user local mode).
         """
-        def stable_string(value) -> str | None:
-            if isinstance(value, str):
-                value = value.strip()
-                return value or None
-            return None
-
-        client_id = stable_string(getattr(ctx, "client_id", None))
-        if not client_id:
-            request_context = getattr(ctx, "request_context", None)
-            client_id = stable_string(getattr(request_context, "client_id", None))
+        client_id = getattr(ctx, "client_id", None)
         if isinstance(client_id, str) and client_id:
             return client_id
 
@@ -94,13 +84,6 @@ class UnityInstanceMiddleware(Middleware):
         user_id = await ctx.get_state("user_id")
         if isinstance(user_id, str) and user_id:
             return f"user:{user_id}"
-
-        session_id = stable_string(getattr(ctx, "session_id", None))
-        if not session_id:
-            request_context = getattr(ctx, "request_context", None)
-            session_id = stable_string(getattr(request_context, "session_id", None))
-        if session_id:
-            return f"session:{session_id}"
 
         # Fallback to global for local dev stability
         return "global"

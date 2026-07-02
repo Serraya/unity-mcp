@@ -30,8 +30,6 @@ namespace MCPForUnity.Editor.Tools
         private static FieldInfo _messageField;
         private static FieldInfo _fileField;
         private static FieldInfo _lineField;
-        private const int DefaultMaxStackFrames = 12;
-        private const int DefaultMaxStackChars = 12000;
     
         // Static constructor for reflection setup
         static ReadConsole()
@@ -172,16 +170,6 @@ namespace MCPForUnity.Editor.Tools
                     string filterText = p.Get("filterText");
                     string format = p.Get("format", "plain").ToLower();
                     bool includeStacktrace = p.GetBool("includeStacktrace", false);
-                    int maxStackFrames = Mathf.Clamp(
-                        p.GetInt("maxStackFrames") ?? DefaultMaxStackFrames,
-                        1,
-                        200
-                    );
-                    int maxStackChars = Mathf.Clamp(
-                        p.GetInt("maxStackChars") ?? DefaultMaxStackChars,
-                        200,
-                        100000
-                    );
 
                     if (types.Contains("all"))
                     {
@@ -195,9 +183,7 @@ namespace MCPForUnity.Editor.Tools
                         cursor,
                         filterText,
                         format,
-                        includeStacktrace,
-                        maxStackFrames,
-                        maxStackChars
+                        includeStacktrace
                     );
                 }
                 else
@@ -240,8 +226,6 @@ namespace MCPForUnity.Editor.Tools
         /// <param name="filterText">Optional text filter (case-insensitive substring match).</param>
         /// <param name="format">Output format: "plain", "detailed", or "json".</param>
         /// <param name="includeStacktrace">Whether to include stack traces in the output.</param>
-        /// <param name="maxStackFrames">Maximum stack frames to include when stack traces are requested.</param>
-        /// <param name="maxStackChars">Maximum stack trace characters to include when stack traces are requested.</param>
         /// <returns>A success response with entries, or an error response.</returns>
         private static object GetConsoleEntries(
             List<string> types,
@@ -250,9 +234,7 @@ namespace MCPForUnity.Editor.Tools
             int? cursor,
             string filterText,
             string format,
-            bool includeStacktrace,
-            int maxStackFrames,
-            int maxStackChars
+            bool includeStacktrace
         )
         {
             List<object> formattedEntries = new List<object>();
@@ -303,10 +285,9 @@ namespace MCPForUnity.Editor.Tools
                     // (Calibration removed)
 
                     // --- Filtering ---
-                    // Explicit Debug.Log entries often contain app stack frames with "Exception" in type names.
-                    // Keep them as logs instead of promoting them to exceptions from stack-trace text.
+                    // Prefer classifying severity from message/stacktrace; fallback to mode bits if needed
+                    LogType unityType = InferTypeFromMessage(message);
                     bool isExplicitDebug = IsExplicitDebugLog(message);
-                    LogType unityType = isExplicitDebug ? LogType.Log : InferTypeFromMessage(message);
                     if (!isExplicitDebug && unityType == LogType.Log)
                     {
                         unityType = GetLogTypeFromMode(mode);
@@ -339,9 +320,7 @@ namespace MCPForUnity.Editor.Tools
                     }
 
                     // --- Formatting ---
-                    string stackTrace = includeStacktrace
-                        ? LimitStackTrace(ExtractStackTrace(message), maxStackFrames, maxStackChars)
-                        : null;
+                    string stackTrace = includeStacktrace ? ExtractStackTrace(message) : null;
                     // Always get first line for the message, use full message only if no stack trace exists
                     string[] messageLines = message.Split(
                         new[] { '\n', '\r' },
@@ -364,13 +343,14 @@ namespace MCPForUnity.Editor.Tools
                         case "json":
                         case "detailed": // Treat detailed as json for structured return
                         default:
-                            formattedEntry = BuildStructuredEntry(
-                                unityType,
-                                messageOnly,
-                                file,
-                                line,
-                                stackTrace
-                            );
+                            formattedEntry = new
+                            {
+                                type = unityType.ToString(),
+                                message = messageOnly,
+                                file = file,
+                                line = line,
+                                stackTrace = stackTrace, // Will be null if includeStacktrace is false or no stack found
+                            };
                             break;
                     }
 
@@ -517,30 +497,6 @@ namespace MCPForUnity.Editor.Tools
             return false;
         }
 
-        private static JObject BuildStructuredEntry(
-            LogType unityType,
-            string message,
-            string file,
-            int line,
-            string stackTrace
-        )
-        {
-            JObject entry = new JObject
-            {
-                ["type"] = unityType.ToString(),
-                ["message"] = message,
-                ["file"] = file ?? string.Empty,
-                ["line"] = line,
-            };
-
-            if (!string.IsNullOrEmpty(stackTrace))
-            {
-                entry["stackTrace"] = stackTrace;
-            }
-
-            return entry;
-        }
-
         /// <summary>
         /// Attempts to extract the stack trace part from a log message.
         /// Unity log messages often have the stack trace appended after the main message,
@@ -602,40 +558,6 @@ namespace MCPForUnity.Editor.Tools
 
             // No clear stack trace found based on the patterns.
             return null;
-        }
-
-        private static string LimitStackTrace(
-            string stackTrace,
-            int maxStackFrames,
-            int maxStackChars
-        )
-        {
-            if (string.IsNullOrEmpty(stackTrace))
-            {
-                return null;
-            }
-
-            string[] lines = stackTrace.Split(
-                new[] { '\r', '\n' },
-                StringSplitOptions.RemoveEmptyEntries
-            );
-            string limited = stackTrace;
-
-            if (lines.Length > maxStackFrames)
-            {
-                int omittedFrames = lines.Length - maxStackFrames;
-                limited = string.Join("\n", lines.Take(maxStackFrames))
-                    + $"\n... truncated {omittedFrames} stack frames";
-            }
-
-            if (limited.Length > maxStackChars)
-            {
-                int omittedChars = limited.Length - maxStackChars;
-                limited = limited.Substring(0, maxStackChars)
-                    + $"\n... truncated {omittedChars} stack trace characters";
-            }
-
-            return limited;
         }
 
         /* LogEntry.mode bits exploration (based on Unity decompilation/observation):

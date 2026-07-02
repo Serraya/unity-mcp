@@ -5,10 +5,6 @@
 .codeiumignore
 .kiro
 
-# Local private notes
-.private/
-docs/serraya-fork-backlog.md
-
 # Local worktrees for parallel feature work
 .worktrees/
 
@@ -73,3 +69,7 @@ tools/.unity-check-logs/
 # Ignore the .claude directory, since it might contain local/project-level setting such as deny and allowlist.
 /.claude
 .mcp.json
+
+# Superpowers skill working artifacts (specs, plans, SDD ledger)
+docs/superpowers/
+.superpowers/

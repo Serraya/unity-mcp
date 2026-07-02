@@ -1,10 +1,9 @@
 import asyncio
 import inspect
-import json
 import logging
 import time
 from hashlib import sha256
-from typing import Annotated, Any, Literal, Optional
+from typing import Optional
 
 from fastmcp import Context, FastMCP
 from pydantic import BaseModel, Field, ValidationError
@@ -200,7 +199,6 @@ class CustomToolService:
         timeout = max_poll_seconds if max_poll_seconds > 0 else _MAX_POLL_SECONDS
         deadline = time.time() + timeout
         response = initial_response
-        self._copy_poll_identifiers(poll_params, response)
 
         while True:
             status, poll_interval = self._interpret_status(response)
@@ -225,7 +223,6 @@ class CustomToolService:
                     poll_params,
                     user_id=user_id,
                 )
-                self._copy_poll_identifiers(poll_params, response)
             except Exception as exc:  # pragma: no cover - network/domain reload variability
                 logger.debug(f"Polling {tool_name} failed, will retry: {exc}")
                 # Back off modestly but stay responsive.
@@ -267,46 +264,39 @@ class CustomToolService:
 
         return "final", _DEFAULT_POLL_INTERVAL
 
-    def _copy_poll_identifiers(self, poll_params: dict[str, object], response) -> None:
-        if isinstance(response, MCPResponse):
-            response = response.data
-        if not isinstance(response, dict):
-            return
-
-        candidates = [response]
-        data = response.get("data")
-        if isinstance(data, dict):
-            candidates.append(data)
-
-        for payload in candidates:
-            for source_key in ("job_id", "jobId"):
-                value = payload.get(source_key)
-                if value is not None and "job_id" not in poll_params and "jobId" not in poll_params:
-                    poll_params["job_id"] = value
-                    return
-
     def _normalize_response(self, response) -> MCPResponse:
         if isinstance(response, MCPResponse):
             return response
         if isinstance(response, dict):
-            status = response.get("_mcp_status")
-            success = response.get("success", status != "error")
-            message = response.get("message")
-            error = response.get("error")
-            if status == "error":
-                success = False
-                if error is None and message is not None:
-                    error = message
-
             return MCPResponse(
-                success=success,
-                message=message,
-                error=error,
+                success=response.get("success", True),
+                message=response.get("message"),
+                error=response.get("error"),
                 data=response.get(
                     "data", response) if "data" not in response else response["data"],
             )
 
-        return MCPResponse(success=False, message=str(response))
+        success = True
+        message = None
+        error = None
+        data = None
+
+        if isinstance(response, dict):
+            success = response.get("success", True)
+            if "_mcp_status" in response and response["_mcp_status"] == "error":
+                success = False
+            message = str(response.get("message")) if response.get(
+                "message") else None
+            error = str(response.get("error")) if response.get(
+                "error") else None
+            data = response.get("data")
+            if "success" not in response and "_mcp_status" not in response:
+                data = response
+        else:
+            success = False
+            message = str(response)
+
+        return MCPResponse(success=success, message=message, error=error, data=data)
 
     def _safe_response(self, response):
         if isinstance(response, dict):
@@ -356,19 +346,12 @@ class CustomToolService:
     def _register_global_tool(self, definition: ToolDefinitionModel) -> None:
         existing = self._global_tools.get(definition.name)
         if existing:
-            if existing.model_dump() == definition.model_dump():
-                return
-
-            try:
-                self._mcp.remove_tool(definition.name)
-            except Exception as exc:  # pragma: no cover - FastMCP compatibility guard
+            if existing.model_dump() != definition.model_dump():
                 logger.warning(
-                    "Failed to replace custom tool '%s' with updated schema: %s",
+                    "Custom tool '%s' already registered with a different schema; keeping existing definition.",
                     definition.name,
-                    exc,
                 )
-                return
-            self._global_tools.pop(definition.name, None)
+            return
 
         handler = self._build_global_tool_handler(definition)
         wrapped = log_execution(definition.name, "Tool")(handler)
@@ -443,9 +426,9 @@ class CustomToolService:
             params.append(
                 inspect.Parameter(
                     param.name,
-                    inspect.Parameter.KEYWORD_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
                     default=default,
-                    annotation=self._build_param_annotation(param),
+                    annotation=self._map_param_type(param),
                 )
             )
         return inspect.Signature(parameters=params)
@@ -455,55 +438,21 @@ class CustomToolService:
         for param in definition.parameters:
             if not param.name.isidentifier():
                 continue
-            annotations[param.name] = self._build_param_annotation(param)
+            annotations[param.name] = self._map_param_type(param)
         return annotations
-
-    def _build_param_annotation(self, param: ToolParameterModel):
-        annotation = self._map_param_type(param)
-        if param.enum_values:
-            annotation = Literal.__getitem__(tuple(param.enum_values))
-
-        if param.nullable or not param.required:
-            if annotation is not Any:
-                annotation = Optional[annotation]
-
-        description = self._build_param_description(param)
-        if description:
-            annotation = Annotated[annotation, Field(description=description)]
-
-        return annotation
-
-    def _build_param_description(self, param: ToolParameterModel) -> str | None:
-        description = param.description or ""
-        aliases = [alias for alias in param.aliases if alias and alias != param.name]
-        if aliases:
-            alias_note = f"Aliases accepted by Unity handler: {', '.join(aliases)}."
-            description = f"{description} {alias_note}".strip()
-        return description or None
 
     def _map_param_type(self, param: ToolParameterModel):
         ptype = (param.type or "string").lower()
-        if ptype in ("array", "list"):
-            item_type = self._map_type_name(param.items_type)
-            return list[item_type]
-        if ptype in ("object", "dict"):
-            return dict[str, Any]
-        return self._map_type_name(ptype)
-
-    def _map_type_name(self, param_type: str | None):
-        ptype = (param_type or "string").lower()
         if ptype in ("integer", "int"):
             return int
         if ptype in ("number", "float", "double"):
             return float
         if ptype in ("bool", "boolean"):
             return bool
-        if ptype in ("object", "dict"):
-            return dict[str, Any]
         if ptype in ("array", "list"):
-            return list[Any]
-        if ptype in ("any", "*"):
-            return Any
+            return list
+        if ptype in ("object", "dict"):
+            return dict
         return str
 
     def _coerce_default(self, value: str | None, param_type: str | None):
@@ -517,8 +466,6 @@ class CustomToolService:
                 return float(value)
             if ptype in ("bool", "boolean"):
                 return str(value).lower() in ("1", "true", "yes", "on")
-            if ptype in ("array", "list", "object", "dict"):
-                return json.loads(value)
             return value
         except Exception:
             return value

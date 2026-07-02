@@ -3,9 +3,7 @@ using System;
 namespace MCPForUnity.Editor.Tools
 {
     /// <summary>
-    /// Marks a class as an MCP tool handler.
-    /// JObject-dispatch tools can expose direct-call schema by adding a public static
-    /// ParametersSchema property returning a JArray/JObject/JToken or JSON string.
+    /// Marks a class as an MCP tool handler
     /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
     public class McpForUnityToolAttribute : Attribute

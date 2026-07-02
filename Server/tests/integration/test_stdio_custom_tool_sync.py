@@ -58,16 +58,7 @@ CUSTOM_TOOL = {
     "is_built_in": False,
     "description": "Simple test tool that returns a pong.",
     "parameters": [
-        {
-            "name": "message",
-            "description": "Message to echo",
-            "type": "string",
-            "required": False,
-            "default_value": "pong",
-            "enum_values": ["ping", "pong"],
-            "aliases": ["text"],
-            "nullable": False,
-        },
+        {"name": "message", "description": "Message to echo", "type": "string", "required": False, "default_value": "pong"},
     ],
 }
 
@@ -111,8 +102,6 @@ async def test_sync_registers_custom_tools():
     assert registered[0].description == "Simple test tool that returns a pong."
     assert len(registered[0].parameters) == 1
     assert registered[0].parameters[0].name == "message"
-    assert registered[0].parameters[0].enum_values == ["ping", "pong"]
-    assert registered[0].parameters[0].aliases == ["text"]
 
 
 @pytest.mark.asyncio
