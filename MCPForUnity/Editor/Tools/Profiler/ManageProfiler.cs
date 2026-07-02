@@ -42,6 +42,14 @@ namespace MCPForUnity.Editor.Tools.Profiler
                         return ObjectMemoryOps.GetObjectMemory(@params);
                     case "get_marker_calltree":
                         return MarkerCalltreeOps.GetMarkerCalltree(@params);
+                    case "get_frame_summary":
+                        return RecordedFrameAnalysisOps.GetFrameSummary(@params);
+                    case "get_hot_markers":
+                        return RecordedFrameAnalysisOps.GetHotMarkers(@params);
+                    case "find_marker":
+                        return RecordedFrameAnalysisOps.FindMarker(@params);
+                    case "export_profile_tables":
+                        return RecordedFrameAnalysisOps.ExportProfileTables(@params);
 
                     // Memory Snapshot
                     case "memory_take_snapshot":
@@ -72,6 +80,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
                             $"Unknown action: '{action}'. Valid actions: "
                             + "profiler_start, profiler_stop, profiler_status, profiler_set_areas, "
                             + "get_frame_timing, get_counters, get_object_memory, get_marker_calltree, "
+                            + "get_frame_summary, get_hot_markers, find_marker, export_profile_tables, "
                             + "memory_take_snapshot, memory_list_snapshots, memory_compare_snapshots, "
                             + "frame_debugger_enable, frame_debugger_disable, frame_debugger_get_events, "
                             + "ping.");

@@ -48,7 +48,7 @@ def mock_unity(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_profiler_actions_count():
-    assert len(ALL_ACTIONS) == 15
+    assert len(ALL_ACTIONS) == 19
 
 
 def test_no_duplicate_actions():
@@ -61,7 +61,10 @@ def test_session_actions():
 
 
 def test_counter_actions():
-    expected = {"get_frame_timing", "get_counters", "get_object_memory", "get_marker_calltree"}
+    expected = {
+        "get_frame_timing", "get_counters", "get_object_memory", "get_marker_calltree",
+        "get_frame_summary", "get_hot_markers", "find_marker", "export_profile_tables",
+    }
     assert set(COUNTER_ACTIONS) == expected
 
 
@@ -114,6 +117,7 @@ def test_empty_action_returns_error(mock_unity):
     "ping",
     "profiler_start", "profiler_stop", "profiler_status", "profiler_set_areas",
     "get_frame_timing", "get_counters", "get_object_memory", "get_marker_calltree",
+    "get_frame_summary", "get_hot_markers", "find_marker", "export_profile_tables",
     "memory_take_snapshot", "memory_list_snapshots", "memory_compare_snapshots",
     "frame_debugger_enable", "frame_debugger_disable", "frame_debugger_get_events",
 ])
@@ -245,6 +249,163 @@ def test_get_marker_calltree_omits_none_params(mock_unity):
     }
 
 
+def test_get_frame_summary_forwards_recorded_frame_params(mock_unity):
+    result = asyncio.run(
+        manage_profiler(
+            SimpleNamespace(),
+            action="get_frame_summary",
+            start_frame=1000,
+            end_frame=1300,
+            thread_name="Main Thread",
+            thread_index=0,
+            top_n=20,
+            max_frames=500,
+        )
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {
+        "action": "get_frame_summary",
+        "start_frame": 1000,
+        "end_frame": 1300,
+        "thread_name": "Main Thread",
+        "thread_index": 0,
+        "top_n": 20,
+        "max_frames": 500,
+    }
+
+
+def test_get_hot_markers_forwards_recorded_marker_params(mock_unity):
+    result = asyncio.run(
+        manage_profiler(
+            SimpleNamespace(),
+            action="get_hot_markers",
+            start_frame=1000,
+            end_frame=1300,
+            thread_name="Main Thread",
+            thread_index=0,
+            marker_filter="Panel.",
+            match_mode="contains",
+            sort_by="max_self_time",
+            top_n=50,
+            max_frames=500,
+        )
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {
+        "action": "get_hot_markers",
+        "start_frame": 1000,
+        "end_frame": 1300,
+        "thread_name": "Main Thread",
+        "thread_index": 0,
+        "marker_filter": "Panel.",
+        "match_mode": "contains",
+        "sort_by": "max_self_time",
+        "top_n": 50,
+        "max_frames": 500,
+    }
+
+
+def test_find_marker_forwards_recorded_marker_params(mock_unity):
+    result = asyncio.run(
+        manage_profiler(
+            SimpleNamespace(),
+            action="find_marker",
+            start_frame=1000,
+            end_frame=1300,
+            thread_name="Main Thread",
+            thread_index=0,
+            marker_filter="Panel.PerformPick",
+            match_mode="exact",
+            top_n=25,
+            max_frames=250,
+        )
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {
+        "action": "find_marker",
+        "start_frame": 1000,
+        "end_frame": 1300,
+        "thread_name": "Main Thread",
+        "thread_index": 0,
+        "marker_filter": "Panel.PerformPick",
+        "match_mode": "exact",
+        "top_n": 25,
+        "max_frames": 250,
+    }
+
+
+def test_recorded_marker_queries_omit_none_params(mock_unity):
+    result = asyncio.run(
+        manage_profiler(
+            SimpleNamespace(),
+            action="get_hot_markers",
+            start_frame=None,
+            end_frame=None,
+            marker_filter=None,
+            match_mode=None,
+            sort_by=None,
+            top_n=None,
+            max_frames=None,
+        )
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {"action": "get_hot_markers"}
+
+
+def test_export_profile_tables_forwards_all_params(mock_unity):
+    result = asyncio.run(
+        manage_profiler(
+            SimpleNamespace(),
+            action="export_profile_tables",
+            output_dir="/tmp/unity-profiler-export",
+            start_frame=1000,
+            end_frame=1300,
+            thread_name="Main Thread",
+            thread_index=0,
+            include_frame_table=True,
+            include_marker_table=False,
+            max_frames=2000,
+            max_marker_rows=20000,
+            overwrite=True,
+        )
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {
+        "action": "export_profile_tables",
+        "output_dir": "/tmp/unity-profiler-export",
+        "start_frame": 1000,
+        "end_frame": 1300,
+        "thread_name": "Main Thread",
+        "thread_index": 0,
+        "include_frame_table": True,
+        "include_marker_table": False,
+        "max_frames": 2000,
+        "max_marker_rows": 20000,
+        "overwrite": True,
+    }
+
+
+def test_export_profile_tables_omits_none_params(mock_unity):
+    result = asyncio.run(
+        manage_profiler(
+            SimpleNamespace(),
+            action="export_profile_tables",
+            output_dir=None,
+            start_frame=None,
+            end_frame=None,
+            thread_name=None,
+            thread_index=None,
+            include_frame_table=None,
+            include_marker_table=None,
+            max_frames=None,
+            max_marker_rows=None,
+            overwrite=None,
+        )
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {"action": "export_profile_tables"}
+
+
 def test_memory_take_snapshot_forwards_path(mock_unity):
     result = asyncio.run(
         manage_profiler(SimpleNamespace(), action="memory_take_snapshot", snapshot_path="/tmp/snap.snap")
@@ -342,3 +503,17 @@ def test_tool_registered_with_profiling_group():
     ]
     assert len(profiler_tools) == 1
     assert profiler_tools[0]["group"] == "profiling"
+
+
+def test_tool_description_mentions_recorded_frame_actions():
+    from services.registry.tool_registry import _tool_registry
+
+    profiler_tool = next(t for t in _tool_registry if t.get("name") == "manage_profiler")
+    description = profiler_tool["description"]
+    assert "get_frame_summary" in description
+    assert "get_hot_markers" in description
+    assert "find_marker" in description
+    assert "export_profile_tables" in description
+    assert "frameTime.csv" in description
+    assert "markerTable.csv" in description
+    assert "not CSV contents" in description

@@ -14,6 +14,7 @@ SESSION_ACTIONS = [
 
 COUNTER_ACTIONS = [
     "get_frame_timing", "get_counters", "get_object_memory", "get_marker_calltree",
+    "get_frame_summary", "get_hot_markers", "find_marker", "export_profile_tables",
 ]
 
 MEMORY_SNAPSHOT_ACTIONS = [
@@ -41,6 +42,10 @@ ProfilerAction = Literal[
     "get_counters",
     "get_object_memory",
     "get_marker_calltree",
+    "get_frame_summary",
+    "get_hot_markers",
+    "find_marker",
+    "export_profile_tables",
     "memory_take_snapshot",
     "memory_list_snapshots",
     "memory_compare_snapshots",
@@ -50,12 +55,16 @@ ProfilerAction = Literal[
 ]
 
 MarkerMatchMode = Literal["contains", "exact", "regex"]
+ProfilerMarkerSortBy = Literal[
+    "total_time", "self_time", "max_total_time", "max_self_time", "call_count", "frame_count",
+]
 
 
 @mcp_for_unity_tool(
     group="profiling",
     description=(
-        "Unity Profiler session control, counter reads, CPU marker call trees, memory snapshots, and Frame Debugger.\n\n"
+        "Unity Profiler session control, counter reads, recorded CPU frame/marker analysis, "
+        "memory snapshots, and Frame Debugger.\n\n"
         "SESSION:\n"
         "- profiler_start: Enable profiler, optionally record to .raw file (log_file, enable_callstacks)\n"
         "- profiler_stop: Disable profiler, stop recording\n"
@@ -67,6 +76,17 @@ MarkerMatchMode = Literal["contains", "exact", "regex"]
         "- get_object_memory: Memory size of a specific object by path\n"
         "- get_marker_calltree: Recorded CPU hierarchy for a marker in an existing profiler frame "
         "(frame_index, marker_filter; optional thread_name/thread_index, match_mode, max_depth, max_rows)\n\n"
+        "RECORDED CPU ANALYSIS:\n"
+        "- get_frame_summary: Recorded-frame timing statistics and worst frames "
+        "(optional start_frame/end_frame, thread_name/thread_index, top_n, max_frames)\n"
+        "- get_hot_markers: Ranked marker statistics across recorded frames "
+        "(optional start_frame/end_frame, thread_name/thread_index, marker_filter, match_mode, sort_by, top_n, max_frames)\n"
+        "- find_marker: Recorded frames/threads where a marker appears "
+        "(marker_filter; optional start_frame/end_frame, thread_name/thread_index, match_mode, top_n, max_frames)\n"
+        "- export_profile_tables: Export Profile Analyzer-style CSV files from the recorded Profiler buffer "
+        "(frameTime.csv and markerTable.csv; optional output_dir, start_frame/end_frame, thread_name/thread_index, "
+        "include_frame_table/include_marker_table, max_frames, max_marker_rows, overwrite). "
+        "Returns paths, columns, row counts, ranges, thread filters, and truncation flags, not CSV contents.\n\n"
         "MEMORY SNAPSHOT (requires com.unity.memoryprofiler):\n"
         "- memory_take_snapshot: Capture memory snapshot to file\n"
         "- memory_list_snapshots: List available .snap files\n"
@@ -89,10 +109,20 @@ async def manage_profiler(
     counters: Annotated[Optional[list[str]], "Specific counter names for get_counters. Omit to read all in category."] = None,
     object_path: Annotated[Optional[str], "Scene hierarchy or asset path for get_object_memory."] = None,
     frame_index: Annotated[Optional[int], "Required for get_marker_calltree. Existing Unity Profiler frame index to inspect."] = None,
-    marker_filter: Annotated[Optional[str], "Required for get_marker_calltree. Marker name or pattern to find in the recorded CPU hierarchy."] = None,
-    thread_name: Annotated[Optional[str], "Optional thread name for get_marker_calltree, e.g. Main Thread. If omitted with thread_index, all available threads are searched."] = None,
-    thread_index: Annotated[Optional[int], "Optional profiler thread index for get_marker_calltree. If omitted with thread_name, all available threads are searched."] = None,
-    match_mode: Annotated[Optional[MarkerMatchMode], "Marker matching mode for get_marker_calltree: contains, exact, or regex. Default: contains."] = None,
+    start_frame: Annotated[Optional[int], "Optional first recorded Profiler frame for get_frame_summary, get_hot_markers, find_marker, or export_profile_tables. Defaults to the first available recorded frame."] = None,
+    end_frame: Annotated[Optional[int], "Optional last recorded Profiler frame for get_frame_summary, get_hot_markers, find_marker, or export_profile_tables. Defaults to the last available recorded frame."] = None,
+    marker_filter: Annotated[Optional[str], "Marker name or pattern. Required for get_marker_calltree and find_marker; optional for get_hot_markers."] = None,
+    thread_name: Annotated[Optional[str], "Optional thread name for recorded CPU hierarchy analysis and marker-table export, e.g. Main Thread. If omitted with thread_index, all available threads are searched."] = None,
+    thread_index: Annotated[Optional[int], "Optional profiler thread index for recorded CPU hierarchy analysis and marker-table export. If omitted with thread_name, all available threads are searched."] = None,
+    output_dir: Annotated[Optional[str], "Optional directory for export_profile_tables CSV output. Defaults to a unique OS temp directory outside the Unity project and Assets. Directories inside Assets are rejected."] = None,
+    include_frame_table: Annotated[Optional[bool], "Whether export_profile_tables writes frameTime.csv. Default: true."] = None,
+    include_marker_table: Annotated[Optional[bool], "Whether export_profile_tables writes markerTable.csv. Default: true."] = None,
+    max_marker_rows: Annotated[Optional[int], "Maximum marker rows to write for export_profile_tables. Unity truncates and reports truncation when exceeded. Default: 20000."] = None,
+    overwrite: Annotated[Optional[bool], "Whether export_profile_tables overwrites existing frameTime.csv/markerTable.csv in output_dir. Default: false; existing files cause a suffixed output directory."] = None,
+    match_mode: Annotated[Optional[MarkerMatchMode], "Marker matching mode for recorded CPU marker queries: contains, exact, or regex. Default: contains."] = None,
+    sort_by: Annotated[Optional[ProfilerMarkerSortBy], "Sort for get_hot_markers: total_time, self_time, max_total_time, max_self_time, call_count, or frame_count. Default: total_time."] = None,
+    top_n: Annotated[Optional[int], "Maximum rows to return for get_frame_summary worst frames, get_hot_markers, or find_marker. Unity clamps to a sane upper bound."] = None,
+    max_frames: Annotated[Optional[int], "Maximum recorded frames to scan for broad profiler queries and export_profile_tables. Unity clamps to a sane upper bound and reports truncated=true when reached."] = None,
     max_depth: Annotated[Optional[int], "Maximum child subtree depth for get_marker_calltree. Default: 8; Unity clamps to a sane upper bound."] = None,
     max_rows: Annotated[Optional[int], "Maximum returned marker rows for get_marker_calltree. Default: 200; Unity clamps to a sane upper bound."] = None,
     include_parents: Annotated[Optional[bool], "Whether get_marker_calltree includes the marker parent chain. Default: true."] = None,
@@ -121,9 +151,15 @@ async def manage_profiler(
     param_map = {
         "category": category, "counters": counters,
         "object_path": object_path,
-        "frame_index": frame_index, "marker_filter": marker_filter,
+        "frame_index": frame_index,
+        "start_frame": start_frame, "end_frame": end_frame,
+        "marker_filter": marker_filter,
         "thread_name": thread_name, "thread_index": thread_index,
-        "match_mode": match_mode, "max_depth": max_depth, "max_rows": max_rows,
+        "output_dir": output_dir,
+        "include_frame_table": include_frame_table, "include_marker_table": include_marker_table,
+        "max_marker_rows": max_marker_rows, "overwrite": overwrite,
+        "match_mode": match_mode, "sort_by": sort_by, "top_n": top_n, "max_frames": max_frames,
+        "max_depth": max_depth, "max_rows": max_rows,
         "include_parents": include_parents, "include_children": include_children,
         "log_file": log_file, "enable_callstacks": enable_callstacks,
         "areas": areas,

@@ -67,7 +67,7 @@ ProBuilder 3D modeling – requires com.unity.probuilder package
 
 ## `profiling` &nbsp; (1 tool)
 Unity Profiler session control, counters, memory snapshots & Frame Debugger
-- **[`manage_profiler`](./profiling/manage_profiler.md)** — Unity Profiler session control, counter reads, CPU marker call trees, memory snapshots, and Frame Debugger.
+- **[`manage_profiler`](./profiling/manage_profiler.md)** — Unity Profiler session control, counter reads, recorded CPU frame/marker analysis, memory snapshots, and Frame Debugger.
 
 ## `scripting_ext` &nbsp; (2 tools)
 ScriptableObject management
