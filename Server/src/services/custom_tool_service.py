@@ -1,9 +1,10 @@
 import asyncio
 import inspect
+import json
 import logging
 import time
 from hashlib import sha256
-from typing import Optional
+from typing import Annotated, Any, Literal, Optional
 
 from fastmcp import Context, FastMCP
 from pydantic import BaseModel, Field, ValidationError
@@ -346,12 +347,19 @@ class CustomToolService:
     def _register_global_tool(self, definition: ToolDefinitionModel) -> None:
         existing = self._global_tools.get(definition.name)
         if existing:
-            if existing.model_dump() != definition.model_dump():
+            if existing.model_dump() == definition.model_dump():
+                return
+
+            try:
+                self._mcp.remove_tool(definition.name)
+            except Exception as exc:  # pragma: no cover - FastMCP compatibility guard
                 logger.warning(
-                    "Custom tool '%s' already registered with a different schema; keeping existing definition.",
+                    "Failed to replace custom tool '%s' with updated schema: %s",
                     definition.name,
+                    exc,
                 )
-            return
+                return
+            self._global_tools.pop(definition.name, None)
 
         handler = self._build_global_tool_handler(definition)
         wrapped = log_execution(definition.name, "Tool")(handler)
@@ -426,9 +434,9 @@ class CustomToolService:
             params.append(
                 inspect.Parameter(
                     param.name,
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    inspect.Parameter.KEYWORD_ONLY,
                     default=default,
-                    annotation=self._map_param_type(param),
+                    annotation=self._build_param_annotation(param),
                 )
             )
         return inspect.Signature(parameters=params)
@@ -438,21 +446,55 @@ class CustomToolService:
         for param in definition.parameters:
             if not param.name.isidentifier():
                 continue
-            annotations[param.name] = self._map_param_type(param)
+            annotations[param.name] = self._build_param_annotation(param)
         return annotations
+
+    def _build_param_annotation(self, param: ToolParameterModel):
+        annotation = self._map_param_type(param)
+        if param.enum_values:
+            annotation = Literal.__getitem__(tuple(param.enum_values))
+
+        if param.nullable or not param.required:
+            if annotation is not Any:
+                annotation = Optional[annotation]
+
+        description = self._build_param_description(param)
+        if description:
+            annotation = Annotated[annotation, Field(description=description)]
+
+        return annotation
+
+    def _build_param_description(self, param: ToolParameterModel) -> str | None:
+        description = param.description or ""
+        aliases = [alias for alias in param.aliases if alias and alias != param.name]
+        if aliases:
+            alias_note = f"Aliases accepted by Unity handler: {', '.join(aliases)}."
+            description = f"{description} {alias_note}".strip()
+        return description or None
 
     def _map_param_type(self, param: ToolParameterModel):
         ptype = (param.type or "string").lower()
+        if ptype in ("array", "list"):
+            item_type = self._map_type_name(param.items_type)
+            return list[item_type]
+        if ptype in ("object", "dict"):
+            return dict[str, Any]
+        return self._map_type_name(ptype)
+
+    def _map_type_name(self, param_type: str | None):
+        ptype = (param_type or "string").lower()
         if ptype in ("integer", "int"):
             return int
         if ptype in ("number", "float", "double"):
             return float
         if ptype in ("bool", "boolean"):
             return bool
-        if ptype in ("array", "list"):
-            return list
         if ptype in ("object", "dict"):
-            return dict
+            return dict[str, Any]
+        if ptype in ("array", "list"):
+            return list[Any]
+        if ptype in ("any", "*"):
+            return Any
         return str
 
     def _coerce_default(self, value: str | None, param_type: str | None):
@@ -466,6 +508,8 @@ class CustomToolService:
                 return float(value)
             if ptype in ("bool", "boolean"):
                 return str(value).lower() in ("1", "true", "yes", "on")
+            if ptype in ("array", "list", "object", "dict"):
+                return json.loads(value)
             return value
         except Exception:
             return value
