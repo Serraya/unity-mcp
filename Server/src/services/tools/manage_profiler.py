@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from fastmcp import Context
 from mcp.types import ToolAnnotations
@@ -13,7 +13,7 @@ SESSION_ACTIONS = [
 ]
 
 COUNTER_ACTIONS = [
-    "get_frame_timing", "get_counters", "get_object_memory",
+    "get_frame_timing", "get_counters", "get_object_memory", "get_marker_calltree",
 ]
 
 MEMORY_SNAPSHOT_ACTIONS = [
@@ -31,11 +31,31 @@ ALL_ACTIONS = (
     + MEMORY_SNAPSHOT_ACTIONS + FRAME_DEBUGGER_ACTIONS
 )
 
+ProfilerAction = Literal[
+    "ping",
+    "profiler_start",
+    "profiler_stop",
+    "profiler_status",
+    "profiler_set_areas",
+    "get_frame_timing",
+    "get_counters",
+    "get_object_memory",
+    "get_marker_calltree",
+    "memory_take_snapshot",
+    "memory_list_snapshots",
+    "memory_compare_snapshots",
+    "frame_debugger_enable",
+    "frame_debugger_disable",
+    "frame_debugger_get_events",
+]
+
+MarkerMatchMode = Literal["contains", "exact", "regex"]
+
 
 @mcp_for_unity_tool(
     group="profiling",
     description=(
-        "Unity Profiler session control, counter reads, memory snapshots, and Frame Debugger.\n\n"
+        "Unity Profiler session control, counter reads, CPU marker call trees, memory snapshots, and Frame Debugger.\n\n"
         "SESSION:\n"
         "- profiler_start: Enable profiler, optionally record to .raw file (log_file, enable_callstacks)\n"
         "- profiler_stop: Disable profiler, stop recording\n"
@@ -44,7 +64,9 @@ ALL_ACTIONS = (
         "COUNTERS:\n"
         "- get_frame_timing: FrameTimingManager data (12 fields, synchronous)\n"
         "- get_counters: Generic counter read by category + optional counter names (async, 1-frame wait)\n"
-        "- get_object_memory: Memory size of a specific object by path\n\n"
+        "- get_object_memory: Memory size of a specific object by path\n"
+        "- get_marker_calltree: Recorded CPU hierarchy for a marker in an existing profiler frame "
+        "(frame_index, marker_filter; optional thread_name/thread_index, match_mode, max_depth, max_rows)\n\n"
         "MEMORY SNAPSHOT (requires com.unity.memoryprofiler):\n"
         "- memory_take_snapshot: Capture memory snapshot to file\n"
         "- memory_list_snapshots: List available .snap files\n"
@@ -62,10 +84,19 @@ ALL_ACTIONS = (
 )
 async def manage_profiler(
     ctx: Context,
-    action: Annotated[str, "The profiler action to perform."],
+    action: Annotated[ProfilerAction, "The profiler action to perform."],
     category: Annotated[Optional[str], "Profiler category name for get_counters (e.g. Render, Scripts, Memory, Physics)."] = None,
     counters: Annotated[Optional[list[str]], "Specific counter names for get_counters. Omit to read all in category."] = None,
     object_path: Annotated[Optional[str], "Scene hierarchy or asset path for get_object_memory."] = None,
+    frame_index: Annotated[Optional[int], "Required for get_marker_calltree. Existing Unity Profiler frame index to inspect."] = None,
+    marker_filter: Annotated[Optional[str], "Required for get_marker_calltree. Marker name or pattern to find in the recorded CPU hierarchy."] = None,
+    thread_name: Annotated[Optional[str], "Optional thread name for get_marker_calltree, e.g. Main Thread. If omitted with thread_index, all available threads are searched."] = None,
+    thread_index: Annotated[Optional[int], "Optional profiler thread index for get_marker_calltree. If omitted with thread_name, all available threads are searched."] = None,
+    match_mode: Annotated[Optional[MarkerMatchMode], "Marker matching mode for get_marker_calltree: contains, exact, or regex. Default: contains."] = None,
+    max_depth: Annotated[Optional[int], "Maximum child subtree depth for get_marker_calltree. Default: 8; Unity clamps to a sane upper bound."] = None,
+    max_rows: Annotated[Optional[int], "Maximum returned marker rows for get_marker_calltree. Default: 200; Unity clamps to a sane upper bound."] = None,
+    include_parents: Annotated[Optional[bool], "Whether get_marker_calltree includes the marker parent chain. Default: true."] = None,
+    include_children: Annotated[Optional[bool], "Whether get_marker_calltree includes the child subtree. Default: true."] = None,
     log_file: Annotated[Optional[str], "Path to .raw file for profiler_start recording."] = None,
     enable_callstacks: Annotated[Optional[bool], "Enable allocation callstacks for profiler_start."] = None,
     areas: Annotated[Optional[dict[str, bool]], "Dict of area name to bool for profiler_set_areas."] = None,
@@ -90,6 +121,10 @@ async def manage_profiler(
     param_map = {
         "category": category, "counters": counters,
         "object_path": object_path,
+        "frame_index": frame_index, "marker_filter": marker_filter,
+        "thread_name": thread_name, "thread_index": thread_index,
+        "match_mode": match_mode, "max_depth": max_depth, "max_rows": max_rows,
+        "include_parents": include_parents, "include_children": include_children,
         "log_file": log_file, "enable_callstacks": enable_callstacks,
         "areas": areas,
         "snapshot_path": snapshot_path, "search_path": search_path,
