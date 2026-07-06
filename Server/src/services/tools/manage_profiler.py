@@ -15,6 +15,7 @@ SESSION_ACTIONS = [
 COUNTER_ACTIONS = [
     "get_frame_timing", "get_counters", "get_object_memory", "get_marker_calltree",
     "get_frame_summary", "get_hot_markers", "find_marker", "export_profile_tables",
+    "profiler_job_status", "profiler_job_cancel",
 ]
 
 MEMORY_SNAPSHOT_ACTIONS = [
@@ -46,6 +47,8 @@ ProfilerAction = Literal[
     "get_hot_markers",
     "find_marker",
     "export_profile_tables",
+    "profiler_job_status",
+    "profiler_job_cancel",
     "memory_take_snapshot",
     "memory_list_snapshots",
     "memory_compare_snapshots",
@@ -80,13 +83,18 @@ ProfilerMarkerSortBy = Literal[
         "- get_frame_summary: Recorded-frame timing statistics and worst frames "
         "(optional start_frame/end_frame, thread_name/thread_index, top_n, max_frames)\n"
         "- get_hot_markers: Ranked marker statistics across recorded frames "
-        "(optional start_frame/end_frame, thread_name/thread_index, marker_filter, match_mode, sort_by, top_n, max_frames)\n"
+        "(optional start_frame/end_frame, thread_name/thread_index, marker_filter, match_mode, sort_by, top_n, max_frames, execution_mode)\n"
         "- find_marker: Recorded frames/threads where a marker appears "
-        "(marker_filter; optional start_frame/end_frame, thread_name/thread_index, match_mode, top_n, max_frames)\n"
+        "(marker_filter; optional start_frame/end_frame, thread_name/thread_index, match_mode, top_n, max_frames, execution_mode)\n"
         "- export_profile_tables: Export Profile Analyzer-style CSV files from the recorded Profiler buffer "
         "(frameTime.csv and markerTable.csv; optional output_dir, start_frame/end_frame, thread_name/thread_index, "
-        "include_frame_table/include_marker_table, max_frames, max_marker_rows, overwrite). "
-        "Returns paths, columns, row counts, ranges, thread filters, and truncation flags, not CSV contents.\n\n"
+        "include_frame_table/include_marker_table, max_frames, max_marker_rows, overwrite, execution_mode). "
+        "Returns paths, columns, row counts, ranges, thread filters, and truncation flags, not CSV contents.\n"
+        "- profiler_job_status: Poll a pending broad profiler analysis/export job by job_id.\n"
+        "- profiler_job_cancel: Cancel a queued/running profiler analysis/export job by job_id.\n"
+        "For get_hot_markers, find_marker, and export_profile_tables, execution_mode='auto' starts a Unity-side "
+        "profiler job for broad scans. If a response has _mcp_status='pending', poll with action='profiler_job_status' "
+        "and the returned job_id.\n\n"
         "MEMORY SNAPSHOT (requires com.unity.memoryprofiler):\n"
         "- memory_take_snapshot: Capture memory snapshot to file\n"
         "- memory_list_snapshots: List available .snap files\n"
@@ -123,6 +131,8 @@ async def manage_profiler(
     sort_by: Annotated[Optional[ProfilerMarkerSortBy], "Sort for get_hot_markers: total_time, self_time, max_total_time, max_self_time, call_count, or frame_count. Default: total_time."] = None,
     top_n: Annotated[Optional[int], "Maximum rows to return for get_frame_summary worst frames, get_hot_markers, or find_marker. Unity clamps to a sane upper bound."] = None,
     max_frames: Annotated[Optional[int], "Maximum recorded frames to scan for broad profiler queries and export_profile_tables. Unity clamps to a sane upper bound and reports truncated=true when reached."] = None,
+    execution_mode: Annotated[Optional[Literal["auto", "sync", "async"]], "Execution mode for broad recorded-frame scans. auto queues a Unity-side job when the scan is broad; sync forces a single response; async always returns a job_id to poll with profiler_job_status."] = None,
+    job_id: Annotated[Optional[str], "Profiler analysis job id returned by a pending get_hot_markers, find_marker, or export_profile_tables call. Required for profiler_job_status and profiler_job_cancel."] = None,
     max_depth: Annotated[Optional[int], "Maximum child subtree depth for get_marker_calltree. Default: 8; Unity clamps to a sane upper bound."] = None,
     max_rows: Annotated[Optional[int], "Maximum returned marker rows for get_marker_calltree. Default: 200; Unity clamps to a sane upper bound."] = None,
     include_parents: Annotated[Optional[bool], "Whether get_marker_calltree includes the marker parent chain. Default: true."] = None,
@@ -159,6 +169,7 @@ async def manage_profiler(
         "include_frame_table": include_frame_table, "include_marker_table": include_marker_table,
         "max_marker_rows": max_marker_rows, "overwrite": overwrite,
         "match_mode": match_mode, "sort_by": sort_by, "top_n": top_n, "max_frames": max_frames,
+        "execution_mode": execution_mode, "job_id": job_id,
         "max_depth": max_depth, "max_rows": max_rows,
         "include_parents": include_parents, "include_children": include_children,
         "log_file": log_file, "enable_callstacks": enable_callstacks,

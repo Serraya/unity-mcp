@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using MCPForUnity.Editor.Helpers;
+using UnityEditor;
 using Newtonsoft.Json.Linq;
 using UnityEditor.Profiling;
 using UnityEditorInternal;
@@ -19,11 +20,20 @@ namespace MCPForUnity.Editor.Tools.Profiler
         private const int DefaultFrameSummaryMaxFrames = 1000;
         private const int DefaultExportMaxFrames = 2000;
         private const int MaximumMaxFrames = 5000;
+        private const int AutoAsyncFrameThreshold = 50;
+        private const double JobPollIntervalSeconds = 1.0;
+        private const double JobUpdateBudgetSeconds = 0.008;
+        private const double TerminalJobTtlSeconds = 600.0;
+        private const double RunningJobTtlSeconds = 3600.0;
         private const int DefaultMaxMarkerRows = 20000;
         private const int MaximumMaxMarkerRows = 100000;
         private const int MaximumThreadScan = 128;
         private const int MaximumTrailingInvalidThreads = 8;
         private const int MaximumOutputDirectoryAttempts = 1000;
+
+        private static readonly Dictionary<string, ProfilerAnalysisJob> Jobs =
+            new Dictionary<string, ProfilerAnalysisJob>(StringComparer.Ordinal);
+        private static bool s_jobPumpRegistered;
 
         private static readonly string[] FrameTimeColumns =
         {
@@ -141,6 +151,46 @@ namespace MCPForUnity.Editor.Tools.Profiler
             }
         }
 
+        internal static object GetProfilerJobStatus(JObject @params)
+        {
+            try
+            {
+                return GetProfilerJobStatusImpl(@params);
+            }
+            catch (EntryPointNotFoundException ex)
+            {
+                return ProfilerApiUnavailable(ex);
+            }
+            catch (TypeLoadException ex)
+            {
+                return ProfilerApiUnavailable(ex);
+            }
+            catch (MissingMemberException ex)
+            {
+                return ProfilerApiUnavailable(ex);
+            }
+        }
+
+        internal static object CancelProfilerJob(JObject @params)
+        {
+            try
+            {
+                return CancelProfilerJobImpl(@params);
+            }
+            catch (EntryPointNotFoundException ex)
+            {
+                return ProfilerApiUnavailable(ex);
+            }
+            catch (TypeLoadException ex)
+            {
+                return ProfilerApiUnavailable(ex);
+            }
+            catch (MissingMemberException ex)
+            {
+                return ProfilerApiUnavailable(ex);
+            }
+        }
+
         private static object GetFrameSummaryImpl(JObject @params)
         {
             var p = new ToolParams(@params);
@@ -231,72 +281,10 @@ namespace MCPForUnity.Editor.Tools.Profiler
             if (rangeError != null)
                 return rangeError;
 
-            var searchedThreads = new ThreadCatalog();
-            var markersByName = new Dictionary<string, MarkerAggregate>(StringComparer.Ordinal);
-            bool validThreadFound = false;
-            bool matchedRequestedThread = false;
-            bool truncated = false;
-            int scannedFrameCount = 0;
-            int scannedThreadCount = 0;
-            int scannedItemCount = 0;
+            if (ShouldUseProfilerJob(options.ExecutionMode, GetFrameScanCount(range, options.MaxFrames)))
+                return StartProfilerJob(new HotMarkersJob(options, range));
 
-            for (int frameIndex = range.StartFrame; frameIndex <= range.EndFrame; frameIndex++)
-            {
-                if (scannedFrameCount >= options.MaxFrames)
-                {
-                    truncated = true;
-                    break;
-                }
-
-                var frameResult = ScanFrameForMarkers(frameIndex, options, searchedThreads, markersByName, null);
-                scannedFrameCount++;
-                scannedThreadCount += frameResult.ScannedThreadCount;
-                scannedItemCount += frameResult.ScannedItemCount;
-                validThreadFound |= frameResult.ValidThreadFound;
-                matchedRequestedThread |= frameResult.MatchedRequestedThread;
-            }
-
-            var threadError = ValidateThreadSearch(
-                validThreadFound,
-                matchedRequestedThread,
-                options,
-                range,
-                searchedThreads,
-                scannedFrameCount,
-                scannedThreadCount);
-            if (threadError != null)
-                return threadError;
-
-            if (markersByName.Count == 0)
-                return NoMarkerError(range, options, searchedThreads, scannedFrameCount, scannedThreadCount, scannedItemCount, truncated);
-
-            var rows = BuildMarkerRows(markersByName);
-            SortMarkerRows(rows, options.SortBy);
-            if (rows.Count > options.TopN)
-                truncated = true;
-
-            var markerRows = new List<object>();
-            int rowsToReturn = Math.Min(options.TopN, rows.Count);
-            for (int i = 0; i < rowsToReturn; i++)
-                markerRows.Add(rows[i].ToResponse());
-
-            return new SuccessResponse($"Found {rows.Count} recorded profiler marker(s).", new
-            {
-                available_range = range.AvailableRange,
-                requested_range = range.RequestedRange,
-                searched_threads = searchedThreads.ToResponse(),
-                markers = markerRows,
-                marker_count = rows.Count,
-                rows_returned = markerRows.Count,
-                scanned_frame_count = scannedFrameCount,
-                scanned_thread_count = scannedThreadCount,
-                scanned_item_count = scannedItemCount,
-                max_frames = options.MaxFrames,
-                sort_by = options.SortBy,
-                marker_filter = options.MarkerFilter,
-                match_mode = options.MatchMode,
-                truncated = truncated,
-            });
+            return BuildHotMarkersResponse(range, options, ScanHotMarkers(range, options));
         }
 
         private static object FindMarkerImpl(JObject @params)
@@ -316,70 +304,10 @@ namespace MCPForUnity.Editor.Tools.Profiler
             if (rangeError != null)
                 return rangeError;
 
-            var searchedThreads = new ThreadCatalog();
-            var matches = new List<MarkerFrameThreadMatch>();
-            bool validThreadFound = false;
-            bool matchedRequestedThread = false;
-            bool truncated = false;
-            int scannedFrameCount = 0;
-            int scannedThreadCount = 0;
-            int scannedItemCount = 0;
+            if (ShouldUseProfilerJob(options.ExecutionMode, GetFrameScanCount(range, options.MaxFrames)))
+                return StartProfilerJob(new FindMarkerJob(options, range));
 
-            for (int frameIndex = range.StartFrame; frameIndex <= range.EndFrame; frameIndex++)
-            {
-                if (scannedFrameCount >= options.MaxFrames)
-                {
-                    truncated = true;
-                    break;
-                }
-
-                var frameResult = ScanFrameForMarkers(frameIndex, options, searchedThreads, null, matches);
-                scannedFrameCount++;
-                scannedThreadCount += frameResult.ScannedThreadCount;
-                scannedItemCount += frameResult.ScannedItemCount;
-                validThreadFound |= frameResult.ValidThreadFound;
-                matchedRequestedThread |= frameResult.MatchedRequestedThread;
-            }
-
-            var threadError = ValidateThreadSearch(
-                validThreadFound,
-                matchedRequestedThread,
-                options,
-                range,
-                searchedThreads,
-                scannedFrameCount,
-                scannedThreadCount);
-            if (threadError != null)
-                return threadError;
-
-            if (matches.Count == 0)
-                return NoMarkerError(range, options, searchedThreads, scannedFrameCount, scannedThreadCount, scannedItemCount, truncated);
-
-            matches.Sort(CompareFindMarkerMatches);
-            if (matches.Count > options.TopN)
-                truncated = true;
-
-            var rows = new List<object>();
-            int rowsToReturn = Math.Min(options.TopN, matches.Count);
-            for (int i = 0; i < rowsToReturn; i++)
-                rows.Add(matches[i].ToResponse());
-
-            return new SuccessResponse($"Found marker on {matches.Count} frame/thread row(s).", new
-            {
-                available_range = range.AvailableRange,
-                requested_range = range.RequestedRange,
-                searched_threads = searchedThreads.ToResponse(),
-                matches = rows,
-                match_count = matches.Count,
-                rows_returned = rows.Count,
-                scanned_frame_count = scannedFrameCount,
-                scanned_thread_count = scannedThreadCount,
-                scanned_item_count = scannedItemCount,
-                max_frames = options.MaxFrames,
-                marker_filter = options.MarkerFilter,
-                match_mode = options.MatchMode,
-                truncated = truncated,
-            });
+            return BuildFindMarkerResponse(range, options, ScanFindMarker(range, options));
         }
 
         private static object ExportProfileTablesImpl(JObject @params)
@@ -390,27 +318,129 @@ namespace MCPForUnity.Editor.Tools.Profiler
                 return new ErrorResponse(optionsResult.ErrorMessage);
 
             var options = optionsResult.Value;
-            var rangeOptions = new RecordedOptions
-            {
-                StartFrame = options.StartFrame,
-                EndFrame = options.EndFrame,
-                ThreadName = options.ThreadName,
-                ThreadIndex = options.ThreadIndex,
-            };
-
             object rangeError;
-            var range = ResolveFrameRange(rangeOptions, out rangeError);
+            var range = ResolveFrameRange(ToRecordedOptions(options), out rangeError);
             if (rangeError != null)
                 return rangeError;
 
-            var exportData = ScanExportData(range, options);
+            if (ShouldUseProfilerJob(options.ExecutionMode, GetFrameScanCount(range, options.MaxFrames)))
+                return StartProfilerJob(new ExportProfileTablesJob(options, range));
 
+            return BuildExportProfileTablesResponse(range, options, ScanExportData(range, options));
+        }
+
+        private static object BuildHotMarkersResponse(ResolvedFrameRange range, RecordedOptions options, HotMarkerScanData data)
+        {
+            var threadError = ValidateThreadSearch(
+                data.ValidThreadFound,
+                data.MatchedRequestedThread,
+                options,
+                range,
+                data.SearchedThreads,
+                data.ScannedFrameCount,
+                data.ScannedThreadCount);
+            if (threadError != null)
+                return threadError;
+
+            if (data.MarkersByName.Count == 0)
+            {
+                return NoMarkerError(
+                    range,
+                    options,
+                    data.SearchedThreads,
+                    data.ScannedFrameCount,
+                    data.ScannedThreadCount,
+                    data.ScannedItemCount,
+                    data.Truncated);
+            }
+
+            var rows = BuildMarkerRows(data.MarkersByName);
+            SortMarkerRows(rows, options.SortBy);
+            bool truncated = data.Truncated || rows.Count > options.TopN;
+
+            var markerRows = new List<object>();
+            int rowsToReturn = Math.Min(options.TopN, rows.Count);
+            for (int i = 0; i < rowsToReturn; i++)
+                markerRows.Add(rows[i].ToResponse());
+
+            return new SuccessResponse($"Found {rows.Count} recorded profiler marker(s).", new
+            {
+                available_range = range.AvailableRange,
+                requested_range = range.RequestedRange,
+                searched_threads = data.SearchedThreads.ToResponse(),
+                markers = markerRows,
+                marker_count = rows.Count,
+                rows_returned = markerRows.Count,
+                scanned_frame_count = data.ScannedFrameCount,
+                scanned_thread_count = data.ScannedThreadCount,
+                scanned_item_count = data.ScannedItemCount,
+                max_frames = options.MaxFrames,
+                sort_by = options.SortBy,
+                marker_filter = options.MarkerFilter,
+                match_mode = options.MatchMode,
+                truncated = truncated,
+            });
+        }
+
+        private static object BuildFindMarkerResponse(ResolvedFrameRange range, RecordedOptions options, FindMarkerScanData data)
+        {
+            var threadError = ValidateThreadSearch(
+                data.ValidThreadFound,
+                data.MatchedRequestedThread,
+                options,
+                range,
+                data.SearchedThreads,
+                data.ScannedFrameCount,
+                data.ScannedThreadCount);
+            if (threadError != null)
+                return threadError;
+
+            if (data.Matches.Count == 0)
+            {
+                return NoMarkerError(
+                    range,
+                    options,
+                    data.SearchedThreads,
+                    data.ScannedFrameCount,
+                    data.ScannedThreadCount,
+                    data.ScannedItemCount,
+                    data.Truncated);
+            }
+
+            data.Matches.Sort(CompareFindMarkerMatches);
+            bool truncated = data.Truncated || data.Matches.Count > options.TopN;
+
+            var rows = new List<object>();
+            int rowsToReturn = Math.Min(options.TopN, data.Matches.Count);
+            for (int i = 0; i < rowsToReturn; i++)
+                rows.Add(data.Matches[i].ToResponse());
+
+            return new SuccessResponse($"Found marker on {data.Matches.Count} frame/thread row(s).", new
+            {
+                available_range = range.AvailableRange,
+                requested_range = range.RequestedRange,
+                searched_threads = data.SearchedThreads.ToResponse(),
+                matches = rows,
+                match_count = data.Matches.Count,
+                rows_returned = rows.Count,
+                scanned_frame_count = data.ScannedFrameCount,
+                scanned_thread_count = data.ScannedThreadCount,
+                scanned_item_count = data.ScannedItemCount,
+                max_frames = options.MaxFrames,
+                marker_filter = options.MarkerFilter,
+                match_mode = options.MatchMode,
+                truncated = truncated,
+            });
+        }
+
+        private static object BuildExportProfileTablesResponse(ResolvedFrameRange range, ExportOptions options, ExportData exportData)
+        {
             if (options.IncludeMarkerTable)
             {
                 var threadError = ValidateThreadSearch(
                     exportData.ValidThreadFound,
                     exportData.MatchedRequestedThread,
-                    rangeOptions,
+                    ToRecordedOptions(options),
                     range,
                     exportData.SearchedThreads,
                     exportData.ScannedFrameCount,
@@ -507,6 +537,62 @@ namespace MCPForUnity.Editor.Tools.Profiler
             });
         }
 
+        private static HotMarkerScanData ScanHotMarkers(ResolvedFrameRange range, RecordedOptions options)
+        {
+            var data = new HotMarkerScanData();
+            for (int frameIndex = range.StartFrame; frameIndex <= range.EndFrame; frameIndex++)
+            {
+                if (!ScanHotMarkersFrame(frameIndex, options, data))
+                    break;
+            }
+            return data;
+        }
+
+        private static FindMarkerScanData ScanFindMarker(ResolvedFrameRange range, RecordedOptions options)
+        {
+            var data = new FindMarkerScanData();
+            for (int frameIndex = range.StartFrame; frameIndex <= range.EndFrame; frameIndex++)
+            {
+                if (!ScanFindMarkerFrame(frameIndex, options, data))
+                    break;
+            }
+            return data;
+        }
+
+        private static bool ScanHotMarkersFrame(int frameIndex, RecordedOptions options, HotMarkerScanData data)
+        {
+            if (data.ScannedFrameCount >= options.MaxFrames)
+            {
+                data.Truncated = true;
+                return false;
+            }
+
+            var frameResult = ScanFrameForMarkers(frameIndex, options, data.SearchedThreads, data.MarkersByName, null);
+            data.ScannedFrameCount++;
+            data.ScannedThreadCount += frameResult.ScannedThreadCount;
+            data.ScannedItemCount += frameResult.ScannedItemCount;
+            data.ValidThreadFound |= frameResult.ValidThreadFound;
+            data.MatchedRequestedThread |= frameResult.MatchedRequestedThread;
+            return true;
+        }
+
+        private static bool ScanFindMarkerFrame(int frameIndex, RecordedOptions options, FindMarkerScanData data)
+        {
+            if (data.ScannedFrameCount >= options.MaxFrames)
+            {
+                data.Truncated = true;
+                return false;
+            }
+
+            var frameResult = ScanFrameForMarkers(frameIndex, options, data.SearchedThreads, null, data.Matches);
+            data.ScannedFrameCount++;
+            data.ScannedThreadCount += frameResult.ScannedThreadCount;
+            data.ScannedItemCount += frameResult.ScannedItemCount;
+            data.ValidThreadFound |= frameResult.ValidThreadFound;
+            data.MatchedRequestedThread |= frameResult.MatchedRequestedThread;
+            return true;
+        }
+
         private static ErrorResponse NoMarkerError(
             ResolvedFrameRange range,
             RecordedOptions options,
@@ -558,6 +644,10 @@ namespace MCPForUnity.Editor.Tools.Profiler
             if (!maxFramesResult.IsSuccess)
                 return Result<RecordedOptions>.Error(maxFramesResult.ErrorMessage);
 
+            var executionModeResult = GetExecutionMode(p);
+            if (!executionModeResult.IsSuccess)
+                return Result<RecordedOptions>.Error(executionModeResult.ErrorMessage);
+
             string markerFilter = p.Get("marker_filter");
             if (requireMarkerFilter && string.IsNullOrEmpty(markerFilter))
                 return Result<RecordedOptions>.Error("'marker_filter' parameter is required.");
@@ -599,6 +689,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
                 SortBy = sortBy,
                 TopN = Clamp(topNResult.Value ?? defaultTopN, 1, MaximumTopN),
                 MaxFrames = Clamp(maxFramesResult.Value ?? defaultMaxFrames, 1, MaximumMaxFrames),
+                ExecutionMode = executionModeResult.Value,
             });
         }
 
@@ -623,6 +714,10 @@ namespace MCPForUnity.Editor.Tools.Profiler
             var maxMarkerRowsResult = GetOptionalInt(p, "max_marker_rows");
             if (!maxMarkerRowsResult.IsSuccess)
                 return Result<ExportOptions>.Error(maxMarkerRowsResult.ErrorMessage);
+
+            var executionModeResult = GetExecutionMode(p);
+            if (!executionModeResult.IsSuccess)
+                return Result<ExportOptions>.Error(executionModeResult.ErrorMessage);
 
             bool includeFrameTable = !p.Has("include_frame_table") || p.GetBool("include_frame_table", true);
             bool includeMarkerTable = !p.Has("include_marker_table") || p.GetBool("include_marker_table", true);
@@ -658,6 +753,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
                 MaxFrames = Clamp(maxFramesResult.Value ?? DefaultExportMaxFrames, 1, MaximumMaxFrames),
                 MaxMarkerRows = Clamp(maxMarkerRowsResult.Value ?? DefaultMaxMarkerRows, 1, MaximumMaxMarkerRows),
                 Overwrite = p.GetBool("overwrite", false),
+                ExecutionMode = executionModeResult.Value,
             });
         }
 
@@ -1476,6 +1572,415 @@ namespace MCPForUnity.Editor.Tools.Profiler
             return "\"" + markerName.Replace('\"', '\'') + "\"";
         }
 
+        private static object GetProfilerJobStatusImpl(JObject @params)
+        {
+            var p = new ToolParams(@params);
+            var jobIdResult = p.GetRequired("job_id");
+            if (!jobIdResult.IsSuccess)
+                return new ErrorResponse(jobIdResult.ErrorMessage);
+
+            CleanupExpiredJobs();
+            ProfilerAnalysisJob job;
+            if (!Jobs.TryGetValue(jobIdResult.Value, out job))
+            {
+                return new ErrorResponse("Profiler analysis job not found.", new
+                {
+                    job_id = jobIdResult.Value,
+                });
+            }
+
+            job.Touch();
+            return job.GetStatusResponse();
+        }
+
+        private static object CancelProfilerJobImpl(JObject @params)
+        {
+            var p = new ToolParams(@params);
+            var jobIdResult = p.GetRequired("job_id");
+            if (!jobIdResult.IsSuccess)
+                return new ErrorResponse(jobIdResult.ErrorMessage);
+
+            CleanupExpiredJobs();
+            ProfilerAnalysisJob job;
+            if (!Jobs.TryGetValue(jobIdResult.Value, out job))
+            {
+                return new ErrorResponse("Profiler analysis job not found.", new
+                {
+                    job_id = jobIdResult.Value,
+                });
+            }
+
+            job.Cancel();
+            Jobs.Remove(job.JobId);
+            return new SuccessResponse("Profiler analysis job cancelled.", job.BuildStatusData());
+        }
+
+        private static object StartProfilerJob(ProfilerAnalysisJob job)
+        {
+            CleanupExpiredJobs();
+            Jobs[job.JobId] = job;
+            EnsureJobPump();
+            return job.GetPendingResponse("Profiler analysis job queued.");
+        }
+
+        private static void EnsureJobPump()
+        {
+            if (s_jobPumpRegistered)
+                return;
+
+            EditorApplication.update += ProcessProfilerJobs;
+            s_jobPumpRegistered = true;
+        }
+
+        private static void StopJobPumpIfIdle()
+        {
+            if (!s_jobPumpRegistered)
+                return;
+
+            foreach (var pair in Jobs)
+            {
+                if (!pair.Value.IsTerminal)
+                    return;
+            }
+
+            EditorApplication.update -= ProcessProfilerJobs;
+            s_jobPumpRegistered = false;
+        }
+
+        private static void ProcessProfilerJobs()
+        {
+            CleanupExpiredJobs();
+            var activeJobs = new List<ProfilerAnalysisJob>();
+            foreach (var pair in Jobs)
+            {
+                if (!pair.Value.IsTerminal)
+                    activeJobs.Add(pair.Value);
+            }
+
+            double deadline = EditorApplication.timeSinceStartup + JobUpdateBudgetSeconds;
+            for (int i = 0; i < activeJobs.Count; i++)
+            {
+                activeJobs[i].ProcessUntil(deadline);
+                if (EditorApplication.timeSinceStartup >= deadline)
+                    break;
+            }
+
+            StopJobPumpIfIdle();
+        }
+
+        private static void CleanupExpiredJobs()
+        {
+            if (Jobs.Count == 0)
+                return;
+
+            DateTime now = DateTime.UtcNow;
+            var expired = new List<string>();
+            foreach (var pair in Jobs)
+            {
+                var job = pair.Value;
+                double ttlSeconds = job.IsTerminal ? TerminalJobTtlSeconds : RunningJobTtlSeconds;
+                if ((now - job.LastAccessUtc).TotalSeconds > ttlSeconds)
+                    expired.Add(pair.Key);
+            }
+
+            for (int i = 0; i < expired.Count; i++)
+                Jobs.Remove(expired[i]);
+        }
+
+        private static bool ShouldUseProfilerJob(string executionMode, int frameScanCount)
+        {
+            if (executionMode == "sync")
+                return false;
+            if (executionMode == "async")
+                return true;
+            return frameScanCount > AutoAsyncFrameThreshold;
+        }
+
+        private static int GetFrameScanCount(ResolvedFrameRange range, int maxFrames)
+        {
+            int requested = range.EndFrame - range.StartFrame + 1;
+            return Math.Min(requested, maxFrames);
+        }
+
+        private static Result<string> GetExecutionMode(ToolParams p)
+        {
+            string executionMode = p.Get("execution_mode", "auto").ToLowerInvariant();
+            if (executionMode == "auto" || executionMode == "sync" || executionMode == "async")
+                return Result<string>.Success(executionMode);
+
+            return Result<string>.Error(
+                $"Invalid execution_mode '{executionMode}'. Valid values: auto, sync, async.");
+        }
+
+        private static RecordedOptions ToRecordedOptions(ExportOptions options)
+        {
+            return new RecordedOptions
+            {
+                StartFrame = options.StartFrame,
+                EndFrame = options.EndFrame,
+                ThreadName = options.ThreadName,
+                ThreadIndex = options.ThreadIndex,
+                ExecutionMode = options.ExecutionMode,
+            };
+        }
+
+        private abstract class ProfilerAnalysisJob
+        {
+            protected ProfilerAnalysisJob(string action, ResolvedFrameRange range, int maxFrames)
+            {
+                JobId = Guid.NewGuid().ToString("N");
+                Action = action;
+                Range = range;
+                MaxFrames = maxFrames;
+                TotalFrames = GetFrameScanCount(range, maxFrames);
+                CreatedUtc = DateTime.UtcNow;
+                UpdatedUtc = CreatedUtc;
+                LastAccessUtc = CreatedUtc;
+                State = "queued";
+            }
+
+            public string JobId { get; }
+            public string Action { get; }
+            public ResolvedFrameRange Range { get; }
+            public int MaxFrames { get; }
+            public int TotalFrames { get; }
+            public int ScannedFrameCount { get; protected set; }
+            public int ScannedThreadCount { get; protected set; }
+            public int ScannedItemCount { get; protected set; }
+            public string State { get; private set; }
+            public DateTime CreatedUtc { get; }
+            public DateTime UpdatedUtc { get; private set; }
+            public DateTime LastAccessUtc { get; private set; }
+            public object Result { get; private set; }
+            public string ErrorMessage { get; private set; }
+
+            public bool IsTerminal => State == "complete" || State == "failed" || State == "cancelled";
+
+            public void Touch()
+            {
+                LastAccessUtc = DateTime.UtcNow;
+            }
+
+            public void Cancel()
+            {
+                State = "cancelled";
+                UpdatedUtc = DateTime.UtcNow;
+                Touch();
+            }
+
+            public void ProcessUntil(double deadline)
+            {
+                if (IsTerminal)
+                    return;
+
+                State = "running";
+                Touch();
+                try
+                {
+                    do
+                    {
+                        StepOnce();
+                    }
+                    while (!IsTerminal && EditorApplication.timeSinceStartup < deadline);
+                }
+                catch (Exception ex)
+                {
+                    Fail(ex);
+                }
+            }
+
+            public object GetStatusResponse()
+            {
+                if (State == "complete")
+                    return Result;
+
+                if (State == "failed")
+                    return new ErrorResponse(ErrorMessage, BuildStatusData());
+
+                if (State == "cancelled")
+                    return new ErrorResponse("Profiler analysis job was cancelled.", BuildStatusData());
+
+                return GetPendingResponse("Profiler analysis job running.");
+            }
+
+            public PendingResponse GetPendingResponse(string message)
+            {
+                return new PendingResponse(message, JobPollIntervalSeconds, BuildStatusData());
+            }
+
+            public object BuildStatusData()
+            {
+                return new Dictionary<string, object>
+                {
+                    ["job_id"] = JobId,
+                    ["action"] = Action,
+                    ["state"] = State,
+                    ["pending"] = !IsTerminal,
+                    ["progress"] = new Dictionary<string, object>
+                    {
+                        ["scanned_frames"] = ScannedFrameCount,
+                        ["total_frames"] = TotalFrames,
+                        ["scanned_threads"] = ScannedThreadCount,
+                        ["scanned_items"] = ScannedItemCount,
+                        ["percent"] = TotalFrames > 0 ? Math.Round((double)ScannedFrameCount / TotalFrames, 4) : 1.0,
+                    },
+                    ["available_range"] = Range.AvailableRange,
+                    ["requested_range"] = Range.RequestedRange,
+                    ["max_frames"] = MaxFrames,
+                    ["created_utc"] = CreatedUtc.ToString("o", CultureInfo.InvariantCulture),
+                    ["updated_utc"] = UpdatedUtc.ToString("o", CultureInfo.InvariantCulture),
+                };
+            }
+
+            protected abstract void StepOnce();
+
+            protected void Complete(object result)
+            {
+                Result = result;
+                State = "complete";
+                UpdatedUtc = DateTime.UtcNow;
+                Touch();
+            }
+
+            protected void Fail(Exception ex)
+            {
+                ErrorMessage = ex.Message;
+                Result = new ErrorResponse(ex.Message, new
+                {
+                    exception_type = ex.GetType().Name,
+                    exception_message = ex.Message,
+                });
+                State = "failed";
+                UpdatedUtc = DateTime.UtcNow;
+                Touch();
+            }
+        }
+
+        private sealed class HotMarkersJob : ProfilerAnalysisJob
+        {
+            private readonly RecordedOptions _options;
+            private readonly HotMarkerScanData _data = new HotMarkerScanData();
+            private int _currentFrame;
+
+            public HotMarkersJob(RecordedOptions options, ResolvedFrameRange range)
+                : base("get_hot_markers", range, options.MaxFrames)
+            {
+                _options = options;
+                _currentFrame = range.StartFrame;
+            }
+
+            protected override void StepOnce()
+            {
+                if (_currentFrame > Range.EndFrame || _data.ScannedFrameCount >= _options.MaxFrames)
+                {
+                    if (_data.ScannedFrameCount >= _options.MaxFrames && _currentFrame <= Range.EndFrame)
+                        _data.Truncated = true;
+                    Complete(BuildHotMarkersResponse(Range, _options, _data));
+                    return;
+                }
+
+                ScanHotMarkersFrame(_currentFrame, _options, _data);
+                _currentFrame++;
+                ScannedFrameCount = _data.ScannedFrameCount;
+                ScannedThreadCount = _data.ScannedThreadCount;
+                ScannedItemCount = _data.ScannedItemCount;
+
+                if (_currentFrame > Range.EndFrame || _data.Truncated)
+                    Complete(BuildHotMarkersResponse(Range, _options, _data));
+            }
+        }
+
+        private sealed class FindMarkerJob : ProfilerAnalysisJob
+        {
+            private readonly RecordedOptions _options;
+            private readonly FindMarkerScanData _data = new FindMarkerScanData();
+            private int _currentFrame;
+
+            public FindMarkerJob(RecordedOptions options, ResolvedFrameRange range)
+                : base("find_marker", range, options.MaxFrames)
+            {
+                _options = options;
+                _currentFrame = range.StartFrame;
+            }
+
+            protected override void StepOnce()
+            {
+                if (_currentFrame > Range.EndFrame || _data.ScannedFrameCount >= _options.MaxFrames)
+                {
+                    if (_data.ScannedFrameCount >= _options.MaxFrames && _currentFrame <= Range.EndFrame)
+                        _data.Truncated = true;
+                    Complete(BuildFindMarkerResponse(Range, _options, _data));
+                    return;
+                }
+
+                ScanFindMarkerFrame(_currentFrame, _options, _data);
+                _currentFrame++;
+                ScannedFrameCount = _data.ScannedFrameCount;
+                ScannedThreadCount = _data.ScannedThreadCount;
+                ScannedItemCount = _data.ScannedItemCount;
+
+                if (_currentFrame > Range.EndFrame || _data.Truncated)
+                    Complete(BuildFindMarkerResponse(Range, _options, _data));
+            }
+        }
+
+        private sealed class ExportProfileTablesJob : ProfilerAnalysisJob
+        {
+            private readonly ExportOptions _options;
+            private readonly ExportData _data = new ExportData();
+            private int _currentFrame;
+            private double _timeFromFirstFrameMs;
+
+            public ExportProfileTablesJob(ExportOptions options, ResolvedFrameRange range)
+                : base("export_profile_tables", range, options.MaxFrames)
+            {
+                _options = options;
+                _currentFrame = range.StartFrame;
+            }
+
+            protected override void StepOnce()
+            {
+                if (_currentFrame > Range.EndFrame || _data.ScannedFrameCount >= _options.MaxFrames)
+                {
+                    if (_data.ScannedFrameCount >= _options.MaxFrames && _currentFrame <= Range.EndFrame)
+                        _data.FrameTruncated = true;
+                    Finish();
+                    return;
+                }
+
+                if (_options.IncludeFrameTable || _options.IncludeMarkerTable)
+                    CaptureFrameTime(_currentFrame, _data.ScannedFrameCount, _data.FrameRows, ref _timeFromFirstFrameMs);
+
+                if (_options.IncludeMarkerTable)
+                {
+                    var frameResult = ScanRawFrameForMarkers(
+                        _currentFrame,
+                        _options,
+                        _data.SearchedThreads,
+                        _data.MarkersByName);
+                    _data.ScannedThreadCount += frameResult.ScannedThreadCount;
+                    _data.ScannedItemCount += frameResult.ScannedItemCount;
+                    _data.ValidThreadFound |= frameResult.ValidThreadFound;
+                    _data.MatchedRequestedThread |= frameResult.MatchedRequestedThread;
+                }
+
+                _data.ScannedFrameCount++;
+                _currentFrame++;
+                ScannedFrameCount = _data.ScannedFrameCount;
+                ScannedThreadCount = _data.ScannedThreadCount;
+                ScannedItemCount = _data.ScannedItemCount;
+
+                if (_currentFrame > Range.EndFrame || _data.FrameTruncated)
+                    Finish();
+            }
+
+            private void Finish()
+            {
+                _data.FrameSummaryMedianFrame = GetMedianFrameIndexForExport(_data.FrameRows);
+                Complete(BuildExportProfileTablesResponse(Range, _options, _data));
+            }
+        }
+
         private static ErrorResponse ProfilerApiUnavailable(Exception ex)
         {
             return new ErrorResponse("Unity profiler frame data API unavailable in this editor version.", new
@@ -1497,6 +2002,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             public string SortBy { get; set; }
             public int TopN { get; set; }
             public int MaxFrames { get; set; }
+            public string ExecutionMode { get; set; }
         }
 
         private sealed class ExportOptions
@@ -1511,6 +2017,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             public int MaxFrames { get; set; }
             public int MaxMarkerRows { get; set; }
             public bool Overwrite { get; set; }
+            public string ExecutionMode { get; set; }
         }
 
         private sealed class ResolvedFrameRange
@@ -1555,6 +2062,31 @@ namespace MCPForUnity.Editor.Tools.Profiler
             public int ScannedThreadCount { get; set; }
             public int ScannedItemCount { get; set; }
             public int FrameSummaryMedianFrame { get; set; }
+        }
+
+        private sealed class HotMarkerScanData
+        {
+            public ThreadCatalog SearchedThreads { get; } = new ThreadCatalog();
+            public Dictionary<string, MarkerAggregate> MarkersByName { get; } =
+                new Dictionary<string, MarkerAggregate>(StringComparer.Ordinal);
+            public bool ValidThreadFound { get; set; }
+            public bool MatchedRequestedThread { get; set; }
+            public bool Truncated { get; set; }
+            public int ScannedFrameCount { get; set; }
+            public int ScannedThreadCount { get; set; }
+            public int ScannedItemCount { get; set; }
+        }
+
+        private sealed class FindMarkerScanData
+        {
+            public ThreadCatalog SearchedThreads { get; } = new ThreadCatalog();
+            public List<MarkerFrameThreadMatch> Matches { get; } = new List<MarkerFrameThreadMatch>();
+            public bool ValidThreadFound { get; set; }
+            public bool MatchedRequestedThread { get; set; }
+            public bool Truncated { get; set; }
+            public int ScannedFrameCount { get; set; }
+            public int ScannedThreadCount { get; set; }
+            public int ScannedItemCount { get; set; }
         }
 
         private sealed class ThreadCatalog

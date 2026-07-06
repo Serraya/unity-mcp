@@ -48,7 +48,7 @@ def mock_unity(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_profiler_actions_count():
-    assert len(ALL_ACTIONS) == 19
+    assert len(ALL_ACTIONS) == 21
 
 
 def test_no_duplicate_actions():
@@ -64,6 +64,7 @@ def test_counter_actions():
     expected = {
         "get_frame_timing", "get_counters", "get_object_memory", "get_marker_calltree",
         "get_frame_summary", "get_hot_markers", "find_marker", "export_profile_tables",
+        "profiler_job_status", "profiler_job_cancel",
     }
     assert set(COUNTER_ACTIONS) == expected
 
@@ -118,6 +119,7 @@ def test_empty_action_returns_error(mock_unity):
     "profiler_start", "profiler_stop", "profiler_status", "profiler_set_areas",
     "get_frame_timing", "get_counters", "get_object_memory", "get_marker_calltree",
     "get_frame_summary", "get_hot_markers", "find_marker", "export_profile_tables",
+    "profiler_job_status", "profiler_job_cancel",
     "memory_take_snapshot", "memory_list_snapshots", "memory_compare_snapshots",
     "frame_debugger_enable", "frame_debugger_disable", "frame_debugger_get_events",
 ])
@@ -260,6 +262,7 @@ def test_get_frame_summary_forwards_recorded_frame_params(mock_unity):
             thread_index=0,
             top_n=20,
             max_frames=500,
+            execution_mode="sync",
         )
     )
     assert result["success"] is True
@@ -271,6 +274,7 @@ def test_get_frame_summary_forwards_recorded_frame_params(mock_unity):
         "thread_index": 0,
         "top_n": 20,
         "max_frames": 500,
+        "execution_mode": "sync",
     }
 
 
@@ -288,6 +292,7 @@ def test_get_hot_markers_forwards_recorded_marker_params(mock_unity):
             sort_by="max_self_time",
             top_n=50,
             max_frames=500,
+            execution_mode="async",
         )
     )
     assert result["success"] is True
@@ -302,6 +307,7 @@ def test_get_hot_markers_forwards_recorded_marker_params(mock_unity):
         "sort_by": "max_self_time",
         "top_n": 50,
         "max_frames": 500,
+        "execution_mode": "async",
     }
 
 
@@ -318,6 +324,7 @@ def test_find_marker_forwards_recorded_marker_params(mock_unity):
             match_mode="exact",
             top_n=25,
             max_frames=250,
+            execution_mode="auto",
         )
     )
     assert result["success"] is True
@@ -331,6 +338,7 @@ def test_find_marker_forwards_recorded_marker_params(mock_unity):
         "match_mode": "exact",
         "top_n": 25,
         "max_frames": 250,
+        "execution_mode": "auto",
     }
 
 
@@ -367,6 +375,7 @@ def test_export_profile_tables_forwards_all_params(mock_unity):
             max_frames=2000,
             max_marker_rows=20000,
             overwrite=True,
+            execution_mode="async",
         )
     )
     assert result["success"] is True
@@ -382,6 +391,7 @@ def test_export_profile_tables_forwards_all_params(mock_unity):
         "max_frames": 2000,
         "max_marker_rows": 20000,
         "overwrite": True,
+        "execution_mode": "async",
     }
 
 
@@ -404,6 +414,22 @@ def test_export_profile_tables_omits_none_params(mock_unity):
     )
     assert result["success"] is True
     assert mock_unity["params"] == {"action": "export_profile_tables"}
+
+
+def test_profiler_job_status_forwards_job_id(mock_unity):
+    result = asyncio.run(
+        manage_profiler(SimpleNamespace(), action="profiler_job_status", job_id="job-123")
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {"action": "profiler_job_status", "job_id": "job-123"}
+
+
+def test_profiler_job_cancel_forwards_job_id(mock_unity):
+    result = asyncio.run(
+        manage_profiler(SimpleNamespace(), action="profiler_job_cancel", job_id="job-123")
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {"action": "profiler_job_cancel", "job_id": "job-123"}
 
 
 def test_memory_take_snapshot_forwards_path(mock_unity):
@@ -514,6 +540,9 @@ def test_tool_description_mentions_recorded_frame_actions():
     assert "get_hot_markers" in description
     assert "find_marker" in description
     assert "export_profile_tables" in description
+    assert "profiler_job_status" in description
+    assert "profiler_job_cancel" in description
+    assert "execution_mode" in description
     assert "frameTime.csv" in description
     assert "markerTable.csv" in description
     assert "not CSV contents" in description

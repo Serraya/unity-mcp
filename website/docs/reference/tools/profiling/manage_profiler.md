@@ -28,9 +28,12 @@ COUNTERS:
 
 RECORDED CPU ANALYSIS:
 - get_frame_summary: Recorded-frame timing statistics and worst frames (optional start_frame/end_frame, thread_name/thread_index, top_n, max_frames)
-- get_hot_markers: Ranked marker statistics across recorded frames (optional start_frame/end_frame, thread_name/thread_index, marker_filter, match_mode, sort_by, top_n, max_frames)
-- find_marker: Recorded frames/threads where a marker appears (marker_filter; optional start_frame/end_frame, thread_name/thread_index, match_mode, top_n, max_frames)
-- export_profile_tables: Export Profile Analyzer-style CSV files from the recorded Profiler buffer (frameTime.csv and markerTable.csv; optional output_dir, start_frame/end_frame, thread_name/thread_index, include_frame_table/include_marker_table, max_frames, max_marker_rows, overwrite). Returns paths, columns, row counts, ranges, thread filters, and truncation flags, not CSV contents.
+- get_hot_markers: Ranked marker statistics across recorded frames (optional start_frame/end_frame, thread_name/thread_index, marker_filter, match_mode, sort_by, top_n, max_frames, execution_mode)
+- find_marker: Recorded frames/threads where a marker appears (marker_filter; optional start_frame/end_frame, thread_name/thread_index, match_mode, top_n, max_frames, execution_mode)
+- export_profile_tables: Export Profile Analyzer-style CSV files from the recorded Profiler buffer (frameTime.csv and markerTable.csv; optional output_dir, start_frame/end_frame, thread_name/thread_index, include_frame_table/include_marker_table, max_frames, max_marker_rows, overwrite, execution_mode). Returns paths, columns, row counts, ranges, thread filters, and truncation flags, not CSV contents.
+- profiler_job_status: Poll a pending broad profiler analysis/export job by job_id.
+- profiler_job_cancel: Cancel a queued/running profiler analysis/export job by job_id.
+For get_hot_markers, find_marker, and export_profile_tables, execution_mode='auto' starts a Unity-side profiler job for broad scans. If a response has _mcp_status='pending', poll with action='profiler_job_status' and the returned job_id.
 
 MEMORY SNAPSHOT (requires com.unity.memoryprofiler):
 - memory_take_snapshot: Capture memory snapshot to file
@@ -46,7 +49,7 @@ FRAME DEBUGGER:
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `action` | `Literal['ping', 'profiler_start', 'profiler_stop', 'profiler_status', 'profiler_set_areas', 'get_frame_timing', 'get_counters', 'get_object_memory', 'get_marker_calltree', 'get_frame_summary', 'get_hot_markers', 'find_marker', 'export_profile_tables', 'memory_take_snapshot', 'memory_list_snapshots', 'memory_compare_snapshots', 'frame_debugger_enable', 'frame_debugger_disable', 'frame_debugger_get_events']` | yes | The profiler action to perform. |
+| `action` | `Literal['ping', 'profiler_start', 'profiler_stop', 'profiler_status', 'profiler_set_areas', 'get_frame_timing', 'get_counters', 'get_object_memory', 'get_marker_calltree', 'get_frame_summary', 'get_hot_markers', 'find_marker', 'export_profile_tables', 'profiler_job_status', 'profiler_job_cancel', 'memory_take_snapshot', 'memory_list_snapshots', 'memory_compare_snapshots', 'frame_debugger_enable', 'frame_debugger_disable', 'frame_debugger_get_events']` | yes | The profiler action to perform. |
 | `category` | `str \| None` | — | Profiler category name for get_counters (e.g. Render, Scripts, Memory, Physics). |
 | `counters` | `list[str] \| None` | — | Specific counter names for get_counters. Omit to read all in category. |
 | `object_path` | `str \| None` | — | Scene hierarchy or asset path for get_object_memory. |
@@ -65,6 +68,8 @@ FRAME DEBUGGER:
 | `sort_by` | `Literal['total_time', 'self_time', 'max_total_time', 'max_self_time', 'call_count', 'frame_count'] \| None` | — | Sort for get_hot_markers: total_time, self_time, max_total_time, max_self_time, call_count, or frame_count. Default: total_time. |
 | `top_n` | `int \| None` | — | Maximum rows to return for get_frame_summary worst frames, get_hot_markers, or find_marker. Unity clamps to a sane upper bound. |
 | `max_frames` | `int \| None` | — | Maximum recorded frames to scan for broad profiler queries and export_profile_tables. Unity clamps to a sane upper bound and reports truncated=true when reached. |
+| `execution_mode` | `Literal['auto', 'sync', 'async'] \| None` | — | Execution mode for broad recorded-frame scans. auto queues a Unity-side job when the scan is broad; sync forces a single response; async always returns a job_id to poll with profiler_job_status. |
+| `job_id` | `str \| None` | — | Profiler analysis job id returned by a pending get_hot_markers, find_marker, or export_profile_tables call. Required for profiler_job_status and profiler_job_cancel. |
 | `max_depth` | `int \| None` | — | Maximum child subtree depth for get_marker_calltree. Default: 8; Unity clamps to a sane upper bound. |
 | `max_rows` | `int \| None` | — | Maximum returned marker rows for get_marker_calltree. Default: 200; Unity clamps to a sane upper bound. |
 | `include_parents` | `bool \| None` | — | Whether get_marker_calltree includes the marker parent chain. Default: true. |
