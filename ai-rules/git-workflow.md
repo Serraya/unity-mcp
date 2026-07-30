@@ -23,5 +23,5 @@ Load this for staging, commits, branches, rebases, pushes, PRs, or git-lock prob
 
 ## Locks And Destructive Actions
 
-- Do not use destructive git commands (`reset --hard`, checkout/restore broad paths, clean) unless explicitly requested.
+- Do not use destructive git commands unless explicitly requested: `git reset --hard`, `git checkout -- <path>`, `git restore <path>` without `--staged`, `git clean -f/-d/-x`, `git stash drop/clear`, `git branch -D`, and `git push --force`. Report the dirty files instead; if the user wants one of these, they can run it themselves.
 - If a git lock blocks work, identify the process first; do not delete locks blindly.
