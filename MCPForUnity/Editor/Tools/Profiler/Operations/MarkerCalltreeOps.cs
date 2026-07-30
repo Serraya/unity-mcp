@@ -23,6 +23,10 @@ namespace MCPForUnity.Editor.Tools.Profiler
             {
                 return GetMarkerCalltreeImpl(@params);
             }
+            catch (RegexMatchTimeoutException ex)
+            {
+                return MarkerFilterRegex.TimeoutError(ex);
+            }
             catch (EntryPointNotFoundException ex)
             {
                 return ProfilerApiUnavailable(ex);
@@ -193,7 +197,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             {
                 try
                 {
-                    markerRegex = new Regex(markerFilter, RegexOptions.CultureInvariant);
+                    markerRegex = MarkerFilterRegex.Create(markerFilter);
                 }
                 catch (ArgumentException ex)
                 {

@@ -127,7 +127,7 @@ async def manage_profiler(
     include_marker_table: Annotated[Optional[bool], "Whether export_profile_tables writes markerTable.csv. Default: true."] = None,
     max_marker_rows: Annotated[Optional[int], "Maximum marker rows to write for export_profile_tables. Unity truncates and reports truncation when exceeded. Default: 20000."] = None,
     overwrite: Annotated[Optional[bool], "Whether export_profile_tables overwrites existing frameTime.csv/markerTable.csv in output_dir. Default: false; existing files cause a suffixed output directory."] = None,
-    match_mode: Annotated[Optional[MarkerMatchMode], "Marker matching mode for recorded CPU marker queries: contains, exact, or regex. Default: contains."] = None,
+    match_mode: Annotated[Optional[MarkerMatchMode], "Marker matching mode for recorded CPU marker queries: contains, exact, or regex. Default: contains. Regex patterns are evaluated with a bounded per-match timeout; a pattern that exceeds it fails with an error instead of stalling the Editor."] = None,
     sort_by: Annotated[Optional[ProfilerMarkerSortBy], "Sort for get_hot_markers: total_time, self_time, max_total_time, max_self_time, call_count, or frame_count. Default: total_time."] = None,
     top_n: Annotated[Optional[int], "Maximum rows to return for get_frame_summary worst frames, get_hot_markers, or find_marker. Unity clamps to a sane upper bound."] = None,
     max_frames: Annotated[Optional[int], "Maximum recorded frames to scan for broad profiler queries and export_profile_tables. Unity clamps to a sane upper bound and reports truncated=true when reached."] = None,

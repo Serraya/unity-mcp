@@ -242,7 +242,11 @@ namespace MCPForUnity.Editor.Tools
         /// <param name="includeStacktrace">Whether to include stack traces in the output.</param>
         /// <param name="maxStackFrames">Maximum stack frames to include when stack traces are requested.</param>
         /// <param name="maxStackChars">Maximum stack trace characters to include when stack traces are requested.</param>
-        /// <returns>A success response with entries, or an error response.</returns>
+        /// <returns>
+        /// A success response with entries, or an error response. In paging mode the payload
+        /// reports cursor, pageSize, nextCursor, truncated, and 'total' — the exact number of
+        /// entries matching the requested types/filter across the whole console.
+        /// </returns>
         private static object GetConsoleEntries(
             List<string> types,
             int? count,
@@ -338,56 +342,46 @@ namespace MCPForUnity.Editor.Tools
                         continue;
                     }
 
-                    var (messageOnly, stackTrace) = SplitMessageAndStackTrace(message);
-                    stackTrace = includeStacktrace
-                        ? LimitStackTrace(stackTrace, maxStackFrames, maxStackChars)
-                        : null;
-
-                    object formattedEntry = null;
-                    switch (format)
-                    {
-                        case "plain":
-                            formattedEntry = messageOnly;
-                            break;
-                        case "json":
-                        case "detailed": // Treat detailed as json for structured return
-                        default:
-                            formattedEntry = BuildStructuredEntry(
-                                unityType,
-                                messageOnly,
-                                file,
-                                line,
-                                stackTrace
-                            );
-                            break;
-                    }
-
                     totalMatches++;
 
                     if (usePaging)
                     {
+                        // 'total' is an exact count of matching entries: keep scanning
+                        // after the page fills, paying only classification cost for
+                        // out-of-page entries (formatting happens inside the window only).
                         if (totalMatches > resolvedCursor && totalMatches <= pageEndExclusive)
                         {
-                            formattedEntries.Add(formattedEntry);
+                            formattedEntries.Add(FormatEntry(
+                                format,
+                                unityType,
+                                message,
+                                file,
+                                line,
+                                includeStacktrace,
+                                maxStackFrames,
+                                maxStackChars
+                            ));
                             retrievedCount++;
                         }
-                        // Early exit: we've filled the page and only need to check if more exist
-                        else if (totalMatches > pageEndExclusive)
-                        {
-                            // We've passed the page; totalMatches now indicates truncation
-                            break;
-                        }
+                        continue;
                     }
-                    else
-                    {
-                        formattedEntries.Add(formattedEntry);
-                        retrievedCount++;
 
-                        // Apply count limit (after filtering)
-                        if (count.HasValue && retrievedCount >= count.Value)
-                        {
-                            break;
-                        }
+                    formattedEntries.Add(FormatEntry(
+                        format,
+                        unityType,
+                        message,
+                        file,
+                        line,
+                        includeStacktrace,
+                        maxStackFrames,
+                        maxStackChars
+                    ));
+                    retrievedCount++;
+
+                    // Apply count limit (after filtering)
+                    if (count.HasValue && retrievedCount >= count.Value)
+                    {
+                        break;
                     }
                 }
             }
@@ -413,6 +407,9 @@ namespace MCPForUnity.Editor.Tools
 
             if (usePaging)
             {
+                // Contract: 'total' is the exact number of console entries matching the
+                // requested types/filter across all pages; 'truncated' means more matches
+                // exist beyond the end of this page ('nextCursor' is set accordingly).
                 bool truncated = totalMatches > pageEndExclusive;
                 string nextCursor = truncated ? pageEndExclusive.ToString() : null;
                 var payload = new
@@ -439,6 +436,33 @@ namespace MCPForUnity.Editor.Tools
         }
 
         // --- Internal Helpers ---
+
+        private static object FormatEntry(
+            string format,
+            LogType unityType,
+            string message,
+            string file,
+            int line,
+            bool includeStacktrace,
+            int maxStackFrames,
+            int maxStackChars
+        )
+        {
+            var (messageOnly, stackTrace) = SplitMessageAndStackTrace(message);
+            stackTrace = includeStacktrace
+                ? LimitStackTrace(stackTrace, maxStackFrames, maxStackChars)
+                : null;
+
+            switch (format)
+            {
+                case "plain":
+                    return messageOnly;
+                case "json":
+                case "detailed": // Treat detailed as json for structured return
+                default:
+                    return BuildStructuredEntry(unityType, messageOnly, file, line, stackTrace);
+            }
+        }
 
         // Mapping bits from LogEntry.mode. These may vary by Unity version.
         private const int ModeBitError = 1 << 0;

@@ -97,6 +97,10 @@ namespace MCPForUnity.Editor.Tools.Profiler
             {
                 return GetHotMarkersImpl(@params);
             }
+            catch (RegexMatchTimeoutException ex)
+            {
+                return MarkerFilterRegex.TimeoutError(ex);
+            }
             catch (EntryPointNotFoundException ex)
             {
                 return ProfilerApiUnavailable(ex);
@@ -116,6 +120,10 @@ namespace MCPForUnity.Editor.Tools.Profiler
             try
             {
                 return FindMarkerImpl(@params);
+            }
+            catch (RegexMatchTimeoutException ex)
+            {
+                return MarkerFilterRegex.TimeoutError(ex);
             }
             catch (EntryPointNotFoundException ex)
             {
@@ -662,7 +670,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             {
                 try
                 {
-                    markerRegex = new Regex(markerFilter, RegexOptions.CultureInvariant);
+                    markerRegex = MarkerFilterRegex.Create(markerFilter);
                 }
                 catch (ArgumentException ex)
                 {
@@ -1615,7 +1623,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             return new SuccessResponse("Profiler analysis job cancelled.", job.BuildStatusData());
         }
 
-        private static object StartProfilerJob(ProfilerAnalysisJob job)
+        internal static object StartProfilerJob(ProfilerAnalysisJob job)
         {
             CleanupExpiredJobs();
             Jobs[job.JobId] = job;
@@ -1647,7 +1655,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             s_jobPumpRegistered = false;
         }
 
-        private static void ProcessProfilerJobs()
+        internal static void ProcessProfilerJobs()
         {
             CleanupExpiredJobs();
             var activeJobs = new List<ProfilerAnalysisJob>();
@@ -1657,12 +1665,14 @@ namespace MCPForUnity.Editor.Tools.Profiler
                     activeJobs.Add(pair.Value);
             }
 
-            double deadline = EditorApplication.timeSinceStartup + JobUpdateBudgetSeconds;
-            for (int i = 0; i < activeJobs.Count; i++)
+            if (activeJobs.Count > 0)
             {
-                activeJobs[i].ProcessUntil(deadline);
-                if (EditorApplication.timeSinceStartup >= deadline)
-                    break;
+                // Fairness: split the pump budget across active jobs so long-running
+                // early jobs cannot starve later ones. ProcessUntil always runs at
+                // least one step, so every active job makes bounded progress per pump.
+                double perJobBudget = JobUpdateBudgetSeconds / activeJobs.Count;
+                for (int i = 0; i < activeJobs.Count; i++)
+                    activeJobs[i].ProcessUntil(EditorApplication.timeSinceStartup + perJobBudget);
             }
 
             StopJobPumpIfIdle();
@@ -1724,7 +1734,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             };
         }
 
-        private abstract class ProfilerAnalysisJob
+        internal abstract class ProfilerAnalysisJob
         {
             protected ProfilerAnalysisJob(string action, ResolvedFrameRange range, int maxFrames)
             {
@@ -1782,6 +1792,10 @@ namespace MCPForUnity.Editor.Tools.Profiler
                         StepOnce();
                     }
                     while (!IsTerminal && EditorApplication.timeSinceStartup < deadline);
+                }
+                catch (RegexMatchTimeoutException ex)
+                {
+                    Fail(MarkerFilterRegex.BuildTimeoutMessage(ex), ex);
                 }
                 catch (Exception ex)
                 {
@@ -1844,8 +1858,13 @@ namespace MCPForUnity.Editor.Tools.Profiler
 
             protected void Fail(Exception ex)
             {
-                ErrorMessage = ex.Message;
-                Result = new ErrorResponse(ex.Message, new
+                Fail(ex.Message, ex);
+            }
+
+            private void Fail(string errorMessage, Exception ex)
+            {
+                ErrorMessage = errorMessage;
+                Result = new ErrorResponse(errorMessage, new
                 {
                     exception_type = ex.GetType().Name,
                     exception_message = ex.Message,
@@ -2020,7 +2039,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             public string ExecutionMode { get; set; }
         }
 
-        private sealed class ResolvedFrameRange
+        internal sealed class ResolvedFrameRange
         {
             public int FirstFrame { get; set; }
             public int LastFrame { get; set; }

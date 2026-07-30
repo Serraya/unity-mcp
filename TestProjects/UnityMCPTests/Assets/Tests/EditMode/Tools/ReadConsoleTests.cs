@@ -112,5 +112,65 @@ namespace MCPForUnityTests.Editor.Tools
             StringAssert.Contains($"{firstLine}\n\n{secondLine}", message);
             StringAssert.DoesNotContain("UnityEngine.Debug", message);
         }
+
+        [Test]
+        public void HandleCommand_Get_Paging_TotalIsExactAcrossAllPages()
+        {
+            // Unique prefix isolates this test's entries from unrelated console noise.
+            string prefix = $"PagingTotal {Guid.NewGuid()}";
+            for (int i = 0; i < 25; i++)
+            {
+                Debug.Log($"{prefix} entry {i}");
+            }
+
+            var result = ToJObject(ReadConsole.HandleCommand(new JObject
+            {
+                ["action"] = "get",
+                ["types"] = new JArray { "log" },
+                ["format"] = "plain",
+                ["filterText"] = prefix,
+                ["pageSize"] = 10,
+                ["cursor"] = 0,
+            }));
+
+            Assert.IsTrue(result.Value<bool>("success"), result.ToString());
+            var data = result["data"] as JObject;
+            Assert.IsNotNull(data, "Paged response should carry a structured payload.");
+            Assert.AreEqual(10, ((JArray)data["items"]).Count);
+            Assert.AreEqual(25, data.Value<int>("total"),
+                "'total' must be the exact match count across all pages, not a lower bound.");
+            Assert.IsTrue(data.Value<bool>("truncated"));
+            Assert.AreEqual("10", data.Value<string>("nextCursor"));
+            Assert.AreEqual(0, data.Value<int>("cursor"));
+            Assert.AreEqual(10, data.Value<int>("pageSize"));
+        }
+
+        [Test]
+        public void HandleCommand_Get_Paging_LastPage_ExactTotalAndNotTruncated()
+        {
+            string prefix = $"PagingLast {Guid.NewGuid()}";
+            for (int i = 0; i < 12; i++)
+            {
+                Debug.Log($"{prefix} entry {i}");
+            }
+
+            var result = ToJObject(ReadConsole.HandleCommand(new JObject
+            {
+                ["action"] = "get",
+                ["types"] = new JArray { "log" },
+                ["format"] = "plain",
+                ["filterText"] = prefix,
+                ["pageSize"] = 5,
+                ["cursor"] = 10,
+            }));
+
+            Assert.IsTrue(result.Value<bool>("success"), result.ToString());
+            var data = result["data"] as JObject;
+            Assert.IsNotNull(data);
+            Assert.AreEqual(2, ((JArray)data["items"]).Count);
+            Assert.AreEqual(12, data.Value<int>("total"));
+            Assert.IsFalse(data.Value<bool>("truncated"));
+            Assert.IsNull(data.Value<string>("nextCursor"));
+        }
     }
 }
