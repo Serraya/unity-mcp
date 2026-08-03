@@ -55,6 +55,12 @@ Countable limits that override "I think this fix is right". They restate the gat
 - For custom tool and transport changes, check both stdio and HTTP/WebSocket paths.
 - Keep edits scoped. Do not mix framework changes, app pin updates, release metadata, and generated documentation unless the task asks for that full sequence.
 - Do not edit generated package/cache/build artifacts unless the release or packaging task explicitly requires it.
+- **Look it up before you work. No agent works blind.** Before investigating, estimating, deciding, escalating, or building, find out what is already written down — ours first, then theirs.
+  1. **Ours.** `ai-rules/project-knowledge.md` and the `ai-rules/knowledge/*.md` file for the concept; the rest of `ai-rules/`; and `docs/` — `docs/development/`, the wiki, and any plan or decision record. Intent and process live in `docs/`, not in `ai-rules/`, so a rules-only search misses them.
+  2. **Theirs.** When the question is how something outside this repository behaves — a Unity API, the MCP protocol, FastMCP, a Python dependency, a client's tool-list semantics — read its documentation or search the web. For Unity, prefer locally installed Editor docs and API for the version under test; for MCP and FastMCP, read the spec or upstream source rather than inferring from our wrapper.
+
+  Experiments discover the state of our system; documentation states the rules of theirs. Inspecting our Python wrapper never establishes what a client or the protocol actually requires.
+- **The threshold for looking is low on purpose.** "When needed" must not become "rarely". Skip the lookup only for things that are genuinely trivial or that you can already cite. Mildly unsure is enough reason to look, and so is "this would probably benefit from a search" — one query costs a fraction of one wrong assumption. A failed search is a result: say what you searched and where, label the claim unverified, and report it. That is different from not having looked.
 - If a durable architecture fact is learned, record it in the most specific `ai-rules/knowledge/*.md` file and update `ai-rules/project-knowledge.md` if a new domain file is needed.
 
 ## Task Framing
