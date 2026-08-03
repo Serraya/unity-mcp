@@ -73,6 +73,8 @@ Do not solve behavior or contract issues by:
 
 These are allowed only as temporary workarounds the user explicitly asked for, clearly labeled as such.
 
+That list names the evasions seen so far, not the boundary. The rule is the class: do not make a symptom disappear without fixing the owner. A technique nobody has written down yet is not thereby allowed — if a change would leave the broken ownership model active while the repro looks better, it belongs here whether or not it is listed.
+
 ## Refactor Trigger
 
 If two fixes in the same subsystem are required to address symptoms of the same bug or change class, stop and refactor around the real ownership boundary instead of applying a third patch.
