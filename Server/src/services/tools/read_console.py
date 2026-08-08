@@ -25,6 +25,12 @@ def _strip_stacktrace_from_list(items: list) -> None:
     description="Gets messages from or clears the Unity Editor console. Defaults to 10 most recent error/warning entries. Pass types=['all'] to include logs. Use page_size/cursor for paging; paged responses report items plus cursor/pageSize/nextCursor/truncated and 'total' — the exact number of entries matching the requested types/filter across all pages. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5'). The 'get' action is read-only; 'clear' modifies ephemeral UI state (not project data).",
     annotations=ToolAnnotations(
         title="Read Console",
+        # 'clear' wipes the ephemeral Editor console buffer only — Unity still
+        # mirrors every entry to the Editor log file — so nothing is destroyed.
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
     ),
 )
 async def read_console(

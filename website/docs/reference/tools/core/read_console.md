@@ -12,7 +12,7 @@ description: "Gets messages from or clears the Unity Editor console."
 
 ## Description
 
-Gets messages from or clears the Unity Editor console. Defaults to 10 most recent error/warning entries. Pass types=['all'] to include logs. Use page_size/cursor for paging. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5'). The 'get' action is read-only; 'clear' modifies ephemeral UI state (not project data).
+Gets messages from or clears the Unity Editor console. Defaults to 10 most recent error/warning entries. Pass types=['all'] to include logs. Use page_size/cursor for paging; paged responses report items plus cursor/pageSize/nextCursor/truncated and 'total' — the exact number of entries matching the requested types/filter across all pages. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5'). The 'get' action is read-only; 'clear' modifies ephemeral UI state (not project data).
 
 ## Parameters
 
