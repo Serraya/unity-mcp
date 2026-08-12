@@ -70,6 +70,10 @@ namespace MCPForUnity.Editor.Tools.Profiler
                         return FrameDebuggerOps.Disable(@params);
                     case "frame_debugger_get_events":
                         return FrameDebuggerOps.GetEvents(@params);
+                    case "frame_debugger_get_event_details":
+                        return FrameDebuggerOps.GetEventDetails(@params);
+                    case "frame_debugger_capture_event_output":
+                        return FrameDebuggerOps.CaptureEventOutput(@params);
 
                     // Utility
                     case "ping":
@@ -88,6 +92,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
                             + "profiler_job_status, profiler_job_cancel, "
                             + "memory_take_snapshot, memory_list_snapshots, memory_compare_snapshots, "
                             + "frame_debugger_enable, frame_debugger_disable, frame_debugger_get_events, "
+                            + "frame_debugger_get_event_details, frame_debugger_capture_event_output, "
                             + "ping.");
                 }
             }

@@ -23,7 +23,11 @@ MEMORY_SNAPSHOT_ACTIONS = [
 ]
 
 FRAME_DEBUGGER_ACTIONS = [
-    "frame_debugger_enable", "frame_debugger_disable", "frame_debugger_get_events",
+    "frame_debugger_enable",
+    "frame_debugger_disable",
+    "frame_debugger_get_events",
+    "frame_debugger_get_event_details",
+    "frame_debugger_capture_event_output",
 ]
 
 UTILITY_ACTIONS = ["ping"]
@@ -55,6 +59,8 @@ ProfilerAction = Literal[
     "frame_debugger_enable",
     "frame_debugger_disable",
     "frame_debugger_get_events",
+    "frame_debugger_get_event_details",
+    "frame_debugger_capture_event_output",
 ]
 
 MarkerMatchMode = Literal["contains", "exact", "regex"]
@@ -102,7 +108,13 @@ ProfilerMarkerSortBy = Literal[
         "FRAME DEBUGGER:\n"
         "- frame_debugger_enable: Turn on Frame Debugger, report event count\n"
         "- frame_debugger_disable: Turn off Frame Debugger\n"
-        "- frame_debugger_get_events: Get draw call events (paged, best-effort via reflection)"
+        "- frame_debugger_get_events: List recorded Frame Debugger events compactly and page through indexes "
+        "(page_size, cursor). Use this first to find event_index.\n"
+        "- frame_debugger_get_event_details: Inspect one recorded event's structured details "
+        "(event_index; optional include_shader_properties, max_shader_properties). Use this instead of asking "
+        "for Frame Debugger Details screenshots.\n"
+        "- frame_debugger_capture_event_output: Save one recorded event's render-target output as PNG evidence "
+        "(event_index; optional output_path, include_base64). Defaults to an OS temp path outside Assets."
     ),
     annotations=ToolAnnotations(
         title="Manage Profiler",
@@ -146,6 +158,11 @@ async def manage_profiler(
     snapshot_b: Annotated[Optional[str], "Second snapshot path for memory_compare_snapshots."] = None,
     page_size: Annotated[Optional[int], "Page size for frame_debugger_get_events (default 50)."] = None,
     cursor: Annotated[Optional[int], "Cursor offset for frame_debugger_get_events."] = None,
+    event_index: Annotated[Optional[int], "Required for frame_debugger_get_event_details and frame_debugger_capture_event_output. Get it from frame_debugger_get_events."] = None,
+    include_shader_properties: Annotated[Optional[bool], "Whether frame_debugger_get_event_details includes large shader-property collections beyond textures. Default: false."] = None,
+    max_shader_properties: Annotated[Optional[int], "Maximum shader resource/property rows for frame_debugger_get_event_details. Unity clamps to a hard upper bound. Default: 256."] = None,
+    output_path: Annotated[Optional[str], "Optional PNG file path for frame_debugger_capture_event_output. Defaults to a unique OS temp path outside the Unity project and Assets; paths under Assets are rejected."] = None,
+    include_base64: Annotated[Optional[bool], "Whether frame_debugger_capture_event_output also returns image_base64. Default: false to keep responses small."] = None,
 ) -> dict[str, Any]:
     action_lower = action.lower()
     if action_lower not in ALL_ACTIONS:
@@ -177,6 +194,11 @@ async def manage_profiler(
         "snapshot_path": snapshot_path, "search_path": search_path,
         "snapshot_a": snapshot_a, "snapshot_b": snapshot_b,
         "page_size": page_size, "cursor": cursor,
+        "event_index": event_index,
+        "include_shader_properties": include_shader_properties,
+        "max_shader_properties": max_shader_properties,
+        "output_path": output_path,
+        "include_base64": include_base64,
     }
     for key, val in param_map.items():
         if val is not None:

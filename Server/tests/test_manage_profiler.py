@@ -48,7 +48,7 @@ def mock_unity(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_profiler_actions_count():
-    assert len(ALL_ACTIONS) == 21
+    assert len(ALL_ACTIONS) == 23
 
 
 def test_no_duplicate_actions():
@@ -75,7 +75,13 @@ def test_memory_snapshot_actions():
 
 
 def test_frame_debugger_actions():
-    expected = {"frame_debugger_enable", "frame_debugger_disable", "frame_debugger_get_events"}
+    expected = {
+        "frame_debugger_enable",
+        "frame_debugger_disable",
+        "frame_debugger_get_events",
+        "frame_debugger_get_event_details",
+        "frame_debugger_capture_event_output",
+    }
     assert set(FRAME_DEBUGGER_ACTIONS) == expected
 
 
@@ -122,6 +128,7 @@ def test_empty_action_returns_error(mock_unity):
     "profiler_job_status", "profiler_job_cancel",
     "memory_take_snapshot", "memory_list_snapshots", "memory_compare_snapshots",
     "frame_debugger_enable", "frame_debugger_disable", "frame_debugger_get_events",
+    "frame_debugger_get_event_details", "frame_debugger_capture_event_output",
 ])
 def test_every_action_forwards_to_unity(mock_unity, action_name):
     result = asyncio.run(
@@ -464,6 +471,63 @@ def test_frame_debugger_get_events_forwards_paging(mock_unity):
     assert mock_unity["params"]["cursor"] == 50
 
 
+def test_frame_debugger_get_event_details_forwards_params(mock_unity):
+    result = asyncio.run(
+        manage_profiler(
+            SimpleNamespace(),
+            action="frame_debugger_get_event_details",
+            event_index=11,
+            include_shader_properties=True,
+            max_shader_properties=128,
+        )
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {
+        "action": "frame_debugger_get_event_details",
+        "event_index": 11,
+        "include_shader_properties": True,
+        "max_shader_properties": 128,
+    }
+
+
+def test_frame_debugger_capture_event_output_forwards_params(mock_unity):
+    result = asyncio.run(
+        manage_profiler(
+            SimpleNamespace(),
+            action="frame_debugger_capture_event_output",
+            event_index=11,
+            output_path="/tmp/unity-frame-debugger/event-11.png",
+            include_base64=True,
+        )
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {
+        "action": "frame_debugger_capture_event_output",
+        "event_index": 11,
+        "output_path": "/tmp/unity-frame-debugger/event-11.png",
+        "include_base64": True,
+    }
+
+
+def test_frame_debugger_detail_and_output_omit_none_params(mock_unity):
+    result = asyncio.run(
+        manage_profiler(
+            SimpleNamespace(),
+            action="frame_debugger_get_event_details",
+            event_index=11,
+            include_shader_properties=None,
+            max_shader_properties=None,
+            output_path=None,
+            include_base64=None,
+        )
+    )
+    assert result["success"] is True
+    assert mock_unity["params"] == {
+        "action": "frame_debugger_get_event_details",
+        "event_index": 11,
+    }
+
+
 def test_action_only_params_no_extras(mock_unity):
     result = asyncio.run(
         manage_profiler(SimpleNamespace(), action="profiler_stop")
@@ -546,3 +610,9 @@ def test_tool_description_mentions_recorded_frame_actions():
     assert "frameTime.csv" in description
     assert "markerTable.csv" in description
     assert "not CSV contents" in description
+    assert "frame_debugger_get_events" in description
+    assert "frame_debugger_get_event_details" in description
+    assert "frame_debugger_capture_event_output" in description
+    assert "event_index" in description
+    assert "Frame Debugger Details screenshots" in description
+    assert "outside Assets" in description

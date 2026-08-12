@@ -43,13 +43,15 @@ MEMORY SNAPSHOT (requires com.unity.memoryprofiler):
 FRAME DEBUGGER:
 - frame_debugger_enable: Turn on Frame Debugger, report event count
 - frame_debugger_disable: Turn off Frame Debugger
-- frame_debugger_get_events: Get draw call events (paged, best-effort via reflection)
+- frame_debugger_get_events: List recorded Frame Debugger events compactly and page through indexes (page_size, cursor). Use this first to find event_index.
+- frame_debugger_get_event_details: Inspect one recorded event's structured details (event_index; optional include_shader_properties, max_shader_properties). Use this instead of asking for Frame Debugger Details screenshots.
+- frame_debugger_capture_event_output: Save one recorded event's render-target output as PNG evidence (event_index; optional output_path, include_base64). Defaults to an OS temp path outside Assets.
 
 ## Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `action` | `Literal['ping', 'profiler_start', 'profiler_stop', 'profiler_status', 'profiler_set_areas', 'get_frame_timing', 'get_counters', 'get_object_memory', 'get_marker_calltree', 'get_frame_summary', 'get_hot_markers', 'find_marker', 'export_profile_tables', 'profiler_job_status', 'profiler_job_cancel', 'memory_take_snapshot', 'memory_list_snapshots', 'memory_compare_snapshots', 'frame_debugger_enable', 'frame_debugger_disable', 'frame_debugger_get_events']` | yes | The profiler action to perform. |
+| `action` | `Literal['ping', 'profiler_start', 'profiler_stop', 'profiler_status', 'profiler_set_areas', 'get_frame_timing', 'get_counters', 'get_object_memory', 'get_marker_calltree', 'get_frame_summary', 'get_hot_markers', 'find_marker', 'export_profile_tables', 'profiler_job_status', 'profiler_job_cancel', 'memory_take_snapshot', 'memory_list_snapshots', 'memory_compare_snapshots', 'frame_debugger_enable', 'frame_debugger_disable', 'frame_debugger_get_events', 'frame_debugger_get_event_details', 'frame_debugger_capture_event_output']` | yes | The profiler action to perform. |
 | `category` | `str \| None` | — | Profiler category name for get_counters (e.g. Render, Scripts, Memory, Physics). |
 | `counters` | `list[str] \| None` | — | Specific counter names for get_counters. Omit to read all in category. |
 | `object_path` | `str \| None` | — | Scene hierarchy or asset path for get_object_memory. |
@@ -83,6 +85,11 @@ FRAME DEBUGGER:
 | `snapshot_b` | `str \| None` | — | Second snapshot path for memory_compare_snapshots. |
 | `page_size` | `int \| None` | — | Page size for frame_debugger_get_events (default 50). |
 | `cursor` | `int \| None` | — | Cursor offset for frame_debugger_get_events. |
+| `event_index` | `int \| None` | — | Required for frame_debugger_get_event_details and frame_debugger_capture_event_output. Get it from frame_debugger_get_events. |
+| `include_shader_properties` | `bool \| None` | — | Whether frame_debugger_get_event_details includes large shader-property collections beyond textures. Default: false. |
+| `max_shader_properties` | `int \| None` | — | Maximum shader resource/property rows for frame_debugger_get_event_details. Unity clamps to a hard upper bound. Default: 256. |
+| `output_path` | `str \| None` | — | Optional PNG file path for frame_debugger_capture_event_output. Defaults to a unique OS temp path outside the Unity project and Assets; paths under Assets are rejected. |
+| `include_base64` | `bool \| None` | — | Whether frame_debugger_capture_event_output also returns image_base64. Default: false to keep responses small. |
 
 ## Returns
 
