@@ -53,7 +53,9 @@ uvx --from mcpforunityserver mcp-for-unity --transport http --http-url http://lo
         "mcpforunityserver",
         "mcp-for-unity",
         "--transport",
-        "stdio"
+        "stdio",
+        "--project-path",
+        "."
       ]
     }
   }
@@ -136,6 +138,7 @@ These options apply to the `mcp-for-unity` command (whether run via `uvx`, Docke
 - `--api-key-service-token-header HEADER` - Header name for server-to-auth-service authentication (e.g. `X-Service-Token`)
 - `--api-key-service-token TOKEN` - Token value sent to the auth service for server authentication
 - `--default-instance INSTANCE` - Default Unity instance to target (project name, hash, or `Name@hash`)
+- `--project-path PATH` - Hard-scope discovery and routing to one Unity project root. Relative paths resolve from the server working directory.
 - `--project-scoped-tools` - Keep custom tools scoped to the active Unity project and enable the custom tools resource
 - `--unity-instance-token TOKEN` - Optional per-launch token set by Unity for deterministic lifecycle management
 - `--pidfile PATH` - Optional path where the server writes its PID on startup (used by Unity-managed terminal launches)
@@ -148,6 +151,7 @@ These options apply to the `mcp-for-unity` command (whether run via `uvx`, Docke
 - `UNITY_MCP_HTTP_PORT` - HTTP bind port (overrides URL port)
 - `UNITY_MCP_HTTP_REMOTE_HOSTED` - Enable remote-hosted mode (`true`, `1`, or `yes`)
 - `UNITY_MCP_DEFAULT_INSTANCE` - Default Unity instance to target (project name, hash, or `Name@hash`)
+- `UNITY_MCP_PROJECT_PATH` - Hard-scope discovery and routing to one Unity project root
 - `UNITY_MCP_SKIP_STARTUP_CONNECT=1` - Skip initial Unity connection attempt on startup
 - `UNITY_MCP_LOG_DIR` - Override the rotating server log directory. Default: `%LOCALAPPDATA%\UnityMCP\Logs` (Windows), `~/Library/Application Support/UnityMCP/Logs` (macOS), `$XDG_STATE_HOME/UnityMCP/Logs` (Linux/BSD, defaults to `~/.local/state/UnityMCP/Logs`).
 

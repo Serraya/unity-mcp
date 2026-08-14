@@ -21,6 +21,7 @@ import socket
 import struct
 
 from models.models import UnityInstanceInfo
+from core.config import config
 
 logger = logging.getLogger("mcp-for-unity-server")
 
@@ -30,6 +31,38 @@ class PortDiscovery:
     REGISTRY_FILE = "unity-mcp-port.json"  # legacy single-project file
     DEFAULT_PORT = 6400
     CONNECT_TIMEOUT = 0.3  # seconds, keep this snappy during discovery
+
+    @staticmethod
+    def _normalize_project_root(project_path: str) -> str:
+        path = os.path.realpath(os.path.abspath(os.path.expanduser(project_path)))
+        if os.path.basename(path).lower() == "assets":
+            path = os.path.dirname(path)
+        return os.path.normcase(path)
+
+    @staticmethod
+    def _matches_project_scope(project_path: str) -> bool:
+        project_scope = getattr(config, "project_path", None)
+        if not project_scope:
+            return True
+        if not project_path:
+            return False
+        return PortDiscovery._normalize_project_root(project_path) == project_scope
+
+    @staticmethod
+    def _filter_registry_files_for_scope(paths: list[Path]) -> list[Path]:
+        if not getattr(config, "project_path", None):
+            return paths
+
+        matches: list[Path] = []
+        for path in paths:
+            try:
+                with path.open("r", encoding="utf-8") as file:
+                    data = json.load(file)
+                if PortDiscovery._matches_project_scope(data.get("project_path", "")):
+                    matches.append(path)
+            except (OSError, ValueError, TypeError):
+                logger.debug("Skipping unreadable scoped registry file: %s", path, exc_info=True)
+        return matches
 
     @staticmethod
     def get_registry_path() -> Path:
@@ -58,7 +91,7 @@ class PortDiscovery:
         if legacy.exists():
             # Put legacy at the end so hashed, per-project files win
             hashed.append(legacy)
-        return hashed
+        return PortDiscovery._filter_registry_files_for_scope(hashed)
 
     @staticmethod
     def _try_probe_unity_mcp(port: int) -> bool:
@@ -123,6 +156,7 @@ class PortDiscovery:
                 key=lambda p: p.stat().st_mtime,
                 reverse=True,
             )
+            status_files = PortDiscovery._filter_registry_files_for_scope(status_files)
             if not status_files:
                 return None
             with status_files[0].open('r') as f:
@@ -253,6 +287,8 @@ class PortDiscovery:
 
                 # Extract information
                 project_path = data.get('project_path', '')
+                if not PortDiscovery._matches_project_scope(project_path):
+                    continue
                 project_name = PortDiscovery._extract_project_name(
                     project_path)
                 port = data.get('unity_port')

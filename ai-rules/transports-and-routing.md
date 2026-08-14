@@ -11,6 +11,8 @@ Load this when work touches stdio, HTTP, WebSocket, legacy Unity connection, ins
 ## Instance Routing
 
 - Unity instances are selected by `Name@hash`, hash prefix, or stdio port depending on context.
+- A project-local stdio client should pass `--project-path`. That scope is a hard transport boundary: discovery must filter status metadata before opening any probe socket, and calls must not escape to another project.
+- Do not pair project-local Unity MCP configuration with an unscoped global Unity MCP server, or expose overlapping Unity MCP implementations to the same client by default. One client/project pair has one capability owner.
 - `set_active_instance` stores client/session routing state.
 - Inline `unity_instance` parameters route a single call and must not silently mutate global session state.
 - Remote-hosted mode requires explicit user/session isolation. Do not add shortcuts that bypass user identity.

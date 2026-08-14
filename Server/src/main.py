@@ -660,6 +660,7 @@ def main():
         epilog="""
 Environment Variables:
   UNITY_MCP_DEFAULT_INSTANCE   Default Unity instance to target (project name, hash, or 'Name@hash')
+  UNITY_MCP_PROJECT_PATH   Hard-scope routing to one Unity project root
   UNITY_MCP_SKIP_STARTUP_CONNECT   Skip initial Unity connection attempt (set to 1/true/yes/on)
   UNITY_MCP_TELEMETRY_ENABLED   Enable telemetry (set to 1/true/yes/on)
   UNITY_MCP_TRANSPORT   Transport protocol: stdio or http (default: stdio)
@@ -687,6 +688,14 @@ Examples:
         metavar="INSTANCE",
         help="Default Unity instance to target (project name, hash, or 'Name@hash'). "
              "Overrides UNITY_MCP_DEFAULT_INSTANCE environment variable."
+    )
+    parser.add_argument(
+        "--project-path",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Hard-scope this server to one Unity project root. Relative paths are resolved "
+             "from the server working directory. Overrides UNITY_MCP_PROJECT_PATH."
     )
     parser.add_argument(
         "--transport",
@@ -799,10 +808,30 @@ Examples:
         logger.info(
             f"Using default Unity instance from command-line: {args.default_instance}")
 
-    # Set transport mode
+    # Set transport mode before validating transport-specific routing options.
     config.transport_mode = args.transport or os.environ.get(
         "UNITY_MCP_TRANSPORT", "stdio")
     logger.info(f"Transport mode: {config.transport_mode}")
+
+    project_path = args.project_path or os.environ.get("UNITY_MCP_PROJECT_PATH")
+    if project_path:
+        if config.transport_mode != "stdio":
+            parser.error("--project-path currently applies only to stdio transport")
+        resolved_project_path = os.path.realpath(
+            os.path.abspath(os.path.expanduser(project_path))
+        )
+        if os.path.basename(resolved_project_path).lower() == "assets":
+            resolved_project_path = os.path.dirname(resolved_project_path)
+        if not os.path.isdir(os.path.join(resolved_project_path, "Assets")) or not os.path.isdir(
+            os.path.join(resolved_project_path, "ProjectSettings")
+        ):
+            parser.error(
+                f"--project-path must identify a Unity project root containing Assets and ProjectSettings: "
+                f"{resolved_project_path}"
+            )
+        config.project_path = os.path.normcase(resolved_project_path)
+        os.environ["UNITY_MCP_PROJECT_PATH"] = config.project_path
+        logger.info("Hard-scoped Unity routing to project: %s", config.project_path)
 
     config.http_remote_hosted = (
         bool(args.http_remote_hosted)

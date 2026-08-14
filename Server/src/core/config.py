@@ -37,6 +37,9 @@ class ServerConfig:
 
     # Transport settings
     transport_mode: str = "stdio"
+    # Optional hard scope for local Unity routing. When set, discovery must not
+    # probe or expose Editors outside this project root.
+    project_path: str | None = None
 
     # HTTP transport behaviour
     http_remote_hosted: bool = False

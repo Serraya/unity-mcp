@@ -527,6 +527,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                 }
                 try
                 {
+                    bool commandClientClaimed = false;
                     try
                     {
                         var ep = client.Client?.RemoteEndPoint?.ToString() ?? "unknown";
@@ -556,23 +557,6 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                         return;
                     }
 
-                    // In stdio transport there is only ever one active Python server.
-                    // A new connection means the old one is dead — close stale clients so
-                    // their hung ReadFrameAsUtf8Async calls throw and exit cleanly.
-                    TcpClient[] staleClients;
-                    lock (clientsLock)
-                    {
-                        staleClients = activeClients.Where(c => c != client).ToArray();
-                    }
-                    if (staleClients.Length > 0)
-                    {
-                        if (IsDebugEnabled()) McpLog.Info($"Closing {staleClients.Length} stale client(s) after new connection", always: false);
-                        foreach (var stale in staleClients)
-                        {
-                            try { stale.Close(); } catch { }
-                        }
-                    }
-
                     while (isRunning && !token.IsCancellationRequested)
                     {
                         try
@@ -598,6 +582,27 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                                 );
                                 await WriteFrameAsync(stream, pingResponseBytes);
                                 continue;
+                            }
+
+                            // Discovery probes connect only to exchange ping/pong. They must
+                            // never evict the real command client. Claim single-client ownership
+                            // only after this connection sends its first actual command.
+                            if (!commandClientClaimed)
+                            {
+                                TcpClient[] staleClients;
+                                lock (clientsLock)
+                                {
+                                    staleClients = activeClients.Where(c => c != client).ToArray();
+                                }
+                                if (staleClients.Length > 0)
+                                {
+                                    if (IsDebugEnabled()) McpLog.Info($"Closing {staleClients.Length} stale client(s) after command client connected", always: false);
+                                    foreach (var stale in staleClients)
+                                    {
+                                        try { stale.Close(); } catch { }
+                                    }
+                                }
+                                commandClientClaimed = true;
                             }
 
                             lock (lockObj)

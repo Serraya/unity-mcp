@@ -71,6 +71,18 @@ The server accepts the same value formats as `set_active_instance`: `Name@hash`,
 - **One Unity Editor connected** → it's used automatically.
 - **Multiple Editors connected and no active set** → the server errors with the available instance list. Call `set_active_instance` and retry.
 
+## Permanently binding one client to one project
+
+When each agent should own exactly one Editor, start its stdio server with the Unity project root:
+
+```
+mcp-for-unity --transport stdio --project-path /path/to/MyGame
+```
+
+Relative paths resolve from the MCP server working directory. Scoped discovery filters other projects before opening any TCP probe, and other instances are not exposed as routing targets. This is the preferred setup for project-local MCP configuration because it does not depend on an agent remembering a session pin.
+
+Do not also configure an unscoped global stdio server with the same Unity tool surface. A global server starts for unrelated client workspaces and can discover Editors it does not own. Keep one project-local server per Unity project, and use one selected MCP implementation as the capability owner instead of enabling overlapping Unity MCP servers in the same client.
+
 ## HTTP vs stdio differences
 
 - **HTTP**: instance state is keyed by the MCP session (`MCP-Session-Id`), so two MCP clients can target different Editors at the same time on the same Python server.

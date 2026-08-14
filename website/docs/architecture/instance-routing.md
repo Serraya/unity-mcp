@@ -51,6 +51,11 @@ framed `ping`/`pong` handshake, with a 0.3 second connect timeout. Ports that do
 dropped, except when the file's `reloading` flag is set and the heartbeat is under 60 seconds old, in
 which case the instance is kept and reported as reloading.
 
+When the server is launched with `--project-path`, status metadata is filtered by normalized project
+root before any TCP probe is opened. This makes the project path a hard process boundary rather than a
+mutable session preference. Ping-only probe connections also do not claim the Editor's command-client
+slot; only the first non-ping command on a connection can replace a stale command client.
+
 The consequence is that discovery costs real I/O. Every per-call `unity_instance=` resolution passes
 `force_refresh=True`, so it re-probes every candidate port rather than using the 5 second cache.
 
