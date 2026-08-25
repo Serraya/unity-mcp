@@ -204,8 +204,8 @@ namespace MCPForUnity.Editor.Helpers
 
         /// <summary>
         /// Gets the package source for the MCP server (used with uvx --from).
-        /// Checks for EditorPrefs override first (supports git URLs, file:// paths, etc.),
-        /// then falls back to PyPI package reference.
+        /// Checks for an EditorPrefs override first, then an installed Git package pin,
+        /// then falls back to a PyPI package reference.
         /// When the override is a local path, auto-corrects to the "Server" subdirectory
         /// if the path doesn't contain pyproject.toml but Server/pyproject.toml exists.
         /// </summary>
@@ -226,6 +226,12 @@ namespace MCPForUnity.Editor.Helpers
                 return resolved;
             }
 
+            string installedGitSource = GetInstalledGitServerSource();
+            if (!string.IsNullOrEmpty(installedGitSource))
+            {
+                return installedGitSource;
+            }
+
             // Default to PyPI package (avoids Windows long path issues with git clone)
             string version = GetPackageVersion();
             if (version == "unknown")
@@ -242,6 +248,100 @@ namespace MCPForUnity.Editor.Helpers
             }
 
             return $"mcpforunityserver=={version}";
+        }
+
+        internal static string GetServerSourceFromPackageDependency(string dependency, string resolvedRevision = null)
+        {
+            if (string.IsNullOrWhiteSpace(dependency))
+            {
+                return null;
+            }
+
+            int revisionSeparator = dependency.LastIndexOf('#');
+            if (revisionSeparator <= 0 || revisionSeparator == dependency.Length - 1)
+            {
+                return null;
+            }
+
+            string manifestRevision = dependency.Substring(revisionSeparator + 1);
+            string revision = string.IsNullOrWhiteSpace(resolvedRevision)
+                ? manifestRevision
+                : resolvedRevision.Trim();
+            string sourceWithQuery = dependency.Substring(0, revisionSeparator);
+            int querySeparator = sourceWithQuery.IndexOf('?');
+            if (querySeparator <= 0)
+            {
+                return null;
+            }
+
+            string query = sourceWithQuery.Substring(querySeparator + 1);
+            bool isMcpPackagePath = false;
+            foreach (string part in query.Split('&'))
+            {
+                string[] pair = part.Split(new[] { '=' }, 2);
+                if (pair.Length != 2 || !string.Equals(pair[0], "path", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string packagePath = Uri.UnescapeDataString(pair[1]).TrimEnd('/');
+                isMcpPackagePath = string.Equals(packagePath, "/MCPForUnity", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(packagePath, "MCPForUnity", StringComparison.OrdinalIgnoreCase);
+                break;
+            }
+
+            if (!isMcpPackagePath)
+            {
+                return null;
+            }
+
+            string repositorySource = sourceWithQuery.Substring(0, querySeparator);
+            if (repositorySource.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || repositorySource.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                || repositorySource.StartsWith("ssh://", StringComparison.OrdinalIgnoreCase))
+            {
+                repositorySource = "git+" + repositorySource;
+            }
+            else if (!repositorySource.StartsWith("git+", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return $"{repositorySource}@{revision}#subdirectory=Server";
+        }
+
+        private static string GetInstalledGitServerSource()
+        {
+            try
+            {
+                string packagesDirectory = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Packages"));
+                string manifestPath = Path.Combine(packagesDirectory, "manifest.json");
+                if (!File.Exists(manifestPath))
+                {
+                    return null;
+                }
+
+                JObject manifest = JObject.Parse(File.ReadAllText(manifestPath));
+                string dependency = manifest["dependencies"]?["com.coplaydev.unity-mcp"]?.ToString();
+                string resolvedRevision = null;
+                string packageLockPath = Path.Combine(packagesDirectory, "packages-lock.json");
+                if (File.Exists(packageLockPath))
+                {
+                    JObject packageLock = JObject.Parse(File.ReadAllText(packageLockPath));
+                    JToken packageEntry = packageLock["dependencies"]?["com.coplaydev.unity-mcp"];
+                    if (string.Equals(packageEntry?["source"]?.ToString(), "git", StringComparison.OrdinalIgnoreCase))
+                    {
+                        resolvedRevision = packageEntry?["hash"]?.ToString();
+                    }
+                }
+
+                return GetServerSourceFromPackageDependency(dependency, resolvedRevision);
+            }
+            catch (Exception ex)
+            {
+                McpLog.Debug($"Could not derive MCP server source from Packages/manifest.json: {ex.Message}");
+                return null;
+            }
         }
 
         /// <summary>
