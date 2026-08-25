@@ -391,6 +391,41 @@ async def test_set_active_instance_port_stdio(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_set_active_instance_reuses_the_listed_stdio_snapshot(monkeypatch):
+    """Pinning must not reject an ID by forcing a second discovery scan."""
+    monkeypatch.setattr(config, "transport_mode", "stdio")
+    monkeypatch.setattr(config, "http_remote_hosted", False)
+
+    from transport.unity_instance_middleware import UnityInstanceMiddleware, set_unity_instance_middleware
+    middleware = UnityInstanceMiddleware()
+    set_unity_instance_middleware(middleware)
+
+    listed = SimpleNamespace(id="Proj@abc123", hash="abc123", port=6401)
+
+    class FakePool:
+        def discover_all_instances(self, force_refresh=False):
+            return [] if force_refresh else [listed]
+
+    import services.tools.set_active_instance as set_active_module
+    monkeypatch.setattr(
+        set_active_module,
+        "get_unity_connection_pool",
+        lambda: FakePool(),
+    )
+
+    from services.tools.set_active_instance import set_active_instance
+
+    ctx = DummyContext()
+    ctx.client_id = "client-1"
+
+    result = await set_active_instance(ctx, instance=listed.id)
+
+    assert result["success"] is True
+    assert result["data"]["instance"] == listed.id
+    assert await middleware.get_active_instance(ctx) == listed.id
+
+
+@pytest.mark.asyncio
 async def test_set_active_instance_port_http_errors(monkeypatch):
     """set_active_instance rejects port numbers in HTTP mode."""
     monkeypatch.setattr(config, "transport_mode", "http")

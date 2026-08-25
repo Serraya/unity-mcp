@@ -12,7 +12,7 @@ description: "Set the active Unity instance for this client/session."
 
 ## Description
 
-Set the active Unity instance for this client/session. Accepts Name@hash, hash prefix, or port number (stdio only).
+Set the active Unity instance for this client/session. Accepts Name@hash, hash prefix, or port number (stdio only). Use unity_status to list instances when the client cannot read MCP resources.
 
 ## Parameters
 

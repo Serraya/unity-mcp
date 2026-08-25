@@ -38,6 +38,7 @@ READ_ONLY = {
     "manage_script_capabilities",
     "unity_docs",
     "unity_reflect",
+    "unity_status",
     "validate_script",
 }
 

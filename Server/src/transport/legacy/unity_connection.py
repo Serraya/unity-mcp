@@ -6,7 +6,6 @@ import json
 import logging
 import os
 from pathlib import Path
-from transport.legacy.port_discovery import PortDiscovery
 import random
 import socket
 import struct
@@ -511,9 +510,6 @@ class UnityConnectionPool:
 
     def __init__(self):
         self._connections: dict[str, UnityConnection] = {}
-        self._known_instances: dict[str, UnityInstanceInfo] = {}
-        self._last_full_scan: float = 0
-        self._scan_interval: float = 5.0  # Cache for 5 seconds
         self._pool_lock = threading.Lock()
         self._default_instance_id: str | None = None
 
@@ -534,26 +530,7 @@ class UnityConnectionPool:
         Returns:
             List of UnityInstanceInfo objects
         """
-        now = time.time()
-
-        # Return cached results if valid
-        if not force_refresh and (now - self._last_full_scan) < self._scan_interval:
-            logger.debug(
-                f"Returning cached Unity instances (age: {now - self._last_full_scan:.1f}s)")
-            return list(self._known_instances.values())
-
-        # Scan for instances
-        logger.debug("Scanning for Unity instances...")
-        instances = PortDiscovery.discover_all_unity_instances()
-
-        # Update cache
-        with self._pool_lock:
-            self._known_instances = {inst.id: inst for inst in instances}
-            self._last_full_scan = now
-
-        logger.info(
-            f"Found {len(instances)} Unity instances: {[inst.id for inst in instances]}")
-        return instances
+        return stdio_port_registry.get_instances(force_refresh=force_refresh)
 
     def _resolve_instance_id(self, instance_identifier: str | None, instances: list[UnityInstanceInfo]) -> UnityInstanceInfo:
         """
@@ -592,7 +569,7 @@ class UnityConnectionPool:
                     "Multiple Unity instances are connected and none is selected. "
                     "Pass unity_instance on the call or use set_active_instance "
                     f"with one of: {available_ids}. "
-                    "Read mcpforunity://instances for current sessions."
+                    "Call unity_status or read mcpforunity://instances for current sessions."
                 )
 
         identifier = instance_identifier.strip()
@@ -666,7 +643,7 @@ class UnityConnectionPool:
         raise ConnectionError(
             f"Unity instance '{identifier}' not found. "
             f"Available instances: {available_ids}. "
-            f"Check mcpforunity://instances resource for all instances."
+            "Call unity_status or read mcpforunity://instances for all instances."
         )
 
     def get_connection(self, instance_identifier: str | None = None) -> UnityConnection:

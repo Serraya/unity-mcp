@@ -37,4 +37,5 @@ Essential scene, script, asset & editor tools (always on by default)
 - **[`refresh_unity`](./refresh_unity.md)** — Request a Unity asset database refresh and optionally a script compilation.
 - **[`script_apply_edits`](./script_apply_edits.md)** — Structured C# edits (methods/classes) with safer boundaries - prefer this over raw text.
 - **[`set_active_instance`](./set_active_instance.md)** — Set the active Unity instance for this client/session.
+- **[`unity_status`](./unity_status.md)** — Read Unity instance routing and Editor readiness.
 - **[`validate_script`](./validate_script.md)** — Validate a C# script and return diagnostics.

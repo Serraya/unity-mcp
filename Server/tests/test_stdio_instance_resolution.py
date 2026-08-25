@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from models.models import UnityInstanceInfo
+import transport.legacy.unity_connection as unity_connection
 from transport.legacy.unity_connection import UnityConnectionPool
 
 
@@ -98,3 +99,23 @@ def test_resolve_no_instances_raises_distinct_error():
 
     with pytest.raises(ConnectionError, match="No Unity Editor instances found"):
         pool._resolve_instance_id(None, [])
+
+
+def test_connection_pool_uses_stdio_registry_as_discovery_owner(monkeypatch):
+    pool = UnityConnectionPool()
+    expected = [_instance("Solo", 6400, datetime.now())]
+    calls = []
+
+    def get_instances(*, force_refresh=False):
+        calls.append(force_refresh)
+        return expected
+
+    monkeypatch.setattr(
+        unity_connection.stdio_port_registry,
+        "get_instances",
+        get_instances,
+    )
+
+    assert pool.discover_all_instances() == expected
+    assert pool.discover_all_instances(force_refresh=True) == expected
+    assert calls == [False, True]

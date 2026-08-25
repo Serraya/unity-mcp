@@ -130,7 +130,7 @@ class UnityInstanceMiddleware(Middleware):
             try:
                 from transport.legacy.unity_connection import get_unity_connection_pool
                 pool = get_unity_connection_pool()
-                results = pool.discover_all_instances(force_refresh=True)
+                results = pool.discover_all_instances(force_refresh=False)
             except Exception as exc:
                 if isinstance(exc, (SystemExit, KeyboardInterrupt)):
                     raise
@@ -160,7 +160,8 @@ class UnityInstanceMiddleware(Middleware):
             if transport == "http":
                 raise ValueError(
                     f"Port-based targeting ('{value}') is not supported in HTTP transport mode. "
-                    "Use Name@hash or a hash prefix. Read mcpforunity://instances for available instances."
+                    "Use Name@hash or a hash prefix. Call unity_status or read "
+                    "mcpforunity://instances for available instances."
                 )
             port_int = int(value)
             instances = await self._discover_instances(ctx)
@@ -189,7 +190,7 @@ class UnityInstanceMiddleware(Middleware):
             available = ", ".join(ids) or "none"
             raise ValueError(
                 f"Instance '{value}' not found. Available: {available}. "
-                "Read mcpforunity://instances for current sessions."
+                "Call unity_status or read mcpforunity://instances for current sessions."
             )
 
         # Hash prefix match
@@ -204,12 +205,12 @@ class UnityInstanceMiddleware(Middleware):
             ambiguous = ", ".join(getattr(m, "id", "?") for m in matches)
             raise ValueError(
                 f"Hash prefix '{value}' is ambiguous ({ambiguous}). "
-                "Provide the full Name@hash from mcpforunity://instances."
+                "Provide the full Name@hash from unity_status or mcpforunity://instances."
             )
         available = ", ".join(ids) or "none"
         raise ValueError(
             f"No running Unity instance matches '{value}'. Available: {available}. "
-            "Read mcpforunity://instances for current sessions."
+            "Call unity_status or read mcpforunity://instances for current sessions."
         )
 
     async def _maybe_autoselect_instance(self, ctx) -> str | None:
