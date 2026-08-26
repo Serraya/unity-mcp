@@ -113,3 +113,7 @@ Skip this ceremony only for tiny mechanical edits such as typo fixes or local co
 - Do not update consumer app `.mcp.json`, Codex config, `Packages/manifest.json`, or lockfiles unless the user asks to repin that app.
 - Do not create commits unless explicitly requested.
 - Do not revert user changes. If unrelated dirty files exist, leave them alone.
+- For a program/global coordinator, `unrelated` is not a terminal Git
+  disposition. Route every modified, staged, deleted, and untracked path under
+  `ai-rules/feature-orchestration.md § Worktree Reconciliation By Role` before
+  advancing the queue. Inventory does not authorize touching another slice.

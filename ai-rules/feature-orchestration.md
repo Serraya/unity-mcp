@@ -36,12 +36,39 @@ Use one task type per packet unless the scope is very small.
 
 ## Parallelization
 
-Parallelize only when write scopes do not overlap. Overlapping file ownership is a stop, not a coordination prompt.
+Parallelize only when concurrent write scopes do not overlap. A pre-existing
+dirty file is not automatically an active owner; classify it before dispatch.
+Concurrent overlap is a stop; sequential integration follows `§ Worktree
+Reconciliation By Role`.
 
 - Cross-language contracts are shared state. If a packet changes tool schema, discovery metadata, response shape, or transport contracts, that change is a prerequisite task; never let two parallel workers hold opposite sides of one contract.
 - Do not parallelize extraction and feature expansion against the same owner (`§ Growth Trigger`).
 - Safe: independent read-only audits, implementation slices with disjoint files, Python-only and C#-only slices that do not share a contract change.
 - Keep one orchestrator/integrator responsible for reconciling naming, duplicated ownership, and cross-slice consistency.
+
+## Worktree Reconciliation By Role
+
+`Unrelated` is relative to one packet or commit; it is never a terminal
+repository-level disposition.
+
+- A worker preserves out-of-scope changes and reports any overlap or dependency.
+- A packet integrator excludes other slices from the packet commit and routes
+  them to the program/global coordinator.
+- The program/global coordinator inspects `git status --short` and staged state
+  at startup, after every commit, and before advancing to another milestone or
+  wave. Group every modified, staged, deleted, and untracked path into a work
+  slice and record its provenance/owner, state, evidence or acceptance gap,
+  commit disposition, and next action in the active plan, handoff, or tracker.
+
+Every slice must end as `committed`, `active` under a named task,
+`acceptance_pending`, `deferred` with owner/reason, `decision_needed`, or
+`local_only/ignored` with rationale. `Unknown` is temporary investigation, not
+permission to advance. Coordinator-owned packets, reports, handoffs, and
+generated orchestration artifacts are included.
+
+This inventory does not authorize editing, staging, committing, reverting, or
+discarding another owner's work. It requires routing and closure. A clean index
+or a sentence such as "remaining unrelated changes" does not satisfy it.
 
 ## Worker Prompt Shape
 
@@ -85,6 +112,8 @@ After worker results return, the orchestrator must:
 - require Unity compile/test evidence for C# changes, or record the exact verification gap and the next action that closes it
 - turn remaining risks into explicit follow-up packets or accepted deviations
 - update durable facts in `ai-rules/knowledge/*.md` only after evidence is verified and reusable
+- after any commit, reconcile the full unstaged, staged, deleted, and untracked
+  path set under `§ Worktree Reconciliation By Role` before advancing the queue
 
 Do not mark a task accepted from worker confidence alone. Acceptance requires a reviewed diff plus verification evidence or an explicitly documented verification gap.
 
