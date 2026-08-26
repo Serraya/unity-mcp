@@ -11,7 +11,7 @@ using UnityEditorInternal;
 
 namespace MCPForUnity.Editor.Tools.Profiler
 {
-    internal static class RecordedFrameAnalysisOps
+    internal static partial class RecordedFrameAnalysisOps
     {
         private const int DefaultTopN = 50;
         private const int DefaultFrameSummaryTopN = 20;
@@ -21,21 +21,12 @@ namespace MCPForUnity.Editor.Tools.Profiler
         private const int DefaultExportMaxFrames = 2000;
         private const int MaximumMaxFrames = 5000;
         private const int AutoAsyncFrameThreshold = 50;
-        private const double JobPollIntervalSeconds = 1.0;
-        private const double JobUpdateBudgetSeconds = 0.008;
-        private const double TerminalJobTtlSeconds = 600.0;
-        private const double RunningJobTtlSeconds = 3600.0;
         private const int DefaultMaxMarkerRows = 20000;
         private const int MaximumMaxMarkerRows = 100000;
         private const int MaximumThreadScan = 128;
         private const int MaximumTrailingInvalidThreads = 8;
-        private const int MaximumOutputDirectoryAttempts = 1000;
 
-        private static readonly Dictionary<string, ProfilerAnalysisJob> Jobs =
-            new Dictionary<string, ProfilerAnalysisJob>(StringComparer.Ordinal);
-        private static bool s_jobPumpRegistered;
-
-        private static readonly string[] FrameTimeColumns =
+        internal static readonly string[] FrameTimeColumns =
         {
             "Frame Offset",
             "Frame Index",
@@ -43,7 +34,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             "Time from first frame (ms)",
         };
 
-        private static readonly string[] MarkerTableColumns =
+        internal static readonly string[] MarkerTableColumns =
         {
             "Name",
             "Median Time",
@@ -290,7 +281,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
                 return rangeError;
 
             if (ShouldUseProfilerJob(options.ExecutionMode, GetFrameScanCount(range, options.MaxFrames)))
-                return StartProfilerJob(new HotMarkersJob(options, range));
+                return ProfilerAnalysisJobScheduler.Start(new HotMarkersJob(options, range));
 
             return BuildHotMarkersResponse(range, options, ScanHotMarkers(range, options));
         }
@@ -313,7 +304,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
                 return rangeError;
 
             if (ShouldUseProfilerJob(options.ExecutionMode, GetFrameScanCount(range, options.MaxFrames)))
-                return StartProfilerJob(new FindMarkerJob(options, range));
+                return ProfilerAnalysisJobScheduler.Start(new FindMarkerJob(options, range));
 
             return BuildFindMarkerResponse(range, options, ScanFindMarker(range, options));
         }
@@ -332,7 +323,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
                 return rangeError;
 
             if (ShouldUseProfilerJob(options.ExecutionMode, GetFrameScanCount(range, options.MaxFrames)))
-                return StartProfilerJob(new ExportProfileTablesJob(options, range));
+                return ProfilerAnalysisJobScheduler.Start(new ExportProfileTablesJob(options, range));
 
             return BuildExportProfileTablesResponse(range, options, ScanExportData(range, options));
         }
@@ -472,7 +463,11 @@ namespace MCPForUnity.Editor.Tools.Profiler
             bool markerRowsTruncated = markerRows.Count > options.MaxMarkerRows;
             int markerRowsToWrite = Math.Min(markerRows.Count, options.MaxMarkerRows);
 
-            var outputDirResult = ResolveExportOutputDirectory(options);
+            var outputDirResult = ProfilerTableExportWriter.ResolveOutputDirectory(
+                options.OutputDir,
+                options.Overwrite,
+                options.IncludeFrameTable,
+                options.IncludeMarkerTable);
             if (!outputDirResult.IsSuccess)
                 return new ErrorResponse(outputDirResult.ErrorMessage);
 
@@ -483,7 +478,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             if (options.IncludeFrameTable)
             {
                 string framePath = Path.Combine(outputDir, "frameTime.csv");
-                WriteFrameTimeCsv(framePath, exportData.FrameRows);
+                ProfilerTableExportWriter.WriteFrameTimeCsv(framePath, exportData.FrameRows);
                 files["frame_time"] = new Dictionary<string, object>
                 {
                     ["path"] = framePath,
@@ -495,7 +490,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             if (options.IncludeMarkerTable)
             {
                 string markerPath = Path.Combine(outputDir, "markerTable.csv");
-                WriteMarkerTableCsv(markerPath, markerRows, markerRowsToWrite);
+                ProfilerTableExportWriter.WriteMarkerTableCsv(markerPath, markerRows, markerRowsToWrite);
                 files["marker_table"] = new Dictionary<string, object>
                 {
                     ["path"] = markerPath,
@@ -736,10 +731,10 @@ namespace MCPForUnity.Editor.Tools.Profiler
             if (!string.IsNullOrWhiteSpace(outputDir))
             {
                 string fullPath;
-                if (!TryGetFullPath(outputDir, out fullPath))
+                if (!ProfilerTableExportWriter.TryGetFullPath(outputDir, out fullPath))
                     return Result<ExportOptions>.Error($"Invalid output_dir '{outputDir}'.");
 
-                if (IsInsideAssetsDirectory(fullPath))
+                if (ProfilerTableExportWriter.IsInsideAssetsDirectory(fullPath))
                     return Result<ExportOptions>.Error("output_dir must not be inside the Unity Assets directory.");
 
                 outputDir = fullPath;
@@ -1465,9 +1460,19 @@ namespace MCPForUnity.Editor.Tools.Profiler
             return Math.Round(value, 4);
         }
 
-        private static Result<string> ResolveExportOutputDirectory(ExportOptions options)
+    }
+
+    internal static class ProfilerTableExportWriter
+    {
+        private const int MaximumOutputDirectoryAttempts = 1000;
+
+        internal static Result<string> ResolveOutputDirectory(
+            string requestedOutputDir,
+            bool overwrite,
+            bool includeFrameTable,
+            bool includeMarkerTable)
         {
-            string outputDir = options.OutputDir;
+            string outputDir = requestedOutputDir;
             if (string.IsNullOrEmpty(outputDir))
             {
                 outputDir = Path.Combine(
@@ -1483,13 +1488,13 @@ namespace MCPForUnity.Editor.Tools.Profiler
             if (IsInsideAssetsDirectory(fullPath))
                 return Result<string>.Error("output_dir must not be inside the Unity Assets directory.");
 
-            if (options.Overwrite)
+            if (overwrite)
                 return Result<string>.Success(fullPath);
 
             string candidate = fullPath;
             for (int i = 0; i < MaximumOutputDirectoryAttempts; i++)
             {
-                if (!ExportOutputFilesExist(candidate, options))
+                if (!OutputFilesExist(candidate, includeFrameTable, includeMarkerTable))
                     return Result<string>.Success(candidate);
 
                 candidate = fullPath + "-" + (i + 1).ToString(CultureInfo.InvariantCulture);
@@ -1498,15 +1503,15 @@ namespace MCPForUnity.Editor.Tools.Profiler
             return Result<string>.Error("Could not find a unique output directory for profiler CSV export.");
         }
 
-        private static bool ExportOutputFilesExist(string outputDir, ExportOptions options)
+        private static bool OutputFilesExist(string outputDir, bool includeFrameTable, bool includeMarkerTable)
         {
-            if (options.IncludeFrameTable && File.Exists(Path.Combine(outputDir, "frameTime.csv")))
+            if (includeFrameTable && File.Exists(Path.Combine(outputDir, "frameTime.csv")))
                 return true;
 
-            return options.IncludeMarkerTable && File.Exists(Path.Combine(outputDir, "markerTable.csv"));
+            return includeMarkerTable && File.Exists(Path.Combine(outputDir, "markerTable.csv"));
         }
 
-        private static bool TryGetFullPath(string path, out string fullPath)
+        internal static bool TryGetFullPath(string path, out string fullPath)
         {
             fullPath = null;
             try
@@ -1528,7 +1533,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             }
         }
 
-        private static bool IsInsideAssetsDirectory(string path)
+        internal static bool IsInsideAssetsDirectory(string path)
         {
             string assetsPath;
             if (!TryGetFullPath(UnityEngine.Application.dataPath, out assetsPath))
@@ -1545,26 +1550,34 @@ namespace MCPForUnity.Editor.Tools.Profiler
             return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
-        private static void WriteFrameTimeCsv(string path, List<FrameTimeExportRow> rows)
+        internal static void WriteFrameTimeCsv(
+            string path,
+            List<RecordedFrameAnalysisOps.FrameTimeExportRow> rows)
         {
             using (var writer = new StreamWriter(path, false))
             {
-                writer.WriteLine(string.Join("; ", FrameTimeColumns));
+                writer.WriteLine(string.Join("; ", RecordedFrameAnalysisOps.FrameTimeColumns));
                 for (int i = 0; i < rows.Count; i++)
                     writer.WriteLine(rows[i].ToCsvLine());
             }
         }
 
-        private static void WriteMarkerTableCsv(string path, List<MarkerExportRow> rows, int rowCount)
+        internal static void WriteMarkerTableCsv(
+            string path,
+            List<RecordedFrameAnalysisOps.MarkerExportRow> rows,
+            int rowCount)
         {
             using (var writer = new StreamWriter(path, false))
             {
-                writer.WriteLine(string.Join("; ", MarkerTableColumns));
+                writer.WriteLine(string.Join("; ", RecordedFrameAnalysisOps.MarkerTableColumns));
                 for (int i = 0; i < rowCount; i++)
                     writer.WriteLine(rows[i].ToCsvLine());
             }
         }
+    }
 
+    internal static partial class RecordedFrameAnalysisOps
+    {
         private static string FormatCsvNumber(double value)
         {
             return value.ToString(CultureInfo.InvariantCulture);
@@ -1582,119 +1595,12 @@ namespace MCPForUnity.Editor.Tools.Profiler
 
         private static object GetProfilerJobStatusImpl(JObject @params)
         {
-            var p = new ToolParams(@params);
-            var jobIdResult = p.GetRequired("job_id");
-            if (!jobIdResult.IsSuccess)
-                return new ErrorResponse(jobIdResult.ErrorMessage);
-
-            CleanupExpiredJobs();
-            ProfilerAnalysisJob job;
-            if (!Jobs.TryGetValue(jobIdResult.Value, out job))
-            {
-                return new ErrorResponse("Profiler analysis job not found.", new
-                {
-                    job_id = jobIdResult.Value,
-                });
-            }
-
-            job.Touch();
-            return job.GetStatusResponse();
+            return ProfilerAnalysisJobScheduler.GetStatus(@params);
         }
 
         private static object CancelProfilerJobImpl(JObject @params)
         {
-            var p = new ToolParams(@params);
-            var jobIdResult = p.GetRequired("job_id");
-            if (!jobIdResult.IsSuccess)
-                return new ErrorResponse(jobIdResult.ErrorMessage);
-
-            CleanupExpiredJobs();
-            ProfilerAnalysisJob job;
-            if (!Jobs.TryGetValue(jobIdResult.Value, out job))
-            {
-                return new ErrorResponse("Profiler analysis job not found.", new
-                {
-                    job_id = jobIdResult.Value,
-                });
-            }
-
-            job.Cancel();
-            Jobs.Remove(job.JobId);
-            return new SuccessResponse("Profiler analysis job cancelled.", job.BuildStatusData());
-        }
-
-        internal static object StartProfilerJob(ProfilerAnalysisJob job)
-        {
-            CleanupExpiredJobs();
-            Jobs[job.JobId] = job;
-            EnsureJobPump();
-            return job.GetPendingResponse("Profiler analysis job queued.");
-        }
-
-        private static void EnsureJobPump()
-        {
-            if (s_jobPumpRegistered)
-                return;
-
-            EditorApplication.update += ProcessProfilerJobs;
-            s_jobPumpRegistered = true;
-        }
-
-        private static void StopJobPumpIfIdle()
-        {
-            if (!s_jobPumpRegistered)
-                return;
-
-            foreach (var pair in Jobs)
-            {
-                if (!pair.Value.IsTerminal)
-                    return;
-            }
-
-            EditorApplication.update -= ProcessProfilerJobs;
-            s_jobPumpRegistered = false;
-        }
-
-        internal static void ProcessProfilerJobs()
-        {
-            CleanupExpiredJobs();
-            var activeJobs = new List<ProfilerAnalysisJob>();
-            foreach (var pair in Jobs)
-            {
-                if (!pair.Value.IsTerminal)
-                    activeJobs.Add(pair.Value);
-            }
-
-            if (activeJobs.Count > 0)
-            {
-                // Fairness: split the pump budget across active jobs so long-running
-                // early jobs cannot starve later ones. ProcessUntil always runs at
-                // least one step, so every active job makes bounded progress per pump.
-                double perJobBudget = JobUpdateBudgetSeconds / activeJobs.Count;
-                for (int i = 0; i < activeJobs.Count; i++)
-                    activeJobs[i].ProcessUntil(EditorApplication.timeSinceStartup + perJobBudget);
-            }
-
-            StopJobPumpIfIdle();
-        }
-
-        private static void CleanupExpiredJobs()
-        {
-            if (Jobs.Count == 0)
-                return;
-
-            DateTime now = DateTime.UtcNow;
-            var expired = new List<string>();
-            foreach (var pair in Jobs)
-            {
-                var job = pair.Value;
-                double ttlSeconds = job.IsTerminal ? TerminalJobTtlSeconds : RunningJobTtlSeconds;
-                if ((now - job.LastAccessUtc).TotalSeconds > ttlSeconds)
-                    expired.Add(pair.Key);
-            }
-
-            for (int i = 0; i < expired.Count; i++)
-                Jobs.Remove(expired[i]);
+            return ProfilerAnalysisJobScheduler.Cancel(@params);
         }
 
         private static bool ShouldUseProfilerJob(string executionMode, int frameScanCount)
@@ -1706,7 +1612,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             return frameScanCount > AutoAsyncFrameThreshold;
         }
 
-        private static int GetFrameScanCount(ResolvedFrameRange range, int maxFrames)
+        internal static int GetFrameScanCount(ResolvedFrameRange range, int maxFrames)
         {
             int requested = range.EndFrame - range.StartFrame + 1;
             return Math.Min(requested, maxFrames);
@@ -1734,15 +1640,146 @@ namespace MCPForUnity.Editor.Tools.Profiler
             };
         }
 
+    }
+
+    internal static class ProfilerAnalysisJobScheduler
+    {
+        private const double JobPollIntervalSeconds = 1.0;
+        private const double JobUpdateBudgetSeconds = 0.008;
+        private const double TerminalJobTtlSeconds = 600.0;
+        private const double RunningJobTtlSeconds = 3600.0;
+
+        private static readonly Dictionary<string, ProfilerAnalysisJob> Jobs =
+            new Dictionary<string, ProfilerAnalysisJob>(StringComparer.Ordinal);
+        private static bool s_jobPumpRegistered;
+
+        internal static object GetStatus(JObject @params)
+        {
+            var p = new ToolParams(@params);
+            var jobIdResult = p.GetRequired("job_id");
+            if (!jobIdResult.IsSuccess)
+                return new ErrorResponse(jobIdResult.ErrorMessage);
+
+            CleanupExpiredJobs();
+            ProfilerAnalysisJob job;
+            if (!Jobs.TryGetValue(jobIdResult.Value, out job))
+            {
+                return new ErrorResponse("Profiler analysis job not found.", new
+                {
+                    job_id = jobIdResult.Value,
+                });
+            }
+
+            job.Touch();
+            return job.GetStatusResponse();
+        }
+
+        internal static object Cancel(JObject @params)
+        {
+            var p = new ToolParams(@params);
+            var jobIdResult = p.GetRequired("job_id");
+            if (!jobIdResult.IsSuccess)
+                return new ErrorResponse(jobIdResult.ErrorMessage);
+
+            CleanupExpiredJobs();
+            ProfilerAnalysisJob job;
+            if (!Jobs.TryGetValue(jobIdResult.Value, out job))
+            {
+                return new ErrorResponse("Profiler analysis job not found.", new
+                {
+                    job_id = jobIdResult.Value,
+                });
+            }
+
+            job.Cancel();
+            Jobs.Remove(job.JobId);
+            return new SuccessResponse("Profiler analysis job cancelled.", job.BuildStatusData());
+        }
+
+        internal static object Start(ProfilerAnalysisJob job)
+        {
+            CleanupExpiredJobs();
+            Jobs[job.JobId] = job;
+            EnsurePump();
+            return job.GetPendingResponse("Profiler analysis job queued.");
+        }
+
+        internal static void ProcessJobs()
+        {
+            CleanupExpiredJobs();
+            var activeJobs = new List<ProfilerAnalysisJob>();
+            foreach (var pair in Jobs)
+            {
+                if (!pair.Value.IsTerminal)
+                    activeJobs.Add(pair.Value);
+            }
+
+            if (activeJobs.Count > 0)
+            {
+                // Divide the global update budget so every active job advances once per pump.
+                double perJobBudget = JobUpdateBudgetSeconds / activeJobs.Count;
+                for (int i = 0; i < activeJobs.Count; i++)
+                    activeJobs[i].ProcessUntil(EditorApplication.timeSinceStartup + perJobBudget);
+            }
+
+            StopPumpIfIdle();
+        }
+
+        private static void EnsurePump()
+        {
+            if (s_jobPumpRegistered)
+                return;
+
+            EditorApplication.update += ProcessJobs;
+            s_jobPumpRegistered = true;
+        }
+
+        private static void StopPumpIfIdle()
+        {
+            if (!s_jobPumpRegistered)
+                return;
+
+            foreach (var pair in Jobs)
+            {
+                if (!pair.Value.IsTerminal)
+                    return;
+            }
+
+            EditorApplication.update -= ProcessJobs;
+            s_jobPumpRegistered = false;
+        }
+
+        private static void CleanupExpiredJobs()
+        {
+            if (Jobs.Count == 0)
+                return;
+
+            DateTime now = DateTime.UtcNow;
+            var expired = new List<string>();
+            foreach (var pair in Jobs)
+            {
+                var job = pair.Value;
+                double ttlSeconds = job.IsTerminal ? TerminalJobTtlSeconds : RunningJobTtlSeconds;
+                if ((now - job.LastAccessUtc).TotalSeconds > ttlSeconds)
+                    expired.Add(pair.Key);
+            }
+
+            for (int i = 0; i < expired.Count; i++)
+                Jobs.Remove(expired[i]);
+        }
+
         internal abstract class ProfilerAnalysisJob
         {
-            protected ProfilerAnalysisJob(string action, ResolvedFrameRange range, int maxFrames)
+            protected ProfilerAnalysisJob(
+                string action,
+                RecordedFrameAnalysisOps.ResolvedFrameRange range,
+                int maxFrames)
             {
                 JobId = Guid.NewGuid().ToString("N");
                 Action = action;
                 Range = range;
                 MaxFrames = maxFrames;
-                TotalFrames = GetFrameScanCount(range, maxFrames);
+                TotalFrames = RecordedFrameAnalysisOps.GetFrameScanCount(range, maxFrames);
                 CreatedUtc = DateTime.UtcNow;
                 UpdatedUtc = CreatedUtc;
                 LastAccessUtc = CreatedUtc;
@@ -1751,7 +1788,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
 
             public string JobId { get; }
             public string Action { get; }
-            public ResolvedFrameRange Range { get; }
+            public RecordedFrameAnalysisOps.ResolvedFrameRange Range { get; }
             public int MaxFrames { get; }
             public int TotalFrames { get; }
             public int ScannedFrameCount { get; protected set; }
@@ -1874,8 +1911,11 @@ namespace MCPForUnity.Editor.Tools.Profiler
                 Touch();
             }
         }
+    }
 
-        private sealed class HotMarkersJob : ProfilerAnalysisJob
+    internal static partial class RecordedFrameAnalysisOps
+    {
+        private sealed class HotMarkersJob : ProfilerAnalysisJobScheduler.ProfilerAnalysisJob
         {
             private readonly RecordedOptions _options;
             private readonly HotMarkerScanData _data = new HotMarkerScanData();
@@ -1909,7 +1949,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             }
         }
 
-        private sealed class FindMarkerJob : ProfilerAnalysisJob
+        private sealed class FindMarkerJob : ProfilerAnalysisJobScheduler.ProfilerAnalysisJob
         {
             private readonly RecordedOptions _options;
             private readonly FindMarkerScanData _data = new FindMarkerScanData();
@@ -1943,7 +1983,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             }
         }
 
-        private sealed class ExportProfileTablesJob : ProfilerAnalysisJob
+        private sealed class ExportProfileTablesJob : ProfilerAnalysisJobScheduler.ProfilerAnalysisJob
         {
             private readonly ExportOptions _options;
             private readonly ExportData _data = new ExportData();
@@ -2190,7 +2230,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             public double TimeMs { get; }
         }
 
-        private sealed class FrameTimeExportRow
+        internal sealed class FrameTimeExportRow
         {
             public FrameTimeExportRow(int frameOffset, int frameIndex, double frameTimeMs, double timeFromFirstFrameMs)
             {
@@ -2392,7 +2432,7 @@ namespace MCPForUnity.Editor.Tools.Profiler
             }
         }
 
-        private sealed class MarkerExportRow
+        internal sealed class MarkerExportRow
         {
             public string Name { get; set; }
             public double MedianTimeMs { get; set; }

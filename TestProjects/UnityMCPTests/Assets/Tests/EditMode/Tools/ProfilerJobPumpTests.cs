@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
@@ -7,7 +9,7 @@ using static MCPForUnityTests.Editor.TestUtilities;
 namespace MCPForUnityTests.Editor.Tools
 {
     /// <summary>
-    /// Characterizes the Editor-update job pump in RecordedFrameAnalysisOps.
+    /// Characterizes the Editor-update profiler analysis job scheduler.
     /// The original pump gave every active job the same global deadline, so the
     /// first job could consume the whole budget and starve later jobs. The pump
     /// now slices the budget per job: every active job must make bounded
@@ -19,7 +21,7 @@ namespace MCPForUnityTests.Editor.Tools
         /// Deterministic non-terminating job: each step busy-waits ~2ms, so a
         /// single job can easily exhaust the whole pump budget by itself.
         /// </summary>
-        private sealed class SlowStepJob : RecordedFrameAnalysisOps.ProfilerAnalysisJob
+        private sealed class SlowStepJob : ProfilerAnalysisJobScheduler.ProfilerAnalysisJob
         {
             private const double StepDurationSeconds = 0.002;
 
@@ -58,7 +60,7 @@ namespace MCPForUnityTests.Editor.Tools
             }
 
             // No active jobs left: this pump unregisters the EditorApplication.update hook.
-            RecordedFrameAnalysisOps.ProcessProfilerJobs();
+            ProfilerAnalysisJobScheduler.ProcessJobs();
         }
 
         [Test]
@@ -70,12 +72,12 @@ namespace MCPForUnityTests.Editor.Tools
             {
                 foreach (var job in jobs)
                 {
-                    var pending = ToJObject(RecordedFrameAnalysisOps.StartProfilerJob(job));
+                    var pending = ToJObject(ProfilerAnalysisJobScheduler.Start(job));
                     Assert.AreEqual("pending", pending.Value<string>("_mcp_status"), pending.ToString());
                     Assert.AreEqual(job.JobId, pending["data"]?["job_id"]?.ToString());
                 }
 
-                RecordedFrameAnalysisOps.ProcessProfilerJobs();
+                ProfilerAnalysisJobScheduler.ProcessJobs();
 
                 foreach (var job in jobs)
                 {
@@ -96,8 +98,8 @@ namespace MCPForUnityTests.Editor.Tools
 
             try
             {
-                RecordedFrameAnalysisOps.StartProfilerJob(job);
-                RecordedFrameAnalysisOps.ProcessProfilerJobs();
+                ProfilerAnalysisJobScheduler.Start(job);
+                ProfilerAnalysisJobScheduler.ProcessJobs();
 
                 var status = ToJObject(RecordedFrameAnalysisOps.GetProfilerJobStatus(new JObject
                 {
@@ -114,6 +116,44 @@ namespace MCPForUnityTests.Editor.Tools
             {
                 CancelAndDrain(job);
             }
+        }
+
+        [Test]
+        public void ResolveOutputDirectory_ExistingExportFile_UsesUniqueSibling()
+        {
+            string outputDir = Path.Combine(Path.GetTempPath(), "unity-mcp-profiler-export-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(outputDir);
+
+            try
+            {
+                File.WriteAllText(Path.Combine(outputDir, "frameTime.csv"), "existing");
+
+                var result = ProfilerTableExportWriter.ResolveOutputDirectory(
+                    outputDir,
+                    false,
+                    true,
+                    false);
+
+                Assert.IsTrue(result.IsSuccess, result.ErrorMessage);
+                Assert.AreEqual(outputDir + "-1", result.Value);
+            }
+            finally
+            {
+                Directory.Delete(outputDir, true);
+            }
+        }
+
+        [Test]
+        public void ResolveOutputDirectory_AssetsPath_IsRejected()
+        {
+            var result = ProfilerTableExportWriter.ResolveOutputDirectory(
+                UnityEngine.Application.dataPath,
+                true,
+                true,
+                true);
+
+            Assert.IsFalse(result.IsSuccess);
+            StringAssert.Contains("must not be inside", result.ErrorMessage);
         }
     }
 }
