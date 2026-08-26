@@ -37,6 +37,12 @@ If those answers are not clear and the code exists locally, keep reading.
 - Do not fix only the Python wrapper when Unity discovery/handler metadata is the actual source of truth.
 - Do not fix only C# dispatch when FastMCP registration is the actual user-facing schema surface.
 - If a proposal works only by tuning timeouts, retries, buffer sizes, or budgets around a known ownership, ordering, or contract problem, treat that as evidence the fix is incomplete and keep refactoring.
+- Treat package pins, compatibility paths, registry exceptions, guards,
+  exclusions, fallbacks, and legacy transports as decisions to verify, not
+  permanent constraints. Trace their provenance and current consumers; remove
+  an obsolete restriction and its dead dependents inside the approved
+  owner/write boundary instead of routing around it. Published compatibility
+  and consumer-app pin boundaries remain binding until explicitly changed.
 
 ## Minimal-Fix Gate
 

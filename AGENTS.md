@@ -25,6 +25,23 @@ Load additional rule files only when the task touches those areas:
 - Multi-instance and remote-hosted behavior are first-class architecture, not edge cases.
 - Tool schemas are user-facing API. Empty, misleading, or stale tool schemas are product bugs.
 
+## Outcome Over Stale Prescription
+
+- A task packet binds its observable goal, protected compatibility and safety
+  invariants, authority/approval boundaries, write/non-scope, and acceptance
+  route. Its factual claims and proposed mechanism remain falsifiable evidence.
+- When current authoritative evidence disproves a packet mechanism, name the
+  contradiction, inspect the provenance and current consumers of any pin,
+  compatibility path, registry exception, guard, fallback, or legacy transport,
+  and continue with the correct owner-level solution while those boundaries stay
+  unchanged.
+- A tool output or automated remediation is evidence, not the approval boundary.
+  Inspect the current package, transport, schema, and consumer graph before
+  escalating or preserving an obsolete restriction.
+- Stop only when the actual solution changes a published compatibility or safety
+  invariant, authority, consumer-app write boundary, release/rollback boundary,
+  or acceptance route, or leaves the invariant unclear.
+
 ## Hard Stops
 
 Countable limits that override "I think this fix is right". They restate the gates in `ai-rules/engineering-method.md` as counts, so they cannot be argued away in the moment. When one triggers, stop and report — do not keep editing.
@@ -32,7 +49,9 @@ Countable limits that override "I think this fix is right". They restate the gat
 - **At most one unverified behavior patch per symptom.** A fix with no evidence from the layer that owns the behavior is allowed once. Passing Python tests are not C# compile evidence, a C# handler working through `batch_execute` is not client-visible schema evidence, and one transport passing is not evidence for the other. Still unconfirmed after that one patch → the next deliverable is a diagnostic plan, not a second patch.
 - **Two attempts on one symptom → diagnose, never patch a third time.** Count attempts per symptom across the whole task, including earlier attempts recorded in packets, result reports, or this thread — not per session. The same applies immediately to any edit that should change the result but produces no observable effect (see `§ No-Effect Patch Gate`, which lists the stale-process and stale-pin causes to rule out first).
 - **Prove the owner before editing.** While more than one root cause is plausible — Unity discovery, transport, Python registration, or client cache — the only allowed edit is a scoped diagnostic. Naming a likely layer is not proving it.
-- **A forbidden pattern beats your fix idea.** If the approach matches an item in `ai-rules/engineering-method.md § Explicitly Forbidden Patterns`, it is wrong even when it improves the symptom.
+- **A valid forbidden pattern beats your fix idea.** A prohibition protecting a
+  current compatibility, safety, or authority boundary wins. A stale packet fact
+  or proposed mechanism does not; follow `Outcome Over Stale Prescription`.
 
 ## Coding Preferences
 

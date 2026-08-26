@@ -8,6 +8,10 @@ Every delegated task must contain:
 
 - task type (`Read-Only Audit | Implementation | Verification | Diagnostic Isolation`)
 - goal restated as a verifiable observable, per `AGENTS.md § Task Framing`
+- protected invariants and current provenance of package pins, compatibility
+  paths, registry exceptions, guards, exclusions, fallbacks, or legacy transports
+- adaptive execution lane: which facts or mechanisms the worker may correct
+  when falsified, and the exact consequence that requires fresh approval
 - write scope (exact files/folders, or "read-only")
 - read-only context files
 - rules to load and rules not to load
@@ -16,7 +20,9 @@ Every delegated task must contain:
 - verification expectations, per `AGENTS.md § Verification Expectations` and `ai-rules/testing-and-verification.md` (Python evidence does not prove C# compile; state the Unity evidence plan or the expected blocker up front)
 - growth check, only when the task adds a materially new capability to an existing owner: current responsibilities, the two prior growth changes, and the keep / extract-first / follow-up decision per `ai-rules/engineering-method.md § Growth Trigger`
 - explicit budgets: max attempts at the same problem, max diagnostic loops
-- stop-and-report blockers (ambiguity, overlapping ownership, missing evidence, contract conflict, compile blocker)
+- stop-and-report blockers stated as actual authority, compatibility, safety,
+  consumer-write, release/rollback, or acceptance boundaries—not merely a
+  stale pin/mechanism or a tool's suggested remediation
 - result report path and required report fields
 
 ## Task Types
@@ -54,7 +60,9 @@ Load these rules:
 Do not load:
 - ai-rules/feature-orchestration.md
 
-Write scope / Read-only context / Goal / Non-scope / Budget / Stop-and-report conditions / Result report path and required fields.
+Write scope / Read-only context / Goal / Protected invariant and restriction
+provenance / Adaptive execution lane / Actual approval or stop boundary /
+Non-scope / Budget / Result report path and required fields.
 ```
 
 ## Result And Artifact Placement
@@ -95,5 +103,11 @@ Do not create tasks that:
 - omit the result report requirement
 - continue with a third implementation brief after two failed attempts on the same surface; brief a Diagnostic Isolation task instead
 - authorize a fallback, compatibility shim, or defensive patch before a diagnostic pass has confirmed the underlying owner is actually broken
+- freeze a proposed mechanism, package pin, compatibility path, registry
+  exception, guard, exclusion, fallback, or legacy transport without naming the
+  current invariant and provenance that still require it
+- stop solely because a tool's suggested remediation crosses an approval
+  boundary before inspecting whether the current graph permits a correct
+  in-scope owner-level solution
 - keep tuning a timeout, retry count, or budget after the worker reports the change had no observable effect; that signal is diagnostic, not tunable
 - claim Unity compile/test success without actual Unity evidence

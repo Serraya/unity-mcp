@@ -12,6 +12,7 @@ Checks, in both directions:
   2. every ai-rules/*.md named in AGENTS.md exists        (no dead pointer)
   3. every ai-rules/knowledge/*.md is named in the index  (no orphaned fact file)
   4. every knowledge file named in the index exists       (no dead index entry)
+  5. packet mechanisms remain falsifiable                 (no stale lock-in)
 
 A file may be excluded only by naming it in EXCLUDED below with a reason. An
 undeclared exclusion is the thing this script exists to prevent.
@@ -29,6 +30,13 @@ from pathlib import Path
 
 # path -> reason. Keep empty unless a file genuinely must not load.
 EXCLUDED: dict[str, str] = {}
+REQUIRED_CONTRACT_TEXT = (
+    "## Outcome Over Stale Prescription",
+    "A tool output or automated remediation is evidence",
+)
+BANNED_ORCHESTRATION_TEXT = (
+    "implement, do not re-litigate",
+)
 
 
 def repo_root() -> Path:
@@ -48,10 +56,31 @@ def check(root: Path) -> list[str]:
     if not contract.is_file():
         return [f"{contract} not found — this script expects a root AGENTS.md"]
     contract_text = contract.read_text(encoding="utf-8", errors="replace")
+    for required_text in REQUIRED_CONTRACT_TEXT:
+        if required_text not in contract_text:
+            problems.append(
+                "STALE PRESCRIPTION LOCK: AGENTS.md is missing "
+                f"{required_text!r}. Keep goals and approval boundaries "
+                "binding, but leave facts and mechanisms falsifiable."
+            )
 
     rules_dir = root / "ai-rules"
     if not rules_dir.is_dir():
         return problems  # Repository does not use the ai-rules layout.
+
+    orchestration = rules_dir / "feature-orchestration.md"
+    orchestration_text = (
+        orchestration.read_text(encoding="utf-8", errors="replace").lower()
+        if orchestration.is_file()
+        else ""
+    )
+    for banned_text in BANNED_ORCHESTRATION_TEXT:
+        if banned_text in orchestration_text:
+            problems.append(
+                "STALE PRESCRIPTION LOCK: feature orchestration contains "
+                f"{banned_text!r}. Keep goals and approval boundaries binding, "
+                "but leave facts and mechanisms falsifiable."
+            )
 
     # 1. orphaned rule files
     rule_files = sorted(p for p in rules_dir.glob("*.md"))
@@ -109,7 +138,10 @@ def main() -> int:
             "until someone needs the rule.\n"
         )
         return 1
-    print("Rule-map check passed: every rule file loads, every pointer resolves.")
+    print(
+        "Rule-map check passed: every rule file loads, every pointer resolves, "
+        "and packet mechanisms remain falsifiable."
+    )
     return 0
 
 
