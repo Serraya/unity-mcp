@@ -82,7 +82,7 @@ namespace MCPForUnityTests.Editor.Services
         }
 
         [UnityTest]
-        public IEnumerator NewClient_WhileOldClientStillConnected_ClosesStaleClient()
+        public IEnumerator NewCommandClient_WhileOldCommandClientStillConnected_ClosesStaleClient()
         {
             if (!StdioBridgeHost.IsRunning)
             {
@@ -104,10 +104,12 @@ namespace MCPForUnityTests.Editor.Services
                 string handshake1 = ReadLine(stream1, ReadTimeoutMs);
                 Assert.That(handshake1, Does.Contain("FRAMING=1"), "First client should receive handshake");
 
-                // Verify ping works on first client
-                SendFrame(stream1, Encoding.UTF8.GetBytes("ping"));
-                byte[] pong1Bytes = ReadFrame(stream1, ReadTimeoutMs);
-                Assert.That(Encoding.UTF8.GetString(pong1Bytes), Does.Contain("pong"));
+                // A ping-only connection is a discovery probe and must not claim command-client
+                // ownership. Send a real command so this connection becomes the active client.
+                SendFrame(stream1, Encoding.UTF8.GetBytes("{\"type\":\"get_editor_state\",\"params\":{}}"));
+                yield return WaitForData(stream1, ReadTimeoutMs);
+                byte[] state1Bytes = ReadFrame(stream1, ReadTimeoutMs);
+                Assert.That(Encoding.UTF8.GetString(state1Bytes), Does.Contain("success"));
 
                 // --- Second client: connect while first is still open ---
                 using (var client2 = new TcpClient())
@@ -120,14 +122,13 @@ namespace MCPForUnityTests.Editor.Services
                     string handshake2 = ReadLine(stream2, ReadTimeoutMs);
                     Assert.That(handshake2, Does.Contain("FRAMING=1"), "Second client should receive handshake");
 
-                    // Stale-client cleanup runs synchronously in HandleClientAsync before
-                    // the read loop, so by the time we read the handshake it's already done.
-                    // No yield needed — yielding here creates a window for the MCP Python
-                    // server to reconnect and close our test client as stale.
-                    SendFrame(stream2, Encoding.UTF8.GetBytes("ping"));
-                    byte[] pong2Bytes = ReadFrame(stream2, ReadTimeoutMs);
-                    Assert.That(Encoding.UTF8.GetString(pong2Bytes), Does.Contain("pong"),
-                        "Second client should get pong after stale client cleanup");
+                    // The second real command claims ownership and closes the prior command
+                    // client. Ping-only discovery probes deliberately do not trigger cleanup.
+                    SendFrame(stream2, Encoding.UTF8.GetBytes("{\"type\":\"get_editor_state\",\"params\":{}}"));
+                    yield return WaitForData(stream2, ReadTimeoutMs);
+                    byte[] state2Bytes = ReadFrame(stream2, ReadTimeoutMs);
+                    Assert.That(Encoding.UTF8.GetString(state2Bytes), Does.Contain("success"),
+                        "Second command client should receive a response after stale client cleanup");
 
                     client2.Close();
                 }
@@ -155,6 +156,15 @@ namespace MCPForUnityTests.Editor.Services
         }
 
         #region Frame protocol helpers
+
+        private static IEnumerator WaitForData(NetworkStream stream, int timeoutMs)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (!stream.DataAvailable && DateTime.UtcNow < deadline)
+                yield return null;
+
+            Assert.IsTrue(stream.DataAvailable, "Timed out waiting for a framed bridge response");
+        }
 
         private static string ReadLine(NetworkStream stream, int timeoutMs)
         {
