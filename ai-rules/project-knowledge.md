@@ -23,6 +23,11 @@ If no existing file fits a new durable fact, create a focused file under `ai-rul
 ## Recording Rules
 
 - Add facts to the most specific knowledge file.
+- Replace or remove assertions invalidated by the same change; do not append a
+  dated correction beneath executable-looking stale guidance. Git and task
+  evidence retain chronology.
+- Keep each durable assertion in one owning record, and inspect routed siblings
+  that could still imply the superseded state before closing the edit.
 - Keep facts short, concrete, and reusable.
 - Prefer facts tied to task triggers over abstract taxonomy.
 - Include exact paths when the fact depends on source layout.

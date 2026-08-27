@@ -1,10 +1,16 @@
 # Feature Orchestration
 
-Load this only when splitting fork work into delegated worker tasks or integrating their results. A worker implementing a single packet must not load this file.
+Load this only when splitting fork work into delegated worker tasks or integrating their results. A worker implementing one bounded brief must not load this file.
 
-## Task Packet Requirement
+## Delegation Briefs And Persistent Packets
 
-Every delegated task must contain:
+Every delegated task needs a bounded brief. Persist that brief as a task packet
+only when another context must resume it, the work crosses a consequential
+compatibility/release/approval boundary, or the packet itself is required
+evidence. Small same-session delegations use the worker prompt and reviewed diff;
+creating a task/result pair is not a completion predicate.
+
+A delegation brief contains:
 
 - task type (`Read-Only Audit | Implementation | Verification | Diagnostic Isolation`)
 - goal restated as a verifiable observable, per `AGENTS.md § Task Framing`
@@ -23,7 +29,7 @@ Every delegated task must contain:
 - stop-and-report blockers stated as actual authority, compatibility, safety,
   consumer-write, release/rollback, or acceptance boundaries—not merely a
   stale pin/mechanism or a tool's suggested remediation
-- result report path and required report fields
+- result-report path and fields only when persistent handoff evidence is needed
 
 ## Task Types
 
@@ -89,7 +95,8 @@ Do not load:
 
 Write scope / Read-only context / Goal / Protected invariant and restriction
 provenance / Adaptive execution lane / Actual approval or stop boundary /
-Non-scope / Budget / Result report path and required fields.
+Non-scope / Budget / Optional result-report path and required fields when a
+persistent handoff is justified.
 ```
 
 ## Result And Artifact Placement
@@ -100,17 +107,23 @@ docs/agent-work/results/NNN-<slug>-result.md
 docs/agent-work/artifacts/<task-id-and-slug>/
 ```
 
-Result reports are handoff evidence, not durable project knowledge. Promote only stable, verified facts to the relevant `ai-rules/knowledge/*.md` file via the `ai-rules/project-knowledge.md` index.
+Result reports are optional handoff evidence, not durable project knowledge.
+Create one only when the work must cross a context/acceptance boundary or retain
+unique evidence that the source, test output, or git history cannot carry more
+directly. Promote only stable, verified facts to the relevant
+`ai-rules/knowledge/*.md` file via the `ai-rules/project-knowledge.md` index.
 
 ## Integration Rules
 
 After worker results return, the orchestrator must:
 
 - review the diff, not just the worker's summary
-- read the result report and confirm the worker stayed inside the write scope
+- read the result report when one was required, and always confirm from the diff
+  that the worker stayed inside the write scope
 - run targeted Python tests for touched layers
 - require Unity compile/test evidence for C# changes, or record the exact verification gap and the next action that closes it
-- turn remaining risks into explicit follow-up packets or accepted deviations
+- assign remaining risks an owner and next action; persist a follow-up packet
+  only when its handoff or consequence justifies one
 - update durable facts in `ai-rules/knowledge/*.md` only after evidence is verified and reusable
 - after any commit, reconcile the full unstaged, staged, deleted, and untracked
   path set under `§ Worktree Reconciliation By Role` before advancing the queue
@@ -129,7 +142,8 @@ Do not create tasks that:
 - delegate a vague goal without write scope, non-scope, and acceptance criteria
 - give overlapping write scopes to parallel workers
 - let a worker choose between competing contract or schema interpretations without prior approval
-- omit the result report requirement
+- omit required handoff evidence when the delegation crosses a context,
+  consequential acceptance, or release boundary
 - continue with a third implementation brief after two failed attempts on the same surface; brief a Diagnostic Isolation task instead
 - authorize a fallback, compatibility shim, or defensive patch before a diagnostic pass has confirmed the underlying owner is actually broken
 - freeze a proposed mechanism, package pin, compatibility path, registry
