@@ -1,3 +1,19 @@
+@AGENTS.md
+
+<!--
+Maintainer note (block HTML comments are stripped before this file enters
+Claude's context, so this costs no tokens).
+
+Claude Code reads CLAUDE.md, not AGENTS.md. Without this import a Claude-side
+session starts without the project contract while a Codex-side session receives
+it automatically.
+
+Do not copy rules out of AGENTS.md into this file - duplicates drift. Add
+content below the import only when it is genuinely Claude-specific.
+
+Added 2026-08-27. Reference: https://code.claude.com/docs/en/memory
+-->
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
