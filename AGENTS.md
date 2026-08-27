@@ -83,6 +83,21 @@ Countable limits that override "I think this fix is right". They restate the gat
 - If a durable architecture fact is learned, record it in the most specific `ai-rules/knowledge/*.md` file and update `ai-rules/project-knowledge.md` if a new domain file is needed.
 - **Living documents carry current operational state only — never narrative.** Trackers, status lines, plan bullets, backlog entries, and knowledge entries state what IS and what acceptance remains, in the fewest words that stay unambiguous. How a fact was discovered, what was previously believed, why an earlier claim was wrong, and the tool mechanics behind a verification live in git history and result reports, not in documents every future agent loads — each stored sentence is paid for on every read. A correction replaces the wrong text; it does not append an annotated trail. Method detail survives only where the method is the fact: a repro recipe, a validator invocation, a required evidence table.
 
+## Claim-Scoped Verification
+
+- Every acceptance predicate belongs to a named claim, evidence layer, artifact
+  stage, causal path, and decision. Do not inherit it from an earlier or sibling
+  task after that claim closes without proving relevance to the current claim.
+- A path, stage, timestamp, or hash proves artifact identity and provenance; it
+  does not impose cross-artifact equality. Require byte identity only when exact
+  bytes are the observable or a proven causal input. Otherwise compare the
+  semantic, behavioral, or stage-appropriate output.
+- Before repeated-build or A/B work, name the intended variable, measured
+  boundary, must-match controls, allowed differences, and invalidators. Before
+  asking a person for a build, deploy, upload, or repro, state what decision
+  each possible result can change; if none changes, do not request it. Stop
+  expensive verification when its named claim closes.
+
 ## Task Framing
 
 Before implementing a non-trivial change, restate the request as a verifiable goal with an observable:
