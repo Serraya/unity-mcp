@@ -10,26 +10,50 @@ compatibility/release/approval boundary, or the packet itself is required
 evidence. Small same-session delegations use the worker prompt and reviewed diff;
 creating a task/result pair is not a completion predicate.
 
-A delegation brief contains:
+A routine known-owner brief starts with the task type, observable and done
+predicate, owner/source of truth, exact scope/non-scope and preserved overlaps,
+acceptance route, material budget/blockers, and handoff destination. Retain
+applicable compatibility/release consequence, protected invariants, and the
+material approval boundary. High-authority release, external, or consumer-write
+work states exact authorization, target, side effect, and rollback. Add the
+following only when each item can change execution or a decision:
 
-- task type (`Read-Only Audit | Implementation | Verification | Diagnostic Isolation`)
-- goal restated as a verifiable observable, per `AGENTS.md § Task Framing`
 - protected invariants and current provenance of package pins, compatibility
   paths, registry exceptions, guards, exclusions, fallbacks, or legacy transports
 - adaptive execution lane: which facts or mechanisms the worker may correct
   when falsified, and the exact consequence that requires fresh approval
-- write scope (exact files/folders, or "read-only")
 - read-only context files
 - rules to load and rules not to load
-- non-scope (explicit exclusions)
-- acceptance criteria
 - verification expectations, per `AGENTS.md § Verification Expectations` and `ai-rules/testing-and-verification.md` (Python evidence does not prove C# compile; state the Unity evidence plan or the expected blocker up front)
 - growth check, only when the task adds a materially new capability to an existing owner: current responsibilities, the two prior growth changes, and the keep / extract-first / follow-up decision per `ai-rules/engineering-method.md § Growth Trigger`
-- explicit budgets: max attempts at the same problem, max diagnostic loops
 - stop-and-report blockers stated as actual authority, compatibility, safety,
   consumer-write, release/rollback, or acceptance boundaries—not merely a
   stale pin/mechanism or a tool's suggested remediation
 - result-report path and fields only when persistent handoff evidence is needed
+
+A cause is live only when current evidence shows its mechanism is present or
+naturally reachable on the observed path, authoritative evidence does not
+contradict it, and the current instrument cannot exclude it. When evidence
+cannot distinguish multiple present/reachable paths, keep them live and run the
+smallest discriminator. A symptom or theoretical possibility is insufficient
+and cannot enlarge diagnostics or brief size. Choose matrix cases
+for distinct failure modes, boundaries, data paths, or interactions; preserve
+cheap parameterized branch coverage. Constrain repeated human, build, or
+environment variants to results that can change a decision. Calling a check
+costly requires its named marginal cost, not case count alone.
+
+When adapting or challenging a packet, name the exact clause to collapse, the
+evidence, and why no result can change the decision. Do not attribute intent or
+use unsupported labels such as `overspecified`, `noise`, or `costly`.
+
+After one evidence-linked correction, a comparable controllable coordinator
+defect on a later task may change role eligibility only when the agent had a
+fair opportunity to apply the correction. The program owner decides removal;
+external blockers and legitimate consequential scope do not count as repeats.
+Bounded worker/reviewer eligibility is separate. Restore coordinator eligibility
+only after an independently graded, predefined eval set covers both compact and
+legitimately consequential briefs; record the role failure class, not a
+permanent model or vendor blacklist.
 
 ## Task Types
 
