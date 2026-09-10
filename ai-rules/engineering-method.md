@@ -4,12 +4,30 @@
 
 Use this workflow for any task that changes behavior, architecture, transport, schemas, tests, packaging, or cross-file contracts.
 
+## Requested Changes And Simplification
+
+An explicit behavior-change request supplies the target; it does not require
+proving the old behavior defective. For a bounded removal or simplification,
+inspect the owner and actual dependencies, remove obsolete support within scope,
+and verify the remaining behavior. Use this route instead of diagnostic proof
+blocks, architecture assessments, or KB research unless unresolved dependencies
+or ownership changes need them. Consequential data, security, compatibility,
+and external-action checks still apply.
+
+Before adding filters, aliases, flags, or fallbacks to retain disputed behavior,
+name the current requirement or real consumer it serves. Existing code or
+backend fields alone do not justify retention. If none supports it, recommend
+removal. Clarify only uncertainty that materially changes scope or risk; do not
+reopen an explicit decision.
+
 ## Core Workflow
+
+For other non-trivial changes:
 
 1. Identify the user-visible contract being changed.
 2. Trace the flow through every owning layer that participates in that contract.
 3. Inspect sibling implementations and tests before designing the change.
-4. Name the first invalid state transition, schema mismatch, routing error, or ownership conflict before editing.
+4. For a bug fix, locate the first invalid transition, schema mismatch, routing error, or ownership conflict; for a requested change, name the intended difference.
 5. Choose the owner that should enforce the invariant.
 6. Implement the fix at that owner, not at a downstream symptom site.
 7. Verify with the narrowest tests or runtime evidence that proves the contract.
@@ -24,8 +42,8 @@ Before changing non-trivial behavior, be able to state:
 - the source of truth for the data/schema/state;
 - the entry point that starts the flow;
 - each boundary crossed by the flow;
-- where the current behavior first becomes wrong;
-- why the planned edit fixes that point rather than hiding a later symptom.
+- the intended behavior difference, or the first failure for a bug fix;
+- why the edit belongs at that owner.
 
 If those answers are not clear and the code exists locally, keep reading.
 
@@ -57,7 +75,7 @@ If any item fails, name the ownership gap and make the smallest architectural co
 
 ## Patch Classification
 
-Before editing, classify the planned change in plain language:
+For bug work, classify the planned change in plain language:
 
 - **Architectural fix** - removes the failure mode at the owning layer.
 - **Quick patch** - narrows, avoids, or stabilizes the failure without fixing the owner.
