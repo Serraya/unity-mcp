@@ -14,7 +14,9 @@ from transport.unity_instance_middleware import get_unity_instance_middleware
     group=None,
     description=(
         "Read Unity instance routing and Editor readiness. Use this when the MCP client "
-        "cannot read mcpforunity://instances or mcpforunity://editor/state resources."
+        "cannot read mcpforunity://instances or mcpforunity://editor/state resources. "
+        "Top-level success describes discovery; check editor_state.success and "
+        "data.advice.ready_for_tools explicitly. Empty discovery does not prove Unity is closed."
     ),
     annotations=ToolAnnotations(
         title="Unity Status",
@@ -40,6 +42,7 @@ async def unity_status(ctx: Context) -> dict[str, Any]:
 
     if not result["success"]:
         result["error"] = instances_result.get("error") or "Failed to list Unity instances."
+        result["message"] = _UNAVAILABLE_GUIDANCE
         return result
 
     if active_instance:
@@ -49,12 +52,29 @@ async def unity_status(ctx: Context) -> dict[str, Any]:
             if hasattr(editor_response, "model_dump")
             else editor_response
         )
+        snapshot = result["editor_state"]
+        data = snapshot.get("data") if isinstance(snapshot, dict) else None
+        advice = data.get("advice") if isinstance(data, dict) else None
+        if (not isinstance(snapshot, dict) or snapshot.get("success") is not True
+                or not isinstance(advice, dict) or advice.get("ready_for_tools") is None):
+            result["message"] = _UNAVAILABLE_GUIDANCE
     elif result["instance_count"] > 1:
         result["message"] = (
             "Multiple Unity instances are available. Pass unity_instance on the next call "
             "or call set_active_instance with an exact Name@hash."
         )
     elif result["instance_count"] == 0:
-        result["message"] = "No Unity instances are currently connected."
+        result["message"] = _UNAVAILABLE_GUIDANCE
 
     return result
+
+
+_UNAVAILABLE_GUIDANCE = (
+    "Editor readiness is unknown; discovery/transport availability does not prove "
+    "whether the Editor process exists. Before asking to open Unity, use the installed "
+    "CLI's read-only `unity editors running --json` and match the exact projectPath "
+    "and PID, not the display name. If present with failed automation, report running but automation unavailable. "
+    "If process inspection is unavailable, report presence as unknown. Use bounded "
+    "read-only rediscovery; do not restart, launch another Editor, change Play Mode, "
+    "or replay a timed-out operation. MCP and Pipeline health are independent."
+)

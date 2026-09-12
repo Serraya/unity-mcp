@@ -9,6 +9,7 @@ from transport.legacy.unity_connection import get_unity_connection_pool
 from transport.unity_instance_middleware import get_unity_instance_middleware
 from transport.plugin_hub import PluginHub
 from core.config import config
+from services.tools.unity_status import _UNAVAILABLE_GUIDANCE
 
 
 @mcp_for_unity_tool(
@@ -95,7 +96,8 @@ async def set_active_instance(
     if not instances:
         return {
             "success": False,
-            "error": "No Unity instances are currently connected. Start Unity and press 'Start Session'."
+            "error": "No Unity instances are currently connected.",
+            "message": _UNAVAILABLE_GUIDANCE,
         }
     ids = {inst.id: inst for inst in instances if getattr(inst, "id", None)}
 

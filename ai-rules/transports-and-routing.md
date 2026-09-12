@@ -26,6 +26,10 @@ Load this when work touches stdio, HTTP, WebSocket, legacy Unity connection, ins
 
 ## Diagnostics
 
+- Keep process presence, transport reachability, current state and operation permission separate. `unity_status.success` means diagnostic discovery succeeded; require a successful nested Editor query and fresh, identity-verified `advice.ready_for_tools=true` before proceeding. Missing/null, malformed, stale or wrong-project state cannot authorize tools. Preserve failures; do not promote cached healthy state to current.
+- Empty MCP/Pipeline discovery is not proof the Editor is closed. First use the installed CLI's supported `unity editors running --json`, independently of Pipeline endpoint discovery. Match the canonical exact `projectPath` and PID, not a display name or a sibling checkout. If process inspection fails, report presence as unknown. If it finds the target, report: "The target Editor is running, but its automation connection is unavailable; current readiness is unknown."
+- Retry discovery/state reads at most once after a bounded wait using existing mechanisms. State compilation/import/reload only when observed, not as an explanation for every timeout. Do not start/restart an Editor, change Play Mode, fabricate a discovery entry or reset configuration. Ask for intervention only for a named unresolved step. An absent target requires a successful independent process query before asking the user to open it.
+- Keep MCP and Pipeline health distinct: a recovered exact-project MCP operation is not blocked by Pipeline discovery, and does not close Pipeline recovery. A timed-out mutation has an unknown outcome; inspect the existing job/result before any resubmission. Discovery retries are not mutation retries.
 - A group listing proves group visibility, not that custom tools are absent.
 - For custom tools, verify both metadata registration and callable routing.
 - Do not treat a client cache problem as a Unity discovery problem without checking server registration and `tools/list` behavior.

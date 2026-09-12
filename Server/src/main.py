@@ -319,12 +319,13 @@ Reading resources (read this before using ANY resource named below):
 - Resources are addressed by URI, never by name. A resource's name and URI are NOT interchangeable: names use underscores (e.g. editor_state) while URIs use slashes (e.g. mcpforunity://editor/state). Do NOT build a URI by swapping separators in the name — you will 404.
 - These instructions always spell resources as full mcpforunity:// URIs — read one exactly as written. If you only have a name (from resources/list or another tool's output), look its URI up in resources/list rather than guessing it.
 - Resource payloads are wrapped: the content lives under a top-level `data` object, so field paths are `data.<section>.<field>` (e.g. `data.advice.ready_for_tools`), not bare top-level fields.
+- `unity_status.success` describes diagnostic discovery, not Editor readiness. Require editor_state.success=true and fresh, correctly routed data.advice.ready_for_tools=true; null/missing/stale state is unknown, never permission. Empty transport discovery does not mean Unity is closed. Before asking to open Unity, use the installed CLI's read-only `unity editors running --json` and match the exact projectPath and PID, not the display name. If that query fails, process presence is unknown too. A running but unreachable Editor needs bounded rediscovery, not a restart, another Editor, or a Play Mode change. MCP and Pipeline availability are separate. Do not replay a timed-out mutation until its outcome is established.
 - The mcpforunity:// URI names the resource, not the server. Some clients take a separate server key on a resource read — in Codex, tools are exposed as mcp__unityMCP__* but resources/read wants server: "unityMCP". If a read fails with an unknown-server error, list resources first and use the key exactly as returned.
 
 Script Management:
 - After creating or modifying scripts (by your own tools or the `manage_script` tool) use `read_console` to check for compilation errors before proceeding
 - Only after successful compilation can new components/types be used
-- You can poll mcpforunity://editor/state and read `data.compilation.is_compiling` to check if the domain reload is complete, or `data.advice.ready_for_tools` for overall readiness
+- Poll fresh mcpforunity://editor/state for overall readiness; is_compiling=false alone does not establish that domain reload/import finished. Report compilation, reload or import only from current state evidence.
 
 Scene Setup:
 - Always include a Camera and main Light (Directional Light) in new scenes

@@ -12,7 +12,7 @@ description: "Read Unity instance routing and Editor readiness."
 
 ## Description
 
-Read Unity instance routing and Editor readiness. Use this when the MCP client cannot read mcpforunity://instances or mcpforunity://editor/state resources.
+Read Unity instance routing and Editor readiness. Use this when the MCP client cannot read mcpforunity://instances or mcpforunity://editor/state resources. Top-level success describes discovery; check editor_state.success and data.advice.ready_for_tools explicitly. Empty discovery does not prove Unity is closed.
 
 ## Parameters
 

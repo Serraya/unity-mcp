@@ -245,11 +245,11 @@ namespace MCPForUnityTests.Editor.Services.Characterization
         }
 
         /// <summary>
-        /// Current behavior: BuildSnapshot is only called when state changes,
+        /// Current behavior: periodic BuildSnapshot is only called when state changes,
         /// using two-stage change detection to minimize expensive operations.
         /// </summary>
         [Test]
-        public void EditorStateCache_BuildSnapshot_OnlyCalledWhenStateChanges()
+        public void EditorStateCache_PeriodicBuildSnapshot_OnlyCalledWhenStateChanges()
         {
             // Document the change detection stages
             var stages = new[]
@@ -292,6 +292,22 @@ namespace MCPForUnityTests.Editor.Services.Characterization
             Assert.IsNotNull(snapshot1);
             Assert.IsNotNull(snapshot2);
             Assert.Pass("EditorStateCache uses lock pattern for concurrent access safety");
+        }
+
+        [Test]
+        public void EditorStateCache_ExplicitRead_ReobservesStateAndReportsProjectIdentity()
+        {
+            var first = EditorStateCache.GetSnapshot();
+            long beforeRead = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var second = EditorStateCache.GetSnapshot();
+            Assert.Greater((long)second["sequence"], (long)first["sequence"],
+                "Returning or re-stamping the old cache is not a new state observation.");
+            Assert.GreaterOrEqual((long)second["observed_at_unix_ms"], beforeRead);
+            Assert.AreEqual(
+                $"{MCPForUnity.Editor.Helpers.ProjectIdentityUtility.GetProjectName()}@{MCPForUnity.Editor.Helpers.ProjectIdentityUtility.GetProjectHash()}",
+                (string)second["unity"]["instance_id"]);
+            Assert.AreEqual(EditorApplication.isUpdating, (bool)second["assets"]["is_updating"]);
+            Assert.AreEqual(EditorApplication.isPlaying, (bool)second["editor"]["play_mode"]["is_playing"]);
         }
 
         #endregion

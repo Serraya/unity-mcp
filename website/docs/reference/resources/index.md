@@ -60,7 +60,7 @@ URI: mcpforunity://editor/selection
 
 **URI:** `mcpforunity://editor/state`
 
-Canonical editor readiness snapshot. Includes advice and server-computed staleness.
+Canonical Editor readiness snapshot. success means the Editor query returned a valid snapshot, not that tools may run. Require advice.ready_for_tools=true; null means state/identity/freshness is unknown. Failed queries retain their failure and never authorize tools.
 
 URI: mcpforunity://editor/state
 
@@ -246,7 +246,7 @@ URI: mcpforunity://tool-groups
 
 **URI:** `mcpforunity://instances`
 
-Lists all running Unity Editor instances with their details.
+Lists Unity instances discoverable by the selected transport, not all OS processes. Empty discovery does not prove the Editor is closed. Status is routing metadata, not readiness.
 
 URI: mcpforunity://instances
 

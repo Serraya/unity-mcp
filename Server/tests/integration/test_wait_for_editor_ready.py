@@ -31,8 +31,8 @@ async def test_polls_until_ready(monkeypatch):
         nonlocal call_count
         call_count += 1
         if call_count < 3:
-            return {"data": {"advice": {"ready_for_tools": False, "blocking_reasons": ["compiling"]}}}
-        return {"data": {"advice": {"ready_for_tools": True, "blocking_reasons": []}}}
+            return {"success": True, "data": {"advice": {"ready_for_tools": False, "blocking_reasons": ["compiling"]}}}
+        return {"success": True, "data": {"advice": {"ready_for_tools": True, "blocking_reasons": []}}}
 
     monkeypatch.setattr(mod.editor_state, "get_editor_state", fake_get_editor_state)
 
@@ -62,20 +62,20 @@ async def test_timeout_returns_false(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_stale_only_treated_as_ready(monkeypatch):
-    """If the only blocking reason is stale_status, consider ready."""
+async def test_stale_only_is_not_permission_to_proceed(monkeypatch):
+    """Previously healthy but stale status cannot authorize the next operation."""
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
 
     from services.tools import refresh_unity as mod
 
     async def fake_get_editor_state(ctx):
-        return {"data": {"advice": {"ready_for_tools": False, "blocking_reasons": ["stale_status"]}}}
+        return {"success": True, "data": {"advice": {"ready_for_tools": None, "blocking_reasons": ["stale_status"]}}}
 
     monkeypatch.setattr(mod.editor_state, "get_editor_state", fake_get_editor_state)
 
     ctx = DummyContext()
-    ready, elapsed = await mod.wait_for_editor_ready(ctx, timeout_s=5.0)
-    assert ready is True
+    ready, elapsed = await mod.wait_for_editor_ready(ctx, timeout_s=0.1)
+    assert ready is False
 
 
 @pytest.mark.asyncio
@@ -92,7 +92,7 @@ async def test_exception_during_poll_keeps_trying(monkeypatch):
         call_count += 1
         if call_count < 3:
             raise ConnectionError("Unity disconnected")
-        return {"data": {"advice": {"ready_for_tools": True, "blocking_reasons": []}}}
+        return {"success": True, "data": {"advice": {"ready_for_tools": True, "blocking_reasons": []}}}
 
     monkeypatch.setattr(mod.editor_state, "get_editor_state", fake_get_editor_state)
 

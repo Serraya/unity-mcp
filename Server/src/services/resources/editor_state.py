@@ -1,9 +1,10 @@
 import os
 import time
+from copy import deepcopy
 from typing import Any
 
 from fastmcp import Context
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from core.config import config
 from models import MCPResponse
@@ -12,6 +13,7 @@ from services.tools import get_unity_instance_from_context
 from services.state.external_changes_scanner import external_changes_scanner
 import transport.unity_transport as unity_transport
 from transport.legacy.unity_connection import async_send_command_with_retry
+from transport.legacy.port_discovery import PortDiscovery
 from transport.plugin_hub import PluginHub
 
 
@@ -175,13 +177,11 @@ async def infer_single_instance_id(ctx: Context) -> str | None:
     return None
 
 
-def _enrich_advice_and_staleness(state_v2: dict[str, Any]) -> dict[str, Any]:
+def _enrich_advice_and_staleness(
+    state_v2: dict[str, Any], *, identity_verified: bool = True,
+) -> dict[str, Any]:
     now_ms = _now_unix_ms()
-    observed = state_v2.get("observed_at_unix_ms")
-    try:
-        observed_ms = int(observed)
-    except Exception:
-        observed_ms = now_ms
+    observed_ms = state_v2["observed_at_unix_ms"]
 
     age_ms = max(0, now_ms - observed_ms)
     # Conservative default: treat >2s as stale (covers common unfocused-editor throttling).
@@ -191,8 +191,28 @@ def _enrich_advice_and_staleness(state_v2: dict[str, Any]) -> dict[str, Any]:
     tests = state_v2.get("tests") or {}
     assets = state_v2.get("assets") or {}
     refresh = (assets.get("refresh") or {}) if isinstance(assets, dict) else {}
+    editor = state_v2.get("editor") or {}
+    play_mode = editor.get("play_mode") or {}
+    phase = (state_v2.get("activity") or {}).get("phase")
+    unity = state_v2.get("unity") or {}
+
+    # Unknown is not False: these observations are required before granting readiness.
+    required_flags = (
+        compilation.get("is_compiling"), compilation.get("is_domain_reload_pending"),
+        assets.get("is_updating"), refresh.get("is_refresh_in_progress"),
+        tests.get("is_running"), play_mode.get("is_playing"),
+        play_mode.get("is_paused"), play_mode.get("is_changing"),
+    )
+    known_phases = {"idle", "compiling", "domain_reload", "running_tests",
+                    "asset_import", "playmode_transition"}
+    missing_state = (any(type(flag) is not bool for flag in required_flags)
+                     or phase not in known_phases or not unity.get("instance_id"))
 
     blocking: list[str] = []
+    if not identity_verified:
+        blocking.append("unknown_editor_identity")
+    if missing_state:
+        blocking.append("unknown_editor_state")
     if compilation.get("is_compiling") is True:
         blocking.append("compiling")
     if compilation.get("is_domain_reload_pending") is True:
@@ -201,10 +221,16 @@ def _enrich_advice_and_staleness(state_v2: dict[str, Any]) -> dict[str, Any]:
         blocking.append("running_tests")
     if refresh.get("is_refresh_in_progress") is True:
         blocking.append("asset_refresh")
+    if assets.get("is_updating") is True:
+        blocking.append("asset_import")
+    if play_mode.get("is_changing") is True:
+        blocking.append("playmode_transition")
+    if phase in known_phases and phase != "idle" and phase not in blocking:
+        blocking.append(phase)
     if is_stale:
         blocking.append("stale_status")
 
-    ready_for_tools = len(blocking) == 0
+    ready_for_tools = None if missing_state or not identity_verified or is_stale else not blocking
 
     state_v2["advice"] = {
         "ready_for_tools": ready_for_tools,
@@ -219,46 +245,77 @@ def _enrich_advice_and_staleness(state_v2: dict[str, Any]) -> dict[str, Any]:
 @mcp_for_unity_resource(
     uri="mcpforunity://editor/state",
     name="editor_state",
-    description="Canonical editor readiness snapshot. Includes advice and server-computed staleness.\n\nURI: mcpforunity://editor/state",
+    description="Canonical Editor readiness snapshot. success means the Editor query returned a valid snapshot, not that tools may run. Require advice.ready_for_tools=true; null means state/identity/freshness is unknown. Failed queries retain their failure and never authorize tools.\n\nURI: mcpforunity://editor/state",
 )
 async def get_editor_state(ctx: Context) -> MCPResponse:
     unity_instance = await get_unity_instance_from_context(ctx)
+    if not unity_instance:
+        unity_instance = await infer_single_instance_id(ctx)
 
-    response = await unity_transport.send_with_unity_instance(
-        async_send_command_with_retry,
-        unity_instance,
-        "get_editor_state",
-        {},
-    )
+    try:
+        response = await unity_transport.send_with_unity_instance(
+            async_send_command_with_retry, unity_instance, "get_editor_state", {},
+        )
+    except Exception as exc:
+        # Transport implementations may raise or return MCPResponse on disconnect.
+        return MCPResponse(success=False, error=str(exc) or type(exc).__name__, hint="retry")
 
-    # If Unity returns a structured retry hint or error, surface it directly.
-    if isinstance(response, dict) and not response.get("success", True):
-        return MCPResponse(**response)
+    if isinstance(response, MCPResponse):
+        response = response.model_dump()
+    if not isinstance(response, dict) or type(response.get("success")) is not bool:
+        return MCPResponse(success=False, error="invalid_editor_state",
+                           message="Editor query did not return a valid response; readiness is unknown.")
+    if response["success"] is False:
+        try:
+            failure = MCPResponse.model_validate(response, strict=True)
+        except ValidationError:
+            return MCPResponse(success=False, error="invalid_editor_state",
+                               message="Malformed Editor failure response; readiness is unknown.",
+                               data={"original_response": response})
+        # Preserve the error/hint and diagnostic data, but never carry a healthy
+        # readiness assertion inside a failed query (including a cached snapshot).
+        if isinstance(failure.data, dict) and "advice" in failure.data:
+            failure.data = deepcopy(failure.data)
+            failure.data["advice"] = EditorStateAdvice(
+                ready_for_tools=None, blocking_reasons=["editor_query_failed"],
+                recommended_next_action="retry_later", recommended_retry_after_ms=500,
+            ).model_dump()
+        return failure
 
-    state_v2 = response.get("data") if isinstance(
-        response, dict) and isinstance(response.get("data"), dict) else {}
-    state_v2.setdefault("schema_version", "unity-mcp/editor_state@2")
-    state_v2.setdefault("observed_at_unix_ms", _now_unix_ms())
-    state_v2.setdefault("sequence", 0)
+    try:
+        validated = EditorStateData.model_validate(response.get("data"), strict=True)
+        if (validated.schema_version != "unity-mcp/editor_state@2"
+                or validated.observed_at_unix_ms <= 0
+                or validated.observed_at_unix_ms > _now_unix_ms() + 2000
+                or validated.sequence < 0):
+            raise ValueError("Invalid Editor snapshot schema, timestamp or sequence.")
+    except (ValidationError, ValueError) as exc:
+        return MCPResponse(success=False, error="invalid_editor_state",
+                           message=f"Editor state payload failed validation: {exc}")
+    state_v2 = validated.model_dump()
 
-    # Ensure the returned snapshot is clearly associated with the targeted instance.
-    unity_section = state_v2.get("unity")
-    if not isinstance(unity_section, dict):
-        unity_section = {}
-        state_v2["unity"] = unity_section
-    current_instance_id = unity_section.get("instance_id")
-    if current_instance_id in (None, ""):
-        if unity_instance:
-            unity_section["instance_id"] = unity_instance
-        else:
-            inferred = await infer_single_instance_id(ctx)
-            if inferred:
-                unity_section["instance_id"] = inferred
+    # Routing intent cannot stand in for identity actually returned by the Editor.
+    instance_id = (state_v2.get("unity") or {}).get("instance_id")
+    # Stdio discovery advertises 8 hash digits; the shared Unity identity uses 16.
+    # The name and full advertised hash must match, not merely the display name.
+    expected_name, _, expected_hash = (unity_instance or "").rpartition("@")
+    actual_name, _, actual_hash = (instance_id or "").rpartition("@")
+    identity_verified = bool(unity_instance and instance_id and (
+        instance_id == unity_instance or (
+            expected_name == actual_name and len(expected_hash) == 8
+            and len(actual_hash) == 16 and actual_hash.startswith(expected_hash))))
+    if unity_instance and instance_id and not identity_verified:
+        return MCPResponse(success=False, error="editor_instance_mismatch",
+                           message=f"Requested {unity_instance}, but Editor reported {instance_id}; readiness is unknown.")
+    if identity_verified:
+        # Keep the transport's canonical ID usable by set_active_instance and the
+        # per-instance dirty tracker, but only after verifying the producer ID.
+        instance_id = unity_instance
+        state_v2["unity"]["instance_id"] = instance_id
 
     # External change detection (server-side): compute per instance based on project root path.
     try:
-        instance_id = unity_section.get("instance_id")
-        if isinstance(instance_id, str) and instance_id.strip():
+        if identity_verified:
             from services.resources.project_info import get_project_info
 
             proj_resp = await get_project_info(ctx)
@@ -266,44 +323,29 @@ async def get_editor_state(ctx: Context) -> MCPResponse:
                 proj_resp, "model_dump") else proj_resp
             proj_data = proj.get("data") if isinstance(proj, dict) else None
             project_root = proj_data.get("projectRoot") if isinstance(
-                proj_data, dict) else None
-            if isinstance(project_root, str) and project_root.strip():
+                proj_data, dict) and proj.get("success") is True else None
+            if config.project_path:
+                if not isinstance(project_root, str) or not project_root.strip():
+                    identity_verified = False
+                elif not PortDiscovery._matches_project_scope(project_root):
+                    return MCPResponse(success=False, error="editor_project_mismatch",
+                                       message="Editor project root does not match this server's project scope; readiness is unknown.")
+            if identity_verified and isinstance(project_root, str) and project_root.strip():
                 external_changes_scanner.set_project_root(
                     instance_id, project_root)
 
             ext = external_changes_scanner.update_and_get(instance_id)
 
             assets = state_v2.get("assets")
-            if not isinstance(assets, dict):
-                assets = {}
-                state_v2["assets"] = assets
-            assets["external_changes_dirty"] = bool(
-                ext.get("external_changes_dirty", False))
-            assets["external_changes_last_seen_unix_ms"] = ext.get(
-                "external_changes_last_seen_unix_ms")
-            assets["external_changes_dirty_since_unix_ms"] = ext.get(
-                "dirty_since_unix_ms")
-            assets["external_changes_last_cleared_unix_ms"] = ext.get(
-                "last_cleared_unix_ms")
+            if isinstance(assets, dict):
+                assets["external_changes_dirty"] = bool(ext.get("external_changes_dirty", False))
+                assets["external_changes_last_seen_unix_ms"] = ext.get("external_changes_last_seen_unix_ms")
+                assets["external_changes_dirty_since_unix_ms"] = ext.get("dirty_since_unix_ms")
+                assets["external_changes_last_cleared_unix_ms"] = ext.get("last_cleared_unix_ms")
     except Exception:
-        pass
+        # A failed scoped identity query must not leave a guessed identity ready.
+        if config.project_path:
+            identity_verified = False
 
-    state_v2 = _enrich_advice_and_staleness(state_v2)
-
-    try:
-        if hasattr(EditorStateData, "model_validate"):
-            validated = EditorStateData.model_validate(state_v2)
-        else:
-            validated = EditorStateData.parse_obj(
-                state_v2)  # type: ignore[attr-defined]
-        data = validated.model_dump() if hasattr(
-            validated, "model_dump") else validated.dict()
-    except Exception as e:
-        return MCPResponse(
-            success=False,
-            error="invalid_editor_state",
-            message=f"Editor state payload failed validation: {e}",
-            data={"raw": state_v2},
-        )
-
-    return MCPResponse(success=True, message="Retrieved editor state.", data=data)
+    state_v2 = _enrich_advice_and_staleness(state_v2, identity_verified=identity_verified)
+    return MCPResponse(success=True, message="Retrieved editor state.", data=state_v2)

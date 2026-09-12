@@ -426,7 +426,7 @@ namespace MCPForUnity.Editor.Services
                 Sequence = _sequence,
                 Unity = new EditorStateUnity
                 {
-                    InstanceId = null,
+                    InstanceId = $"{ProjectIdentityUtility.GetProjectName()}@{ProjectIdentityUtility.GetProjectHash()}",
                     UnityVersion = Application.unityVersion,
                     ProjectId = null,
                     Platform = Application.platform.ToString(),
@@ -511,27 +511,11 @@ namespace MCPForUnity.Editor.Services
         {
             lock (LockObj)
             {
-                // Defensive: if something went wrong early, rebuild once.
-                if (_cached == null)
-                {
-                    _cached = BuildSnapshot("rebuild");
-                }
-
-                // Always return a fresh clone to prevent mutation bugs.
-                // The main GC optimization comes from state-change detection (OnUpdate)
-                // which prevents unnecessary _cached rebuilds, not from caching the clone.
-                var clone = (JObject)_cached.DeepClone();
-
-                // When Unity is backgrounded, OnUpdate is throttled and the
-                // cached timestamp grows stale even though the data is current.
-                // Re-stamp only in that case so the server-side staleness check
-                // still fires for genuinely unresponsive editors when focused.
-                if (!InternalEditorUtility.isApplicationActive)
-                {
-                    clone["observed_at_unix_ms"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                }
-
-                return clone;
+                // CommandRegistry calls this on the Editor main thread. Re-observe
+                // state on explicit reads; a recent response is not a recent observation.
+                // Keep OnUpdate's change-detection optimization for unsolicited ticks.
+                _cached = BuildSnapshot("read");
+                return (JObject)_cached.DeepClone();
             }
         }
 
@@ -564,5 +548,4 @@ namespace MCPForUnity.Editor.Services
         }
     }
 }
-
 
