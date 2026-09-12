@@ -142,6 +142,9 @@ Countable limits that override "I think this fix is right". They restate the gat
 
 ## Task Framing
 
+Record the framing below in the working plan. User updates lead with the result
+and next action; expose internal classifications only for a decision.
+
 Before implementing a non-trivial change, restate the request as a verifiable goal with an observable:
 
 - "Fix custom tools" -> "Trace C# discovery through Python/FastMCP registration, identify where schema is lost, then verify a direct tool schema includes expected parameters."

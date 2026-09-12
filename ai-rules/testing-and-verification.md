@@ -4,6 +4,14 @@ Load this when work requires tests, compile checks, runtime diagnostics, MCP cli
 
 ## Automated Test Execution
 
+A regression test exercises the production owner and transition relevant to
+its claim. Supply valid initial state and controlled external inputs; let
+production code compute the outcome. A helper test proves its helper boundary,
+not an unexecuted binding or lifecycle. Where safely practical, show failure
+before the correction and success after it; otherwise state the limitation.
+Report affected consumers covered and material gaps. Use existing infrastructure
+and the execution cadence below.
+
 - During implementation, run affected test cases selected from the changed
   behavior and affected consumers, including shared-contract paths. Use explicit
   case filters; widen to a small fixture when filtering is unavailable or shared
@@ -27,6 +35,17 @@ Load this when work requires tests, compile checks, runtime diagnostics, MCP cli
 
 ## Python Verification
 
+Close each named claim when its complete required evidence route passes.
+Static or deterministic checks can close claims they fully exercise; rendered,
+native-input, lifecycle, build, deployment and design claims retain their
+corresponding predicates. Report remaining claims separately; do not request a
+human check for an unrelated layer.
+
+A failure in the production owner under valid inputs, with an established
+ordinary entry/binding path, can prove a code defect using controlled external
+responses. It does not by itself prove deployment, incidence, device behavior
+or the cause of an earlier report. State that boundary.
+
 - Run Python tests from `Server/`.
 - Use `uv run --extra dev pytest ...` for tests that need dev dependencies.
 - Target tests to the changed layer first:
@@ -41,7 +60,12 @@ Load this when work requires tests, compile checks, runtime diagnostics, MCP cli
 - Unity compile evidence should come from a Unity project importing the package.
 - Prefer an already-running Editor and Console/MCP evidence when available.
 - Do not shell-launch Unity for routine compile checks unless explicitly requested.
-- If package pins still point at an old commit, say that Unity compile/direct MCP verification for local package edits is not yet possible.
+- Verify the code actually loaded, not the pin alone: record the imported Unity
+  package/assembly and the running Python server source separately, including
+  working-tree hashes for uncommitted edits. An authorized local deployment can
+  verify those bytes without changing a pin; it does not qualify the published
+  package or another client process. Without loaded-code evidence, report the
+  specific unverified layer. This rule grants no deployment or restart authority.
 
 ## MCP Client Verification
 

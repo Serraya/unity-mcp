@@ -6,6 +6,13 @@ Use this workflow for any task that changes behavior, architecture, transport, s
 
 ## Requested Changes And Simplification
 
+Continue within the approved objective, authority, write scope, protected
+behavior, side effects and stop conditions. Diagnosis to an already-authorized
+repair, or approved plan to implementation, does not require another approval.
+Ask only for an unresolved decision or changed boundary. Diagnostic-only scope
+stays diagnostic-only; product, backend, live-data and deployment authority do
+not expand implicitly.
+
 An explicit behavior-change request supplies the target; it does not require
 proving the old behavior defective. For a bounded removal or simplification,
 inspect the owner and actual dependencies, remove obsolete support within scope,
@@ -145,3 +152,17 @@ A no-effect result is not automatic permission to revert. If the edit is a valid
 ## Ambiguity Rule
 
 If multiple valid interpretations remain after reading the code, ask for the next decision or evidence. Do not silently pick a policy for API compatibility, transport scope, release process, or consumer app pinning.
+
+## Source And Decision Records
+
+Preserve original feedback wording, author and recoverable source reference
+before triage or migration. Attribute interpretations and later requests
+separately. Retain consequential approvals, holds, rejected attempts and recorded
+reasons with date, scope and supersession; unknown reasons stay unknown. Proposed
+approval text is not a user decision.
+
+Each current claim/decision has one owning record; routers link there and
+handoffs identify their snapshot date. Before removing history, verify its
+durable destination, including never-committed work. Update status without
+rewriting original requests or decisions. This requires neither a conversation
+archive nor a new register for trivial work.
