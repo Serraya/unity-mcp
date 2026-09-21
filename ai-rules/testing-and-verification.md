@@ -61,9 +61,11 @@ or the cause of an earlier report. State that boundary.
 - Prefer an already-running Editor and Console/MCP evidence when available.
 - Do not shell-launch Unity for routine compile checks unless explicitly requested.
 - Verify the code actually loaded, not the pin alone: record the imported Unity
-  package/assembly and the running Python server source separately, including
-  working-tree hashes for uncommitted edits. An authorized local deployment can
-  verify those bytes without changing a pin; it does not qualify the published
+  package/assembly and the running Python server source separately, using their
+  loaded paths, revision and relevant dirty diff or build/run record. Use a hash
+  only if exact loaded-byte identity remains material and unresolved. An
+  authorized local deployment can establish loaded-code identity without
+  changing a pin; it does not qualify the published
   package or another client process. Without loaded-code evidence, report the
   specific unverified layer. This rule grants no deployment or restart authority.
 

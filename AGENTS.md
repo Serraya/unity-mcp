@@ -123,10 +123,17 @@ Countable limits that override "I think this fix is right". They restate the gat
 - Every acceptance predicate belongs to a named claim, evidence layer, artifact
   stage, causal path, and decision. Do not inherit it from an earlier or sibling
   task after that claim closes without proving relevance to the current claim.
-- A path, stage, timestamp, or hash proves artifact identity and provenance; it
-  does not impose cross-artifact equality. Require byte identity only when exact
-  bytes are the observable or a proven causal input. Otherwise compare the
-  semantic, behavioral, or stage-appropriate output.
+- Use existing Git revision/diff, build/run ID, artifact location and relevant
+  stage to identify evidence. Do not routinely hash documents, source trees or
+  untouched files, create checksum inventories, or demand manual hash receipts.
+- Require a hash only when exact identity, integrity or determinism changes the
+  current decision; state that reason briefly in the existing task context.
+  Reuse a sufficient existing manifest/digest. A hash alone proves neither
+  origin nor correctness. Compare semantics or behavior otherwise; a hash
+  difference alone does not justify another build, deploy or user repro.
+- Preserve hashes required by publication/cache addressing, dependency or
+  transfer integrity, concurrency checks, and replay/approval contracts. Those
+  mechanisms do not create a blanket manual evidence requirement.
 - Before repeated-build or A/B work, name the intended variable, measured
   boundary, must-match controls, allowed differences, and invalidators. Before
   asking a person for a build, deploy, upload, or repro, state what decision
