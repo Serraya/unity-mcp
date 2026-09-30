@@ -24,6 +24,16 @@ Load this when work touches stdio, HTTP, WebSocket, legacy Unity connection, ins
 - HTTP/WebSocket registration receives `register_tools` messages from Unity.
 - Notify MCP clients of changed tool lists only after the server-side registration state is updated.
 
+## Auxiliary Pipeline Discovery
+
+Keep fork MCP workflows on their existing owner. If a task uses an already
+configured Pipeline connection, follow the shared
+[tag-first discovery procedure](../../personal-knowledge-base/wiki/unity/patterns/unity-cli-and-third-party-mcp-coexistence.md#pipeline-command-discovery):
+tag index when useful, compact tag results, selected full schemas; known commands
+need no redundant discovery. Preserve exact-project/authentication, paging and
+mutation boundaries. The dated CLI limitation is in that owner; this does not
+install Pipeline, add a wrapper, or authorize eval/code reload in test projects.
+
 ## Diagnostics
 
 - Keep process presence, transport reachability, current state and operation permission separate. `unity_status.success` means diagnostic discovery succeeded; require a successful nested Editor query and fresh, identity-verified `advice.ready_for_tools=true` before proceeding. Missing/null, malformed, stale or wrong-project state cannot authorize tools. Preserve failures; do not promote cached healthy state to current.
