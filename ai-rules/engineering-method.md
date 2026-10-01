@@ -155,6 +155,12 @@ If multiple valid interpretations remain after reading the code, ask for the nex
 
 ## Source And Decision Records
 
+At handoff or readiness, reconcile each original requirement with the observed
+result, unmet items and accepted deviations. Carry approval scope and open
+acceptance downstream; a candidate is not automatic product authority. Use
+[requirement reconciliation](../../personal-knowledge-base/wiki/agent-workflows/patterns/result-report-integration.md#requirements-and-downstream-authority)
+in the existing task record, without a new register.
+
 Preserve original feedback wording, author and recoverable source reference
 before triage or migration. Attribute interpretations and later requests
 separately. Retain consequential approvals, holds, rejected attempts and recorded

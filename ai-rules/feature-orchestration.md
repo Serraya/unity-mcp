@@ -2,6 +2,17 @@
 
 Load this only when splitting fork work into delegated worker tasks or integrating their results. A worker implementing one bounded brief must not load this file.
 
+## Coordinator and feature ownership
+
+In a multi-feature program, keep routine fixes and feedback with the feature
+owner; the coordinator preserves requests, dependencies and acceptance. A bounded
+integration correction needs explicit ownership and rechecking, with no concurrent
+writer. Direct single-owner work remains valid. Use
+[the role and session boundary](../../personal-knowledge-base/schema/project-agent-base/optional/collaboration.md#coordinator-and-feature-ownership):
+reuse persistent feature chats for continuing work, bounded subagents for isolated
+questions, and create/message chats only under the applicable user authorization.
+Selected model handoffs retain their route; no silent substitution.
+
 ## Delegation Briefs And Persistent Packets
 
 Every delegated task needs a bounded brief. Persist that brief as a task packet
