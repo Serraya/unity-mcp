@@ -30,8 +30,6 @@ namespace MCPForUnity.Editor.Tools
         private static FieldInfo _messageField;
         private static FieldInfo _fileField;
         private static FieldInfo _lineField;
-        private const int DefaultMaxStackFrames = 12;
-        private const int DefaultMaxStackChars = 12000;
 
         // Optional reflection members: used to neutralize the Console window's own filters
         // while reading. Absent members degrade to the previous (filter-inheriting) behavior.
@@ -194,16 +192,6 @@ namespace MCPForUnity.Editor.Tools
                     string filterText = p.Get("filterText");
                     string format = p.Get("format", "plain").ToLower();
                     bool includeStacktrace = p.GetBool("includeStacktrace", false);
-                    int maxStackFrames = Mathf.Clamp(
-                        p.GetInt("maxStackFrames") ?? DefaultMaxStackFrames,
-                        1,
-                        200
-                    );
-                    int maxStackChars = Mathf.Clamp(
-                        p.GetInt("maxStackChars") ?? DefaultMaxStackChars,
-                        200,
-                        100000
-                    );
 
                     if (types.Contains("all"))
                     {
@@ -217,9 +205,7 @@ namespace MCPForUnity.Editor.Tools
                         cursor,
                         filterText,
                         format,
-                        includeStacktrace,
-                        maxStackFrames,
-                        maxStackChars
+                        includeStacktrace
                     );
                 }
                 else
@@ -355,8 +341,6 @@ namespace MCPForUnity.Editor.Tools
         /// <param name="filterText">Optional text filter (case-insensitive substring match).</param>
         /// <param name="format">Output format: "plain", "detailed", or "json".</param>
         /// <param name="includeStacktrace">Whether to include stack traces in the output.</param>
-        /// <param name="maxStackFrames">Maximum stack frames to include when stack traces are requested.</param>
-        /// <param name="maxStackChars">Maximum stack trace characters to include when stack traces are requested.</param>
         /// <returns>
         /// A success response with entries, or an error response. In paging mode the payload
         /// reports cursor, pageSize, nextCursor, truncated, and 'total' — the exact number of
@@ -369,9 +353,7 @@ namespace MCPForUnity.Editor.Tools
             int? cursor,
             string filterText,
             string format,
-            bool includeStacktrace,
-            int maxStackFrames,
-            int maxStackChars
+            bool includeStacktrace
         )
         {
             List<object> formattedEntries = new List<object>();
@@ -381,7 +363,7 @@ namespace MCPForUnity.Editor.Tools
             // pageSize defaults to 50 when omitted; count is the overall non-paging limit only
             int resolvedPageSize = Mathf.Clamp(pageSize ?? 50, 1, 500);
             int resolvedCursor = Mathf.Max(0, cursor ?? 0);
-            int pageEndExclusive = resolvedCursor + resolvedPageSize;
+            long pageEndExclusive = (long)resolvedCursor + resolvedPageSize;
 
             // LogEntries filtering state is global and shared with the Console window, so a
             // severity toggle switched off or a leftover search query in the toolbar silently
@@ -434,14 +416,7 @@ namespace MCPForUnity.Editor.Tools
                     // (Calibration removed)
 
                     // --- Filtering ---
-                    // Explicit Debug.Log entries often contain app stack frames with "Exception" in type names.
-                    // Keep them as logs instead of promoting them to exceptions from stack-trace text.
-                    bool isExplicitDebug = IsExplicitDebugLog(message);
-                    LogType unityType = isExplicitDebug ? LogType.Log : InferTypeFromMessage(message);
-                    if (!isExplicitDebug && unityType == LogType.Log)
-                    {
-                        unityType = GetLogTypeFromMode(mode);
-                    }
+                    LogType unityType = GetLogTypeFromMode(mode);
 
                     bool want;
                     // Treat Exception/Assert as errors for filtering convenience
@@ -484,9 +459,7 @@ namespace MCPForUnity.Editor.Tools
                                 message,
                                 file,
                                 line,
-                                includeStacktrace,
-                                maxStackFrames,
-                                maxStackChars
+                                includeStacktrace
                             ));
                             retrievedCount++;
                         }
@@ -499,9 +472,7 @@ namespace MCPForUnity.Editor.Tools
                         message,
                         file,
                         line,
-                        includeStacktrace,
-                        maxStackFrames,
-                        maxStackChars
+                        includeStacktrace
                     ));
                     retrievedCount++;
 
@@ -582,15 +553,12 @@ namespace MCPForUnity.Editor.Tools
             string message,
             string file,
             int line,
-            bool includeStacktrace,
-            int maxStackFrames,
-            int maxStackChars
+            bool includeStacktrace
         )
         {
             var (messageOnly, stackTrace) = SplitMessageAndStackTrace(message);
-            stackTrace = includeStacktrace
-                ? LimitStackTrace(stackTrace, maxStackFrames, maxStackChars)
-                : null;
+            if (!includeStacktrace)
+                stackTrace = null;
 
             switch (format)
             {
@@ -645,47 +613,6 @@ namespace MCPForUnity.Editor.Tools
         }
 
         // (Calibration helpers removed)
-
-        /// <summary>
-        /// Classifies severity using message/stacktrace content. Works across Unity versions.
-        /// </summary>
-        private static LogType InferTypeFromMessage(string fullMessage)
-        {
-            if (string.IsNullOrEmpty(fullMessage)) return LogType.Log;
-
-            // Fast path: look for explicit Debug API names in the appended stack trace
-            // e.g., "UnityEngine.Debug:LogError (object)" or "LogWarning"
-            if (fullMessage.IndexOf("LogError", StringComparison.OrdinalIgnoreCase) >= 0)
-                return LogType.Error;
-            if (fullMessage.IndexOf("LogWarning", StringComparison.OrdinalIgnoreCase) >= 0)
-                return LogType.Warning;
-
-            // Compiler diagnostics (C#): "warning CSxxxx" / "error CSxxxx"
-            if (fullMessage.IndexOf(" warning CS", StringComparison.OrdinalIgnoreCase) >= 0
-                || fullMessage.IndexOf(": warning CS", StringComparison.OrdinalIgnoreCase) >= 0)
-                return LogType.Warning;
-            if (fullMessage.IndexOf(" error CS", StringComparison.OrdinalIgnoreCase) >= 0
-                || fullMessage.IndexOf(": error CS", StringComparison.OrdinalIgnoreCase) >= 0)
-                return LogType.Error;
-
-            // Exceptions (avoid misclassifying compiler diagnostics)
-            if (fullMessage.IndexOf("Exception", StringComparison.OrdinalIgnoreCase) >= 0)
-                return LogType.Exception;
-
-            // Unity assertions
-            if (fullMessage.IndexOf("Assertion", StringComparison.OrdinalIgnoreCase) >= 0)
-                return LogType.Assert;
-
-            return LogType.Log;
-        }
-
-        private static bool IsExplicitDebugLog(string fullMessage)
-        {
-            if (string.IsNullOrEmpty(fullMessage)) return false;
-            if (fullMessage.IndexOf("Debug:Log (", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            if (fullMessage.IndexOf("UnityEngine.Debug:Log (", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            return false;
-        }
 
         private static JObject BuildStructuredEntry(
             LogType unityType,
@@ -768,40 +695,6 @@ namespace MCPForUnity.Editor.Tools
             }
 
             return -1;
-        }
-
-        private static string LimitStackTrace(
-            string stackTrace,
-            int maxStackFrames,
-            int maxStackChars
-        )
-        {
-            if (string.IsNullOrEmpty(stackTrace))
-            {
-                return null;
-            }
-
-            string[] lines = stackTrace.Split(
-                new[] { '\r', '\n' },
-                StringSplitOptions.RemoveEmptyEntries
-            );
-            string limited = stackTrace;
-
-            if (lines.Length > maxStackFrames)
-            {
-                int omittedFrames = lines.Length - maxStackFrames;
-                limited = string.Join("\n", lines.Take(maxStackFrames))
-                    + $"\n... truncated {omittedFrames} stack frames";
-            }
-
-            if (limited.Length > maxStackChars)
-            {
-                int omittedChars = limited.Length - maxStackChars;
-                limited = limited.Substring(0, maxStackChars)
-                    + $"\n... truncated {omittedChars} stack trace characters";
-            }
-
-            return limited;
         }
 
         // Native frames Unity appends when Stack Trace Logging is set to Full, e.g.

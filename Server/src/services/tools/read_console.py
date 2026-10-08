@@ -50,11 +50,7 @@ async def read_console(
     format: Annotated[Literal['plain', 'detailed',
                               'json'], "Output format"] | None = None,
     include_stacktrace: Annotated[bool | str,
-                                  "Include stack traces in output (accepts true/false or 'true'/'false')"] | None = None,
-    max_stack_frames: Annotated[int | str,
-                                "Maximum stack frames to include when include_stacktrace is true. Unity defaults apply when omitted."] | None = None,
-    max_stack_chars: Annotated[int | str,
-                               "Maximum stack trace characters to include when include_stacktrace is true. Unity defaults apply when omitted."] | None = None,
+                                  "Include complete, untruncated stack traces with format='detailed' or 'json' (accepts true/false or 'true'/'false')."] | None = None,
 ) -> dict[str, Any]:
     # Get active instance from session state
     # Removed session_state import
@@ -103,8 +99,6 @@ async def read_console(
     include_stacktrace = coerce_bool(include_stacktrace, default=False)
     coerced_page_size = coerce_int(page_size, default=None)
     coerced_cursor = coerce_int(cursor, default=None)
-    coerced_max_stack_frames = coerce_int(max_stack_frames, default=None)
-    coerced_max_stack_chars = coerce_int(max_stack_chars, default=None)
 
     # Normalize action if it's a string
     if isinstance(action, str):
@@ -132,9 +126,7 @@ async def read_console(
         "pageSize": coerced_page_size,
         "cursor": coerced_cursor,
         "format": format.lower() if isinstance(format, str) else format,
-        "includeStacktrace": include_stacktrace,
-        "maxStackFrames": coerced_max_stack_frames,
-        "maxStackChars": coerced_max_stack_chars
+        "includeStacktrace": include_stacktrace
     }
 
     # Remove None values unless it's 'count' (as None might mean 'all')

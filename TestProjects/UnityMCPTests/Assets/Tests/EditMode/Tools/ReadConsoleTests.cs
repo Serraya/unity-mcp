@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 using MCPForUnity.Editor.Tools;
 using static MCPForUnityTests.Editor.TestUtilities;
 
@@ -115,6 +116,142 @@ namespace MCPForUnityTests.Editor.Tools
             StringAssert.DoesNotContain("UnityEngine.Debug", message);
         }
 
+        [TestCase(LogType.Error, StackTraceLogType.None)]
+        [TestCase(LogType.Error, StackTraceLogType.ScriptOnly)]
+        [TestCase(LogType.Warning, StackTraceLogType.None)]
+        [TestCase(LogType.Warning, StackTraceLogType.ScriptOnly)]
+        public void HandleCommand_Get_QuotedDebugLog_PreservesProducerSeverity(
+            LogType logType,
+            StackTraceLogType stackTraceLogType
+        )
+        {
+            string message = $"Severity probe {Guid.NewGuid()}: quoted UnityEngine.Debug:Log (object)";
+            StackTraceLogType originalStackTraceLogType = Application.GetStackTraceLogType(logType);
+
+            try
+            {
+                Application.SetStackTraceLogType(logType, stackTraceLogType);
+                LogAssert.Expect(logType, message);
+                if (logType == LogType.Error)
+                    Debug.LogError(message);
+                else
+                    Debug.LogWarning(message);
+
+                var result = ToJObject(ReadConsole.HandleCommand(new JObject
+                {
+                    ["action"] = "get",
+                    ["types"] = new JArray { logType.ToString().ToLowerInvariant() },
+                    ["format"] = "detailed",
+                    ["filterText"] = message,
+                    ["count"] = 1,
+                }));
+
+                Assert.IsTrue(result.Value<bool>("success"), result.ToString());
+                var entries = result["data"] as JArray;
+                Assert.IsNotNull(entries);
+                Assert.AreEqual(1, entries.Count);
+                Assert.AreEqual(logType.ToString(), entries[0].Value<string>("type"));
+                Assert.AreEqual(message, entries[0].Value<string>("message"));
+            }
+            finally
+            {
+                Application.SetStackTraceLogType(logType, originalStackTraceLogType);
+            }
+        }
+
+        [TestCase(StackTraceLogType.None)]
+        [TestCase(StackTraceLogType.ScriptOnly)]
+        public void HandleCommand_Get_SeverityKeywords_RespectModesAndDefaultFilter(
+            StackTraceLogType stackTraceLogType
+        )
+        {
+            string prefix = $"Keyword severity probe {Guid.NewGuid()}";
+            string errorMessage = $"{prefix} actual error";
+            string warningMessage = $"{prefix} actual warning";
+            StackTraceLogType originalLog = Application.GetStackTraceLogType(LogType.Log);
+            StackTraceLogType originalError = Application.GetStackTraceLogType(LogType.Error);
+            StackTraceLogType originalWarning = Application.GetStackTraceLogType(LogType.Warning);
+
+            try
+            {
+                Application.SetStackTraceLogType(LogType.Log, stackTraceLogType);
+                Application.SetStackTraceLogType(LogType.Error, stackTraceLogType);
+                Application.SetStackTraceLogType(LogType.Warning, stackTraceLogType);
+
+                foreach (string keyword in new[] { "LogError", "LogWarning", "Exception", "Assertion" })
+                    Debug.Log($"{prefix} harmless {keyword}");
+                LogAssert.Expect(LogType.Error, errorMessage);
+                Debug.LogError(errorMessage);
+                LogAssert.Expect(LogType.Warning, warningMessage);
+                Debug.LogWarning(warningMessage);
+
+                var parameters = new JObject
+                {
+                    ["action"] = "get",
+                    ["types"] = new JArray { "all" },
+                    ["format"] = "detailed",
+                    ["filterText"] = prefix,
+                    ["count"] = 6,
+                };
+                var allResult = ToJObject(ReadConsole.HandleCommand(parameters));
+                Assert.IsTrue(allResult.Value<bool>("success"), allResult.ToString());
+                var allEntries = allResult["data"] as JArray;
+                Assert.IsNotNull(allEntries);
+                Assert.AreEqual(6, allEntries.Count);
+                foreach (var entry in allEntries)
+                {
+                    string body = entry.Value<string>("message");
+                    string expectedType = body == errorMessage ? "Error"
+                        : body == warningMessage ? "Warning" : "Log";
+                    Assert.AreEqual(expectedType, entry.Value<string>("type"), body);
+                }
+
+                parameters.Remove("types");
+                var defaultResult = ToJObject(ReadConsole.HandleCommand(parameters));
+                Assert.IsTrue(defaultResult.Value<bool>("success"), defaultResult.ToString());
+                var defaultEntries = defaultResult["data"] as JArray;
+                Assert.IsNotNull(defaultEntries);
+                Assert.AreEqual(2, defaultEntries.Count);
+                Assert.IsTrue(ContainsMessage(defaultEntries, errorMessage));
+                Assert.IsTrue(ContainsMessage(defaultEntries, warningMessage));
+            }
+            finally
+            {
+                Application.SetStackTraceLogType(LogType.Log, originalLog);
+                Application.SetStackTraceLogType(LogType.Error, originalError);
+                Application.SetStackTraceLogType(LogType.Warning, originalWarning);
+            }
+        }
+
+        [TestCase(10)]
+        [TestCase(int.MaxValue)]
+        public void HandleCommand_Get_Paging_BeyondEnd_PreservesExactTotal(int cursor)
+        {
+            string prefix = $"Paging beyond end probe {Guid.NewGuid()}";
+            for (int i = 0; i < 3; i++)
+                Debug.Log($"{prefix} entry {i}");
+
+            var result = ToJObject(ReadConsole.HandleCommand(new JObject
+            {
+                ["action"] = "get",
+                ["types"] = new JArray { "log" },
+                ["format"] = "plain",
+                ["filterText"] = prefix,
+                ["pageSize"] = 1,
+                ["cursor"] = cursor,
+            }));
+
+            Assert.IsTrue(result.Value<bool>("success"), result.ToString());
+            var data = result["data"] as JObject;
+            Assert.IsNotNull(data);
+            Assert.AreEqual(0, ((JArray)data["items"]).Count);
+            Assert.AreEqual(3, data.Value<int>("total"));
+            Assert.AreEqual(cursor, data.Value<int>("cursor"));
+            Assert.AreEqual(1, data.Value<int>("pageSize"));
+            Assert.IsFalse(data.Value<bool>("truncated"));
+            Assert.IsNull(data.Value<string>("nextCursor"));
+        }
+
         [Test]
         public void HandleCommand_Get_Paging_TotalIsExactAcrossAllPages()
         {
@@ -202,6 +339,55 @@ namespace MCPForUnityTests.Editor.Tools
 
             Assert.AreEqual(message, body);
             Assert.IsNull(stackTrace);
+        }
+
+        [TestCase("detailed")]
+        [TestCase("json")]
+        public void HandleCommand_Get_RequestedStack_PreservesAllDetails(string format)
+        {
+            string stack = CreateLongNativeAndManagedStack();
+
+            string returnedStack = ReadLoggedStack(stack, format);
+
+            StringAssert.StartsWith(stack, returnedStack);
+            StringAssert.Contains("(at Assets/Scripts/CloudSaveManager.cs:12)", returnedStack);
+            StringAssert.DoesNotContain("... truncated", returnedStack);
+        }
+
+        private static string CreateLongNativeAndManagedStack()
+        {
+            // Exceed both former defaults before the application caller appears.
+            var frames = new string[21];
+            for (int i = 0; i < 20; i++)
+                frames[i] = $"0x00007ffd387f224e (Unity) NativeFrame{i}";
+            frames[19] += new string('x', 13000);
+            frames[20] = "CloudSaveManager:Start () (at Assets/Scripts/CloudSaveManager.cs:12)";
+            return string.Join("\n", frames);
+        }
+
+        private static string ReadLoggedStack(string stack, string format)
+        {
+            string message = $"Stack preservation probe {Guid.NewGuid()}";
+            Debug.Log(message + "\n" + stack);
+            var parameters = new JObject
+            {
+                ["action"] = "get",
+                ["types"] = new JArray { "log" },
+                ["format"] = format,
+                ["includeStacktrace"] = true,
+                ["filterText"] = message,
+                ["count"] = 1,
+            };
+
+            var result = ToJObject(ReadConsole.HandleCommand(parameters));
+            Assert.IsTrue(result.Value<bool>("success"), result.ToString());
+            var entries = result["data"] as JArray;
+            Assert.IsNotNull(entries);
+            Assert.AreEqual(1, entries.Count);
+            Assert.AreEqual(message, entries[0].Value<string>("message"));
+            string returnedStack = entries[0].Value<string>("stackTrace");
+            Assert.IsNotNull(returnedStack);
+            return returnedStack;
         }
 
         // ──────────────────── LogEntry.mode severity mapping (issue #1348) ────────────────────

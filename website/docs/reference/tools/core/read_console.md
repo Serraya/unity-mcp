@@ -25,9 +25,7 @@ Gets messages from or clears the Unity Editor console. Defaults to 10 most recen
 | `page_size` | `int \| str \| None` | — | Page size for paginated console reads. Defaults to 50 when omitted. |
 | `cursor` | `int \| str \| None` | — | Opaque cursor for paging (0-based offset). Defaults to 0. |
 | `format` | `Literal['plain', 'detailed', 'json'] \| None` | — | Output format |
-| `include_stacktrace` | `bool \| str \| None` | — | Include stack traces in output (accepts true/false or 'true'/'false') |
-| `max_stack_frames` | `int \| str \| None` | — | Maximum stack frames to include when include_stacktrace is true. Unity defaults apply when omitted. |
-| `max_stack_chars` | `int \| str \| None` | — | Maximum stack trace characters to include when include_stacktrace is true. Unity defaults apply when omitted. |
+| `include_stacktrace` | `bool \| str \| None` | — | Include complete, untruncated stack traces with format='detailed' or 'json' (accepts true/false or 'true'/'false'). |
 
 ## Returns
 
