@@ -33,6 +33,7 @@ uv pip install -e .
 | `-t, --timeout` | Timeout seconds | 30 | `UNITY_MCP_TIMEOUT` |
 | `-f, --format` | Output: text, json, table | text | `UNITY_MCP_FORMAT` |
 | `-i, --instance` | Target Unity instance | - | `UNITY_MCP_INSTANCE` |
+| `-v, --verbose` | Print each command sent to Unity and its raw response to stderr | off | - |
 
 ### Core CLI Commands
 
@@ -44,7 +45,7 @@ unity-mcp status                           # Check server + Unity connection
 **Instance Management**
 ```bash
 unity-mcp instance list                    # List connected Unity instances
-unity-mcp instance set "ProjectName@abc"   # Set active instance
+unity-mcp --instance "ProjectName@abc" editor play   # Target one instance for one call
 unity-mcp instance current                 # Show current instance
 ```
 
@@ -71,7 +72,7 @@ unity-mcp editor custom-tool "capture_screenshot" --params '{"filename":"shot_01
 
 **Scene Operations**
 ```bash
-unity-mcp scene hierarchy [--limit 20] [--depth 3]
+unity-mcp scene hierarchy [--limit 20] [--max-depth 3]
 unity-mcp scene active
 unity-mcp scene load "Assets/Scenes/Main.unity"
 unity-mcp scene save
@@ -114,7 +115,7 @@ unity-mcp code search "pattern" "path/to/file.cs" [--max-results 20]
 
 **Asset Operations**
 ```bash
-unity-mcp asset search --pattern "*.mat" --path "Assets/Materials"
+unity-mcp asset search "*.mat" --path "Assets/Materials"
 unity-mcp asset info "Assets/Materials/File.mat"
 unity-mcp asset mkdir "Assets/NewFolder"
 unity-mcp asset move "Old/Path" "New/Path"
@@ -125,7 +126,7 @@ unity-mcp asset move "Old/Path" "New/Path"
 unity-mcp prefab open "Assets/Prefabs/File.prefab"
 unity-mcp prefab save
 unity-mcp prefab close
-unity-mcp prefab create "GameObject" --path "Assets/Prefabs"
+unity-mcp prefab create "GameObject" "Assets/Prefabs/File.prefab"
 unity-mcp prefab modify "Assets/Prefabs/File.prefab" --delete-child Child1
 unity-mcp prefab modify "Assets/Prefabs/File.prefab" --target Weapon --position "0,1,2"
 unity-mcp prefab modify "Assets/Prefabs/File.prefab" --set-property "Rigidbody.mass=5"
@@ -224,7 +225,7 @@ unity-mcp texture delete "Assets/Textures/Old.png" [--force]
 ```bash
 unity-mcp sprite info "Assets/Sprites/Hero.png"                      # Size, import settings, slices
 unity-mcp sprite slice "Assets/Sprites/Hero.png" --cols 6 --rows 4   # Or --frame-width/--frame-height
-unity-mcp sprite full-setup "Assets/Sprites/Coin.png" --cols 8 --animation-name spin
+unity-mcp sprite full-setup "Assets/Sprites/Coin.png" --cols 8 --clips '[{"name":"spin","start_frame":0,"end_frame":7,"loop":true}]'
 unity-mcp sprite full-setup "Assets/Sprites/Hero.png" --cols 6 --rows 4 --clips '[{"name":"idle","start_frame":0,"end_frame":5},{"name":"walk","start_frame":6,"end_frame":11}]' --controller-path "Assets/Animators/Hero.controller"
 ```
 
