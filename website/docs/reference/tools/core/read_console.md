@@ -34,6 +34,53 @@ A `dict` containing the Unity response. The exact shape depends on the action.
 ## Examples
 
 <!-- examples:start -->
-*No examples yet. Add usage examples here — they will be preserved across regenerations.*
+### Inspect a relevant causal stack
+
+```json
+{
+  "action": "get",
+  "types": ["error", "warning"],
+  "count": "10",
+  "filter_text": "ExampleComponent",
+  "format": "detailed",
+  "include_stacktrace": true
+}
+```
+
+Replace the illustrative filter with the actual diagnostic scope. `"json"` also
+returns structured entries with stacks; `"plain"` does not. The stack-limit
+parameters `max_stack_frames` and `max_stack_chars` have been removed. Complete
+returned stacks retain what Unity captured, not frames absent from that capture.
+
+### Read all message types with pagination
+
+```json
+{
+  "action": "get",
+  "types": ["all"],
+  "page_size": 50,
+  "cursor": 0,
+  "format": "detailed",
+  "include_stacktrace": false
+}
+```
+
+On success, inspect `data.items` and pass `data.nextCursor` as the next request's
+`cursor`, retaining the same query, until `nextCursor` is null. This example has
+no text filter and includes ordinary logs/breadcrumbs. `count` is ignored in
+paging mode; `count="all"` and `count="*"` are not full-fetch recipes.
+
+An omitted query is capped at ten errors/warnings, not a complete Console read;
+do not rely on an unverified newest-first ordering. `total` describes matches
+for that read, not a frozen snapshot across requests. If the Console buffer
+changes between pages, qualify cross-page completeness. A targeted absence
+claim covers only the selected types/filter and observed buffer.
+
+For a causal stack, request it on the relevant entries using the first example.
+If client output is cut off, narrow the entry selection or reduce `page_size`
+and reread the affected page rather than discard frames. If even one entry
+cannot be fully delivered, report the retrieval limit. A full Console audit
+does not require stacks on every entry. Reading does not authorize clearing;
+retain the consuming project's instance-routing and read/clear approval gates.
 <!-- examples:end -->
 
