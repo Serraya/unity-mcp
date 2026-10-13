@@ -103,6 +103,10 @@ Countable limits that override "I think this fix is right". They restate the gat
 
 ## Engineering Preferences
 
+- When recommending the next milestone or project direction, reconcile relevant
+  current plans, implementation, evidence and prior decisions. Explain what
+  already exists, what gap remains, and which plan item the recommendation
+  advances, reuses or revises. Explain discrepancies with prior decisions.
 - Do not patch from a single symptom file when the surrounding registration, transport, or handler path is available to read.
 - Before changing behavior, trace the request end to end: MCP client schema -> Python FastMCP function -> transport/middleware -> Unity command dispatch -> C# handler -> response normalization.
 - For server-backed behavior, inspect the actual server implementation rather than inferring from docs, CLI wrappers, or client config snippets.
