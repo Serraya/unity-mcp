@@ -12,6 +12,25 @@ before the correction and success after it; otherwise state the limitation.
 Report affected consumers covered and material gaps. Use existing infrastructure
 and the execution cadence below.
 
+Derive expected values and properties from the requirement, an independently
+justified reference or an external contract, not the tested output or a helper
+shared with the implementation. For semantic contracts, fix the relevant units,
+normalization, ordering, completion/error meaning and tolerance before judging
+the result; types and shapes alone may not express them.
+
+Agreement between agents or implementations, a round trip or a small residual
+can share a mistaken assumption. State material shared assumptions; agreement
+on an intermediate representation does not check information added later.
+Choose the smallest useful reference, invariant, boundary or relation between
+runs that can reject the relevant mistake. Use a bounded deliberate defect only
+when the check's ability to detect that mistake is uncertain; no default second
+agent, second implementation or mutation campaign.
+
+If a check fails, distinguish an implementation error from a wrong requirement
+or oracle. Change an expectation or tolerance only with independent justification
+and keep the material reason in the existing task; passing alone is not a reason.
+Reuse sufficient coverage and the execution cadence below.
+
 - During implementation, run affected test cases selected from the changed
   behavior and affected consumers, including shared-contract paths. Use explicit
   case filters; widen to a small fixture when filtering is unavailable or shared
