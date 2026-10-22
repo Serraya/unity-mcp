@@ -416,6 +416,8 @@ namespace MCPForUnity.Editor.Tools
                     // (Calibration removed)
 
                     // --- Filtering ---
+                    // The mode bits carry Unity's own type. The message text does not: with Full
+                    // stack traces its frames contain words like "Exception" for any log (#1433).
                     LogType unityType = GetLogTypeFromMode(mode);
 
                     bool want;
